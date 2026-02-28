@@ -76,7 +76,7 @@ UTXO creation involves up to three transactions. Each has its own callbacks slot
 // See /sdk/advanced/zk-provers for zkProver setup
 const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
   { client },
-  { zkProver }, // e.g. getSelfClaimableUtxoFromPublicBalanceProver(assetProvider)
+  { zkProver }, // e.g. getCreateSelfClaimableUtxoFromPublicBalanceProver(assetProvider)
 );
 
 await createUtxo(recipient, mint, amount, {

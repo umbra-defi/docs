@@ -17,9 +17,9 @@ Fund the UTXO from your existing encrypted balance. You will claim it yourself.
 
 ```typescript
 import { getCreateSelfClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateSelfClaimableUtxoFromEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getSelfClaimableUtxoProver();
+const zkProver = getCreateSelfClaimableUtxoFromEncryptedBalanceProver();
 
 const createUtxo = getCreateSelfClaimableUtxoFromEncryptedBalanceFunction(
   { client },
@@ -39,9 +39,9 @@ Fund the UTXO directly from your public ATA. You will claim it yourself.
 
 ```typescript
 import { getCreateSelfClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getSelfClaimableUtxoFromPublicBalanceProver();
+const zkProver = getCreateSelfClaimableUtxoFromPublicBalanceProver();
 
 const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
   { client },
@@ -61,9 +61,9 @@ Fund the UTXO from your public ATA. A specified recipient will claim it (anonymo
 
 ```typescript
 import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
 
 const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
   { client },
@@ -85,9 +85,9 @@ Fund the UTXO from your encrypted balance. A specified recipient will claim it.
 
 ```typescript
 import { getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
-import { getReceiverClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateReceiverClaimableUtxoFromEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getReceiverClaimableUtxoProver();
+const zkProver = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
 
 const createUtxo = getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction(
   { client },
@@ -145,9 +145,9 @@ Send 50 USDC to a recipient without revealing you as the sender:
 
 ```typescript
 import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
 
 const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
   { client },

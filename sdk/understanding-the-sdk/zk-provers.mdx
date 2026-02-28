@@ -165,24 +165,24 @@ The `@umbra-privacy/web-zk-prover` package provides ready-made factory functions
 
 ```typescript
 import {
-  getRegistrationProver,
-  getSelfClaimableUtxoProver,
-  getReceiverClaimableUtxoProver,
-  getSelfClaimableUtxoFromPublicBalanceProver,
-  getReceiverClaimableUtxoFromPublicBalanceProver,
-  getClaimEphemeralIntoEtaProver,
-  getClaimReceiverIntoEtaProver,
-  getClaimEphemeralIntoAtaProver,
+  getUserRegistrationProver,
+  getCreateSelfClaimableUtxoFromEncryptedBalanceProver,
+  getCreateReceiverClaimableUtxoFromEncryptedBalanceProver,
+  getCreateSelfClaimableUtxoFromPublicBalanceProver,
+  getCreateReceiverClaimableUtxoFromPublicBalanceProver,
+  getClaimSelfClaimableUtxoIntoEncryptedBalanceProver,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
+  getClaimSelfClaimableUtxoIntoPublicBalanceProver,
 } from "@umbra-privacy/web-zk-prover";
 
-const registrationProver = getRegistrationProver();
-const utxoEphemeralProver = getSelfClaimableUtxoProver();
-const utxoReceiverProver = getReceiverClaimableUtxoProver();
-const utxoEphemeralFromPublicProver = getSelfClaimableUtxoFromPublicBalanceProver();
-const utxoReceiverFromPublicProver = getReceiverClaimableUtxoFromPublicBalanceProver();
-const claimEphemeralEtaProver = getClaimEphemeralIntoEtaProver();
-const claimReceiverEtaProver = getClaimReceiverIntoEtaProver();
-const claimEphemeralAtaProver = getClaimEphemeralIntoAtaProver();
+const registrationProver = getUserRegistrationProver();
+const utxoEphemeralProver = getCreateSelfClaimableUtxoFromEncryptedBalanceProver();
+const utxoReceiverProver = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
+const utxoEphemeralFromPublicProver = getCreateSelfClaimableUtxoFromPublicBalanceProver();
+const utxoReceiverFromPublicProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
+const claimEphemeralEtaProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
+const claimReceiverEtaProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+const claimEphemeralAtaProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
 ```
 
 Each factory accepts an optional `IZkAssetProvider` parameter - a simple interface with one method: `getAssetUrls(type, variant?)`. When no provider is passed, the factories default to the CDN provider (equivalent to calling `getCdnZkAssetProvider()` from `@umbra-privacy/web-zk-prover/cdn`), which fetches proving keys from Umbra's CDN. You can supply your own provider to customise asset resolution.

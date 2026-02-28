@@ -63,7 +63,7 @@ Poseidon / BN254 overrides:
 - `computeLimbwiseSumInverse?: (limbs: Base85LimbTuple) => Bn254FieldElement`
 
 ZK prover:
-- `zkProver?: IZkProverForUserRegistration` - ZK proof generator for the anonymous registration step. Required only when `options.anonymous` is `true`. Use `getRegistrationProver()` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver?: IZkProverForUserRegistration` - ZK proof generator for the anonymous registration step. Required only when `options.anonymous` is `true`. Use `getUserRegistrationProver()` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
 
 ---
 
@@ -96,9 +96,9 @@ Throws `RegistrationError`. See [Errors](./errors#registrationerror) for all sta
 
 ```typescript
 import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
-import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+import { getUserRegistrationProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getRegistrationProver();
+const zkProver = getUserRegistrationProver();
 
 const register = getUserRegistrationFunction({ client }, { zkProver });
 const signatures = await register({ confidential: true, anonymous: true });

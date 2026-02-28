@@ -29,8 +29,8 @@ yarn add @umbra-privacy/web-zk-prover
 
 ```typescript
 import {
-  getReceiverClaimableUtxoProver,
-  getClaimReceiverIntoEtaProver,
+  getCreateReceiverClaimableUtxoFromEncryptedBalanceProver,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
 } from "@umbra-privacy/web-zk-prover";
 import {
   getCreateReceiverClaimableUtxoFromPublicBalanceFunction,
@@ -38,8 +38,8 @@ import {
 } from "@umbra-privacy/sdk";
 
 // 1. Create the provers you need (uses CDN asset provider by default)
-const utxoProver = getReceiverClaimableUtxoProver();
-const claimProver = getClaimReceiverIntoEtaProver();
+const utxoProver = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
+const claimProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
 // 2. Pass them to SDK functions
 const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
@@ -57,14 +57,14 @@ const claimUtxo = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
 
 All factory functions accept an optional `provider` parameter of type `IZkAssetProvider`. When omitted, the default CDN provider is used automatically.
 
-- `getRegistrationProver(provider?)` → `IZkProverForUserRegistration`
-- `getSelfClaimableUtxoProver(provider?)` → `IZkProverForSelfClaimableUtxo`
-- `getReceiverClaimableUtxoProver(provider?)` → `IZkProverForReceiverClaimableUtxo`
-- `getSelfClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForSelfClaimableUtxoFromPublicBalance`
-- `getReceiverClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForReceiverClaimableUtxoFromPublicBalance`
-- `getClaimEphemeralIntoEtaProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`
-- `getClaimReceiverIntoEtaProver(provider?)` → `IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`
-- `getClaimEphemeralIntoAtaProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`
+- `getUserRegistrationProver(provider?)` → `IZkProverForUserRegistration`
+- `getCreateSelfClaimableUtxoFromEncryptedBalanceProver(provider?)` → `IZkProverForSelfClaimableUtxo`
+- `getCreateReceiverClaimableUtxoFromEncryptedBalanceProver(provider?)` → `IZkProverForReceiverClaimableUtxo`
+- `getCreateSelfClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForSelfClaimableUtxoFromPublicBalance`
+- `getCreateReceiverClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForReceiverClaimableUtxoFromPublicBalance`
+- `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`
+- `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(provider?)` → `IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`
+- `getClaimSelfClaimableUtxoIntoPublicBalanceProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`
 
 ### Custom Asset Provider
 
@@ -76,13 +76,13 @@ To load assets from a different CDN or self-hosted location, use `getCdnZkAssetP
 
 ```typescript
 import { getCdnZkAssetProvider } from "@umbra-privacy/web-zk-prover/cdn";
-import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+import { getUserRegistrationProver } from "@umbra-privacy/web-zk-prover";
 
 const myProvider = getCdnZkAssetProvider({
   baseUrl: "https://my-cdn.example.com/zk-assets",
 });
 
-const prover = getRegistrationProver(myProvider);
+const prover = getUserRegistrationProver(myProvider);
 ```
 
 #### Fully Custom Provider
@@ -91,7 +91,7 @@ To load assets from a non-CDN source, implement the `IZkAssetProvider` interface
 
 ```typescript
 import type { IZkAssetProvider, ZkAssetUrls, ZKeyType, ClaimVariant } from "@umbra-privacy/web-zk-prover";
-import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+import { getUserRegistrationProver } from "@umbra-privacy/web-zk-prover";
 
 function createMyAssetProvider(storageBaseUrl: string): IZkAssetProvider {
   return {
@@ -106,7 +106,7 @@ function createMyAssetProvider(storageBaseUrl: string): IZkAssetProvider {
 }
 
 const myProvider = createMyAssetProvider("https://my-storage.example.com/zk-assets");
-const prover = getRegistrationProver(myProvider);
+const prover = getUserRegistrationProver(myProvider);
 ```
 
 ## The ZK Prover Interface
@@ -126,13 +126,13 @@ interface Groth16Proof {
 Pass the prover as the second argument (`deps`) to the relevant factory function:
 
 ```typescript
-import { getSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 import {
   getCreateSelfClaimableUtxoFromPublicBalanceFunction,
   getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
 } from "@umbra-privacy/sdk";
 
-const zkProver = getSelfClaimableUtxoFromPublicBalanceProver();
+const zkProver = getCreateSelfClaimableUtxoFromPublicBalanceProver();
 
 const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
   { client },
@@ -147,9 +147,9 @@ Proof generation is CPU-intensive - generating a Groth16 proof can take 1-5 seco
 ```typescript
 // prover-worker.ts
 import { expose } from "comlink";
-import { getReceiverClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateReceiverClaimableUtxoFromEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const prover = getReceiverClaimableUtxoProver();
+const prover = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
 
 expose(prover);
 ```

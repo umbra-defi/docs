@@ -88,7 +88,7 @@ Creates a self-claimable UTXO in the mixer funded from the caller's encrypted ba
 
 ### GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionDeps
 
-- `zkProver: IZkProverForSelfClaimableUtxo` - **Required.** ZK proof generator for UTXO commitments. Use `getSelfClaimableUtxoProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers). This operation submits two transactions: a proof account creation followed by the UTXO instruction.
+- `zkProver: IZkProverForSelfClaimableUtxo` - **Required.** ZK proof generator for UTXO commitments. Use `getCreateSelfClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers). This operation submits two transactions: a proof account creation followed by the UTXO instruction.
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -148,7 +148,7 @@ Creates a receiver-claimable UTXO in the mixer funded from the caller's encrypte
 
 ### GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionDeps
 
-- `zkProver: IZkProverForReceiverClaimableUtxo` - **Required.** Use `getReceiverClaimableUtxoProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: IZkProverForReceiverClaimableUtxo` - **Required.** Use `getCreateReceiverClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -195,7 +195,7 @@ Creates a self-claimable UTXO in the mixer funded from a public ATA (ATA → Mix
 
 ### GetCreateSelfClaimableUtxoFromPublicBalanceFunctionDeps
 
-- `zkProver: ZkProverForSelfClaimableUtxoFromPublicBalance` - **Required.** Use `getSelfClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: ZkProverForSelfClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateSelfClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -264,7 +264,7 @@ Creates a receiver-claimable UTXO funded from a public ATA (ATA → Mixer). The 
 
 ### GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionDeps
 
-- `zkProver: ZkProverForReceiverClaimableUtxoFromPublicBalance` - **Required.** Use `getReceiverClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: ZkProverForReceiverClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateReceiverClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`

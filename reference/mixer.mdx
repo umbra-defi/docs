@@ -236,17 +236,17 @@ import {
   getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
 } from "@umbra-privacy/sdk";
-import { getClaimEphemeralIntoEtaProver, getClaimReceiverIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver, getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
 // Build functions (once)
 const fetchUtxos = getFetchClaimableUtxosFunction({ client });
 const claimSelf = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
   { client },
-  { zkProver: getClaimEphemeralIntoEtaProver() },
+  { zkProver: getClaimSelfClaimableUtxoIntoEncryptedBalanceProver() },
 );
 const claimReceived = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
   { client },
-  { zkProver: getClaimReceiverIntoEtaProver() },
+  { zkProver: getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver() },
 );
 
 // Fetch claimable UTXOs

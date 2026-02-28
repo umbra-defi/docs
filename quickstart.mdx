@@ -132,9 +132,9 @@ UTXO creation requires a `zkProver` dependency for Groth16 proof generation. Ins
 
 ```typescript
 import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
 
 const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
   { client },
@@ -175,9 +175,9 @@ import {
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimReceiverIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimReceiverIntoEtaProver();
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
@@ -207,8 +207,8 @@ import {
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
 import {
-  getReceiverClaimableUtxoFromPublicBalanceProver,
-  getClaimReceiverIntoEtaProver,
+  getCreateReceiverClaimableUtxoFromPublicBalanceProver,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
 } from "@umbra-privacy/web-zk-prover";
 
 async function main() {
@@ -239,8 +239,8 @@ async function main() {
   await withdraw(signer.address, MINT, 1_000_000n);
 
   // 6. Set up ZK provers
-  const utxoProver = getReceiverClaimableUtxoFromPublicBalanceProver();
-  const claimProver = getClaimReceiverIntoEtaProver();
+  const utxoProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
+  const claimProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
   // 7. Create a receiver-claimable UTXO
   const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(

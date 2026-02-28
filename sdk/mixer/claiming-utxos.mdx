@@ -22,9 +22,9 @@ import {
   getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimEphemeralIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimEphemeralIntoEtaProver();
+const zkProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
@@ -44,9 +44,9 @@ import {
   getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimEphemeralIntoAtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimSelfClaimableUtxoIntoPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimEphemeralIntoAtaProver();
+const zkProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
@@ -66,9 +66,9 @@ import {
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimReceiverIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimReceiverIntoEtaProver();
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
@@ -111,7 +111,7 @@ import {
   getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimEphemeralIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
 
 // Step 1: Fetch claimable UTXOs
 const fetch = getFetchClaimableUtxosFunction({ client });
@@ -123,7 +123,7 @@ if (result.ephemeral.length === 0) {
 }
 
 // Step 2: Claim the first self-claimable UTXO into encrypted balance
-const zkProver = getClaimEphemeralIntoEtaProver();
+const zkProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
@@ -146,9 +146,9 @@ import {
   getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimEphemeralIntoAtaProver } from "@umbra-privacy/web-zk-prover";
+import { getClaimSelfClaimableUtxoIntoPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimEphemeralIntoAtaProver();
+const zkProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
