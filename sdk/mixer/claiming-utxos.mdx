@@ -1,0 +1,245 @@
+---
+title: "Claiming UTXOs"
+description: "Redeem a claimable UTXO into an encrypted balance or your public wallet."
+---
+
+## Overview
+
+Claiming a UTXO presents a ZK proof on-chain that you know the secret inputs behind a Merkle tree commitment, burns the nullifier to prevent double-spending, and releases the tokens.
+
+You choose where the tokens go:
+- **Into an encrypted balance** - tokens remain private after claiming
+- **Into a public wallet** - tokens become visible in your ATA
+
+## Claim Functions
+
+Three factory functions cover the main claim patterns:
+
+### Claim Self-Claimable UTXO → Encrypted Balance
+
+```typescript
+import {
+  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimEphemeralIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getClaimEphemeralIntoEtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const claim = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result = await claim(utxos); // pass array of ClaimableUtxoData
+```
+
+### Claim Self-Claimable UTXO → Public Balance
+
+```typescript
+import {
+  getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimEphemeralIntoAtaProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getClaimEphemeralIntoAtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const claim = getClaimSelfClaimableUtxoIntoPublicBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result = await claim(utxos); // pass array of ClaimableUtxoData
+```
+
+### Claim Receiver-Claimable UTXO → Encrypted Balance
+
+```typescript
+import {
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimReceiverIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getClaimReceiverIntoEtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result = await claim(utxos); // pass array of ClaimableUtxoData
+```
+
+## Parameters
+
+<ParamField path="utxos" type="ClaimableUtxoData[]" required>
+  An array of claimable UTXO data objects returned by `getFetchClaimableUtxosFunction`. Each object contains all the data needed for the claim - UTXO values, Merkle proof, and metadata. Pass them directly from the fetch result without destructuring.
+</ParamField>
+
+<ParamField path="optionalData" type="Uint8Array">
+  32 bytes of arbitrary metadata stored with the claim. Defaults to all zeros.
+</ParamField>
+
+<ParamField path="deps.zkProver" type="ZkProver" required>
+  ZK proof generation function. Use the claim-specific provers from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers) for details.
+</ParamField>
+
+<ParamField path="deps.relayer" type="IUmbraRelayer" required>
+  Relayer instance created via `getUmbraRelayer({ apiEndpoint })`. The relayer pays transaction fees for claim operations so the user's wallet never appears on-chain as the fee payer.
+</ParamField>
+
+## Return Value
+
+Returns a result object with `signatures: Record<number, TransactionSignature[]>` - transaction signatures organized by batch index. Each batch can contain multiple UTXOs.
+
+## Full Example: Fetch and Claim
+
+```typescript
+import {
+  getFetchClaimableUtxosFunction,
+  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimEphemeralIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+
+// Step 1: Fetch claimable UTXOs
+const fetch = getFetchClaimableUtxosFunction({ client });
+const result = await fetch(0, 0); // scan tree 0 from the start
+
+if (result.ephemeral.length === 0) {
+  console.log("No claimable UTXOs found");
+  return;
+}
+
+// Step 2: Claim the first self-claimable UTXO into encrypted balance
+const zkProver = getClaimEphemeralIntoEtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const claim = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const claimResult = await claim([result.ephemeral[0]]);
+
+console.log("Claimed UTXO, signatures:", claimResult.signatures);
+```
+
+## Example: Claim All UTXOs to Public Balance
+
+```typescript
+import {
+  getFetchClaimableUtxosFunction,
+  getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimEphemeralIntoAtaProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getClaimEphemeralIntoAtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const fetch = getFetchClaimableUtxosFunction({ client });
+const claim = getClaimSelfClaimableUtxoIntoPublicBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result = await fetch(0, 0);
+
+if (result.ephemeral.length > 0) {
+  const claimResult = await claim(result.ephemeral);
+  console.log("Claimed all ephemeral UTXOs:", claimResult.signatures);
+}
+```
+
+## ZK Proof Generation
+
+Claim operations generate a **[Groth16](https://eprint.iacr.org/2016/260.pdf) ZK proof** that proves:
+- You know the secret inputs to one of the commitments in the Merkle tree
+- The nullifier for that commitment has not been burned before
+
+The proof is verified on-chain by the Umbra program. Invalid proofs are rejected; valid proofs trigger the callback instruction that releases the tokens.
+
+Proof generation is CPU-intensive and may take 1–5 seconds. Consider showing a progress indicator while it runs.
+
+## Stale Merkle Proofs
+
+Merkle proofs become stale if the tree root changes between when you fetch the proof and when you submit the claim. This can happen if other UTXOs are inserted into the tree.
+
+If your claim fails with a root mismatch error, re-fetch the proof using `getFetchClaimableUtxosFunction` and try again.
+
+<Warning>
+Do not cache Merkle proofs for extended periods. Always fetch a fresh proof immediately before submitting a claim. The indexer's `/v1/trees/{tree_index}/proof/{insertion_index}` endpoint always returns the latest valid proof.
+</Warning>
+
+## Error Handling
+
+Claim operations share the same two ZK-specific failure modes as UTXO creation, plus an additional on-chain failure case: a stale Merkle proof. Use `isClaimUtxoError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each one.
+
+```typescript
+import { isClaimUtxoError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const result = await claim(utxos);
+} catch (err) {
+  if (isClaimUtxoError(err)) {
+    switch (err.stage) {
+      case "zk-proof-generation":
+        // ZK proof generation failed.
+        // This may indicate an out-of-memory condition, or a zkProver mismatch.
+        console.error("Proof generation failed:", err.message);
+        showNotification("Failed to generate proof. Please try again.");
+        break;
+
+      case "transaction-sign":
+        // User rejected the transaction in their wallet.
+        showNotification("Claim cancelled.");
+        break;
+
+      case "transaction-validate":
+        // Pre-flight simulation failed - often indicates a stale Merkle proof.
+        // Re-fetch the proof using getFetchClaimableUtxosFunction and try again.
+        console.warn("Claim pre-flight failed - Merkle proof may be stale:", err.message);
+        break;
+
+      case "transaction-send":
+        // Transaction submitted but confirmation timed out.
+        // Always verify on-chain before retrying - the nullifier may already be burned.
+        console.warn("Confirmation timeout. Check on-chain before retrying.");
+        break;
+
+      default:
+        // Other stages: initialization, validation, key-derivation, pda-derivation,
+        // instruction-build, transaction-build, transaction-compile.
+        console.error("Claim failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+<Warning>
+If `err.stage === "transaction-send"`, always verify on-chain before retrying. A successful claim burns the nullifier - submitting a second claim for the same UTXO will be rejected on-chain and waste transaction fees.
+</Warning>
+
+See [Error Handling](/reference/errors) for a full reference of all error types.
+
+## Nullifier Reuse
+
+Once a UTXO is claimed, its nullifier is burned on-chain. Any attempt to claim the same UTXO again will be rejected by the program. You do not need to track this client-side - the on-chain check is authoritative.

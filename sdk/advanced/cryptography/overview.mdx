@@ -1,0 +1,22 @@
+---
+title: "Advanced Cryptography"
+description: "The cryptographic building blocks underlying Umbra's privacy guarantees."
+---
+
+Umbra combines several well-understood cryptographic primitives to achieve its privacy properties. This section documents each primitive in detail - the construction, the field it operates over, how it is used in the protocol, and where to find the original research.
+
+## Implementation Foundation
+
+All default SDK implementations are built on [`@noble/curves`](https://github.com/paulmillr/noble-curves) and [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) - widely audited, zero-dependency pure TypeScript cryptography libraries. Both implement constant-time algorithms wherever the JavaScript runtime permits, minimising the risk of timing side-channel attacks.
+
+Umbra also ships an **in-house implementation of the Rescue cipher** that is fully constant-time and independently optimised for performance. It is the only primitive in the SDK not delegated to an external library, reflecting the central role Rescue plays in balance encryption, ETA ciphertexts, and compliance re-encryption across the protocol.
+
+## Primitives
+
+- [X25519 Key Exchange](/sdk/advanced/cryptography/x25519) - ECDH for token account encryption and UTXO addressing
+- [Poseidon Hash](/sdk/advanced/cryptography/poseidon) - ZK-friendly hash over BN254 for commitments, nullifiers, and user identity
+- [KMAC256](/sdk/advanced/cryptography/kmac256) - NIST-standardised keyed hash used as the sole KDF across all key derivation
+- [Groth16 ZK Proofs](/sdk/advanced/cryptography/groth16) - zk-SNARK for commitment registration and UTXO claiming
+- [Indexed Merkle Tree](/sdk/advanced/cryptography/indexed-merkle-tree) - on-chain UTXO commitment store with 2^148 total capacity
+- [Rescue Cipher](/sdk/advanced/cryptography/rescue-cipher) - algebraic cipher over p = 2^255 − 19 for balance and ETA encryption
+- [Arcium MPC](/sdk/advanced/cryptography/arcium-mpc) - multi-party computation network for confidential on-chain operations

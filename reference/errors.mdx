@@ -1,0 +1,470 @@
+---
+title: "Errors"
+description: "Complete reference for all error classes, stage enums, properties, type guards, and the error hierarchy."
+---
+
+## Import Path
+
+```typescript
+import {
+  // Staged errors
+  EncryptedDepositError,
+  EncryptedWithdrawalError,
+  RegistrationError,
+  ConversionError,
+  CreateUtxoError,
+  FetchUtxosError,
+  ClaimUtxoError,
+  QueryError,
+  isEncryptedDepositError,
+  isEncryptedWithdrawalError,
+  isRegistrationError,
+  isConversionError,
+  isCreateUtxoError,
+  isFetchUtxosError,
+  isClaimUtxoError,
+  isQueryError,
+
+  // Base primitives
+  UmbraError,
+  CryptographyError,
+  InstructionError,
+  RpcError,
+  TransactionError,
+  TransactionSigningError,
+  MasterSeedSigningRejectedError,
+  isUmbraError,
+  isCryptographyError,
+  isInstructionError,
+  isRpcError,
+  isTransactionError,
+  isTransactionSigningError,
+} from "@umbra-privacy/sdk/errors";
+```
+
+---
+
+## Error Hierarchy
+
+```
+Error
+└── UmbraError
+    ├── CryptographyError
+    ├── InstructionError
+    ├── RpcError
+    ├── TransactionError
+    │   └── TransactionSigningError
+    │       └── MasterSeedSigningRejectedError
+    ├── EncryptedDepositError
+    ├── EncryptedWithdrawalError
+    ├── RegistrationError
+    ├── ConversionError
+    ├── CreateUtxoError
+    ├── FetchUtxosError
+    ├── ClaimUtxoError
+    └── QueryError
+```
+
+---
+
+## Staged Errors
+
+Every major SDK operation throws a dedicated staged error. The `stage` field pinpoints exactly where in the pipeline the failure occurred.
+
+---
+
+### EncryptedDepositError
+
+Thrown by `getDirectDepositIntoEncryptedBalanceFunction`.
+
+```typescript
+class EncryptedDepositError extends UmbraError {
+  readonly stage: EncryptedDepositStage;
+}
+
+function isEncryptedDepositError(error: unknown): error is EncryptedDepositError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed. Missing required arguments.
+- `"validation"` - Invalid mint address, zero amount, or unregistered destination.
+- `"mint-fetch"` - Failed to fetch the mint account. Check RPC and mint address.
+- `"fee-calculation"` - Token-2022 transfer fee calculation failed. Epoch info issue.
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"account-fetch"` - Failed to fetch the destination user or token account.
+- `"instruction-build"` - Failed to construct the instruction. Protocol state mismatch.
+- `"transaction-build"` - Failed to assemble the transaction. Blockhash fetch failure.
+- `"transaction-compile"` - Failed to compile the transaction. Lookup table mismatch.
+- `"transaction-sign"` - Wallet rejected signing.
+- `"transaction-validate"` - Pre-flight simulation failed. Insufficient funds or account state mismatch.
+- `"transaction-send"` - Transaction sent but confirmation timed out. May still have landed.
+
+---
+
+### EncryptedWithdrawalError
+
+Thrown by `getDirectWithdrawIntoPublicBalanceV3Function`.
+
+```typescript
+class EncryptedWithdrawalError extends UmbraError {
+  readonly stage: EncryptedWithdrawalStage;
+}
+
+function isEncryptedWithdrawalError(error: unknown): error is EncryptedWithdrawalError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed.
+- `"validation"` - Zero amount or no encrypted balance exists for this mint.
+- `"mint-fetch"` - Failed to fetch the mint account.
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"instruction-build"` - Failed to construct the instruction.
+- `"transaction-build"` - Blockhash fetch failure.
+- `"transaction-compile"` - Failed to compile the transaction.
+- `"transaction-sign"` - Wallet rejected signing.
+- `"transaction-send"` - Confirmation timed out. May still have landed.
+
+---
+
+### RegistrationError
+
+Thrown by `getUserRegistrationFunction`.
+
+```typescript
+class RegistrationError extends UmbraError {
+  readonly stage: RegistrationStage;
+}
+
+function isRegistrationError(error: unknown): error is RegistrationError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed.
+- `"master-seed-derivation"` - User declined to sign the master seed derivation message.
+- `"account-fetch"` - Failed to fetch on-chain account state. RPC connectivity issue.
+- `"key-derivation"` - Cryptographic key derivation from master seed failed.
+- `"zk-proof-generation"` - Groth16 proof generation failed (anonymous step only).
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"instruction-build"` - Failed to construct an instruction.
+- `"transaction-build"` - Blockhash fetch failure.
+- `"transaction-compile"` - Failed to compile the transaction.
+- `"transaction-sign"` - Wallet rejected signing.
+- `"transaction-validate"` - Pre-flight simulation failed.
+- `"transaction-send"` - Confirmation timed out. May still have landed.
+
+---
+
+### ConversionError
+
+Thrown by `getConvertToSharedEncryptionFunction` and `getRotateMintX25519EncryptionKeyFunction`.
+
+```typescript
+class ConversionError extends UmbraError {
+  readonly stage: ConversionStage;
+}
+
+function isConversionError(error: unknown): error is ConversionError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed.
+- `"account-fetch"` - Failed to fetch token account state.
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"instruction-build"` - Failed to construct the conversion instruction.
+- `"transaction-build"` - Blockhash fetch or transaction assembly failed.
+- `"transaction-compile"` - Failed to compile the transaction.
+- `"transaction-sign"` - Wallet rejected a per-mint transaction.
+- `"transaction-validate"` - Pre-flight simulation failed.
+- `"transaction-send"` - Confirmation timed out. Already-converted mints remain on-chain.
+
+---
+
+### CreateUtxoError
+
+Thrown by all four UTXO creation factory functions.
+
+```typescript
+class CreateUtxoError extends UmbraError {
+  readonly stage: CreateUtxoStage;
+}
+
+function isCreateUtxoError(error: unknown): error is CreateUtxoError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed.
+- `"validation"` - Invalid recipient, mint, or amount.
+- `"account-fetch"` - Failed to fetch the recipient's on-chain account.
+- `"mint-fetch"` - Failed to fetch mint account data.
+- `"fee-calculation"` - Token-2022 transfer fee calculation failed.
+- `"key-derivation"` - Key derivation from master seed failed.
+- `"zk-proof-generation"` - Groth16 proof generation failed.
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"instruction-build"` - Failed to construct the instruction.
+- `"transaction-build"` - Blockhash fetch or transaction assembly failed.
+- `"transaction-compile"` - Failed to compile the transaction.
+- `"transaction-sign"` - Wallet rejected signing.
+- `"transaction-validate"` - Pre-flight simulation failed.
+- `"transaction-send"` - Confirmation timed out. May still have landed - check before retrying.
+
+---
+
+### FetchUtxosError
+
+Thrown by `getFetchClaimableUtxosFunction`.
+
+```typescript
+class FetchUtxosError extends UmbraError {
+  readonly stage: FetchUtxosStage;
+}
+
+function isFetchUtxosError(error: unknown): error is FetchUtxosError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed. `indexerApiEndpoint` not configured.
+- `"validation"` - Invalid `treeIndex` or insertion index parameters.
+- `"key-derivation"` - X25519 private key derivation from master seed failed.
+- `"indexer-fetch"` - Indexer HTTP call failed (unreachable, rate-limited, or error response).
+- `"proof-fetch"` - Merkle proof HTTP call failed.
+
+---
+
+### ClaimUtxoError
+
+Thrown by all three claim factory functions.
+
+```typescript
+class ClaimUtxoError extends UmbraError {
+  readonly stage: ClaimUtxoStage;
+}
+
+function isClaimUtxoError(error: unknown): error is ClaimUtxoError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory construction failed.
+- `"validation"` - Invalid UTXO data or parameters.
+- `"key-derivation"` - Key derivation from master seed failed.
+- `"zk-proof-generation"` - Groth16 proof generation failed.
+- `"pda-derivation"` - Failed to derive required PDAs.
+- `"instruction-build"` - Failed to construct the instruction.
+- `"transaction-build"` - Blockhash fetch or transaction assembly failed.
+- `"transaction-compile"` - Failed to compile the transaction.
+- `"transaction-sign"` - Wallet rejected signing.
+- `"transaction-validate"` - Pre-flight simulation failed. Often indicates a stale Merkle proof - fetch fresh UTXOs.
+- `"transaction-send"` - Confirmation timed out. Verify on-chain before retrying - the nullifier may have been burned.
+
+---
+
+### QueryError
+
+Thrown by `getQueryUserAccountFunction` and `getQueryEncryptedBalanceFunction`.
+
+```typescript
+class QueryError extends UmbraError {
+  readonly stage: QueryStage;
+}
+
+function isQueryError(error: unknown): error is QueryError;
+```
+
+**Stage values:**
+- `"initialization"` - Factory-level validation failed.
+- `"pda-derivation"` - PDA address generation failed.
+- `"account-fetch"` - RPC fetch failed (node unreachable or returned an error).
+- `"account-decode"` - On-chain account data could not be decoded. Unexpected on-chain state.
+- `"key-derivation"` - X25519 key derivation failed (encrypted balance query only).
+- `"decryption"` - Rescue cipher decryption failed (encrypted balance query only).
+
+---
+
+## Base Error Primitives
+
+These are the underlying error types. All staged errors extend `UmbraError`.
+
+---
+
+### UmbraError
+
+Base class for all SDK errors.
+
+```typescript
+class UmbraError extends Error {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly code: string;          // Machine-readable code. Defaults to "UMBRA_ERROR".
+  readonly context?: Record<string, unknown>;
+  override readonly cause?: unknown;
+}
+
+function isUmbraError(error: unknown): error is UmbraError;
+```
+
+---
+
+### CryptographyError
+
+Thrown when a cryptographic operation fails - most commonly ZK proof generation or Rescue cipher encryption/decryption.
+
+```typescript
+class CryptographyError extends UmbraError {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      operation?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly operation?: string;    // Name of the failed operation, e.g. "groth16-prove".
+}
+
+function isCryptographyError(error: unknown): error is CryptographyError;
+```
+
+---
+
+### InstructionError
+
+Thrown when instruction construction fails - typically a protocol state mismatch or missing on-chain account.
+
+```typescript
+class InstructionError extends UmbraError {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      instructionName?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly instructionName?: string;    // Name of the instruction that failed to build.
+}
+
+function isInstructionError(error: unknown): error is InstructionError;
+```
+
+---
+
+### RpcError
+
+Thrown when an RPC or indexer HTTP call fails.
+
+```typescript
+class RpcError extends UmbraError {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      endpoint?: string;
+      statusCode?: number;
+      rpcErrorCode?: number;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly endpoint?: string;       // The URL that was called.
+  readonly statusCode?: number;     // HTTP status code (e.g. 429 for rate limit, 503 for unavailable).
+  readonly rpcErrorCode?: number;   // JSON-RPC error code from the node.
+}
+
+function isRpcError(error: unknown): error is RpcError;
+```
+
+---
+
+### TransactionError
+
+Thrown when a transaction fails on-chain (simulation rejection or network rejection).
+
+```typescript
+class TransactionError extends UmbraError {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      signature?: string;
+      simulationLogs?: string[];
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly signature?: string;          // Base58 tx signature. Present even on failure - tx may have landed.
+  readonly simulationLogs?: string[]    // Program log output from pre-flight simulation.
+}
+
+function isTransactionError(error: unknown): error is TransactionError;
+```
+
+---
+
+### TransactionSigningError
+
+Thrown when a wallet rejects a transaction signing request. Extends `TransactionError`.
+
+```typescript
+class TransactionSigningError extends TransactionError {
+  constructor(
+    message: string,
+    options?: {
+      code?: string;
+      wasRejected?: boolean;
+      signerAddress?: string;
+      signature?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+
+  readonly wasRejected: boolean;      // true = user explicitly cancelled; false = wallet error.
+  readonly signerAddress?: string;    // Address of the wallet that rejected.
+}
+
+function isTransactionSigningError(error: unknown): error is TransactionSigningError;
+```
+
+---
+
+### MasterSeedSigningRejectedError
+
+Thrown when the user declines to sign the master seed derivation message. Extends `TransactionSigningError`. Always has `wasRejected: true`. Error code: `"MASTER_SEED_SIGNING_REJECTED"`.
+
+This surfaces during the first operation that needs key material in a session - typically `register()`, or `getUmbraClientFromSigner()` in non-deferred mode.
+
+```typescript
+class MasterSeedSigningRejectedError extends TransactionSigningError {
+  constructor(
+    message?: string,
+    options?: {
+      signerAddress?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
+    },
+  );
+}
+```
+
+---
+
+## Retry Strategy
+
+- `"transaction-sign"` / `MasterSeedSigningRejectedError` - **Do not retry.** User cancelled. Never auto-retry a wallet prompt rejection.
+- `"transaction-send"` with a `signature` present - **Check first.** The transaction may have landed. Verify on-chain before submitting again to avoid double submissions.
+- `"transaction-validate"` - **Fix inputs first.** Pre-flight simulation failed. Diagnose the root cause before retrying.
+- `"transaction-validate"` for claims - May indicate a stale Merkle proof. Fetch fresh UTXOs before retrying.
+- `isRpcError` - **Safe to retry with exponential backoff.** Transient network issue.
+- All other stages - **Safe to retry with exponential backoff.**

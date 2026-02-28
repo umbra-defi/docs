@@ -1,0 +1,107 @@
+---
+title: "Deposit API Reference"
+description: "Complete reference for direct deposit into encrypted balance."
+---
+
+## `getDirectDepositIntoEncryptedBalanceFunction`
+
+```typescript
+import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+function getDirectDepositIntoEncryptedBalanceFunction(
+  args: GetDirectDepositIntoEncryptedBalanceFunctionArgs,
+  deps?: GetDirectDepositIntoEncryptedBalanceFunctionDeps,
+): DirectDepositIntoEncryptedBalanceFunction
+```
+
+Factory function that returns a callable deposit function.
+
+### `GetDirectDepositIntoEncryptedBalanceFunctionArgs`
+
+<ParamField path="client" type="IUmbraClient" required>
+  The Umbra client instance.
+</ParamField>
+
+### Returned Function
+
+```typescript
+async function deposit(
+  destinationAddress: Address,
+  mint: Address,
+  transferAmount: bigint,
+  options?: DirectDepositOptions,
+): Promise<TransactionSignature>
+```
+
+Moves tokens from the calling user's ATA into an encrypted token account (ETA).
+
+Returns the confirmed transaction signature.
+
+### Parameters
+
+<ParamField path="destinationAddress" type="Address" required>
+  Wallet address whose encrypted balance is credited. Can be any registered user - not just the signer. The tokens are encrypted under the destination's X25519 key (or MPC key if no X25519 key is registered).
+</ParamField>
+
+<ParamField path="mint" type="Address" required>
+  SPL or Token-2022 mint address.
+</ParamField>
+
+<ParamField path="transferAmount" type="bigint" required>
+  Gross amount in native token units (accounting for decimals). Protocol fees and Token-2022 transfer fees are deducted from this value before the ETA is credited.
+</ParamField>
+
+<ParamField path="options.priorityFees" type="bigint" default="0n">
+  Additional compute unit price in microlamports.
+</ParamField>
+
+<ParamField path="options.purpose" type="number" default="0">
+  Purpose flag stored with the deposit. Reserved for protocol use.
+</ParamField>
+
+<ParamField path="options.optionalData" type="Uint8Array">
+  32 bytes of optional metadata stored with the deposit. Defaults to zero bytes.
+</ParamField>
+
+---
+
+## Instruction Variant Selection
+
+The SDK automatically selects the correct on-chain instruction based on the state of the destination account:
+
+- **new MXE-only** - first deposit, no X25519 key registered
+- **existing MXE-only** - subsequent deposit, no X25519 key
+- **new Shared** - first deposit, X25519 key registered
+- **existing Shared** - subsequent deposit, X25519 key present
+
+No manual mode selection is needed.
+
+---
+
+## Protocol Fee Formula
+
+```
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) × commissionBps / 10000)
+```
+
+Fee parameters are set on-chain per pool by the pool administrator.
+
+---
+
+## Error Class
+
+Throws `EncryptedDepositError` on failure.
+
+```typescript
+import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
+
+try {
+  await deposit(dest, mint, amount);
+} catch (err) {
+  if (isEncryptedDepositError(err)) {
+    console.error("Stage:", err.stage, "Message:", err.message);
+  }
+}
+```
+
+See [Error Handling](/reference/errors) for the full list of stages.

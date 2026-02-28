@@ -1,0 +1,25 @@
+---
+title: "Merkle Proof"
+openapi: "GET /v1/trees/{tree_index}/proof/{insertion_index}"
+description: "Generate a Merkle inclusion proof for a specific leaf in a Merkle tree."
+---
+
+Returns an authentication path of **20 sibling hashes** -- one per level -- ordered from the leaf level (index 0) up to the root level (index 19). All hash values are little-endian 64-character hex strings (32 bytes each).
+
+<Warning>
+Merkle proofs become **stale** when new leaves are inserted into the tree (because the root changes). Always fetch a fresh proof immediately before submitting a claim. Never cache proofs across user sessions.
+</Warning>
+
+## Verifying a Proof
+
+Hash the target leaf with each sibling in order and compare the final result to the tree's current root hash (fetch the root via [Tree Metadata](/indexer/api-reference/tree-metadata)).
+
+## Usage in the SDK
+
+The Umbra SDK calls this endpoint automatically via `getFetchClaimableUtxosFunction`. The proof is passed directly to the claim functions -- you do not need to call this endpoint manually when using the SDK.
+
+If you are building a custom claim flow or integrating with the protocol directly, use this endpoint to fetch fresh proofs immediately before submitting a claim transaction.
+
+## Performance
+
+Proof generation traverses all 20 tree levels. Under normal conditions, proofs are generated in under 100 ms. Operations exceeding 500 ms emit a slow-operation warning server-side but still return a valid proof.

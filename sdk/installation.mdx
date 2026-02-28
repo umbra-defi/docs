@@ -1,0 +1,73 @@
+---
+title: "Installation"
+description: "Add the Umbra SDK to your project."
+---
+
+## Package
+
+<CodeGroup>
+```bash pnpm
+pnpm add @umbra-privacy/sdk
+```
+
+```bash npm
+npm install @umbra-privacy/sdk
+```
+
+```bash yarn
+yarn add @umbra-privacy/sdk
+```
+</CodeGroup>
+
+## TypeScript
+
+The SDK is written in TypeScript and ships with full type declarations. No additional `@types` packages are needed.
+
+Minimum TypeScript version: **5.0**.
+
+Add the following to your `tsconfig.json` if you are targeting Node.js:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true
+  }
+}
+```
+
+## Import Paths
+
+The SDK exposes several sub-path imports to keep bundles lean:
+
+- `@umbra-privacy/sdk` - All implementation modules: client, services, Solana providers, cryptography
+- `@umbra-privacy/sdk/types` - Branded type definitions and type assertions only
+- `@umbra-privacy/sdk/interfaces` - Function type signatures (useful for typing your own wrappers)
+- `@umbra-privacy/sdk/utils` - Unit converters and encoding utilities
+- `@umbra-privacy/sdk/constants` - Protocol constants (program ID, seeds, max tree depth, etc.)
+- `@umbra-privacy/sdk/errors` - Error classes and type guard functions
+
+Most applications only need the main `@umbra-privacy/sdk` import.
+
+```typescript
+// Everything you need for standard usage
+import {
+  getUmbraClientFromSigner,
+  getUserRegistrationFunction,
+  getDirectDepositIntoEncryptedBalanceFunction,
+  getDirectWithdrawIntoPublicBalanceV3Function,
+} from "@umbra-privacy/sdk";
+
+// Error handling
+import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
+```
+
+## Runtime Requirements
+
+The SDK works in both Node.js (18+) and modern browser environments. It has no native dependencies - all cryptography is pure TypeScript/WebAssembly.
+
+<Note>
+If you are using a bundler (Vite, webpack, Next.js), no special configuration is needed. The SDK uses standard ES module syntax.
+</Note>

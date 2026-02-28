@@ -1,0 +1,179 @@
+---
+title: "Fetching UTXOs"
+description: "Discover and decrypt UTXO commitments addressed to your wallet."
+---
+
+## Overview
+
+After tokens are deposited into the mixer, the depositor publishes an encrypted ciphertext on-chain addressed to the recipient's [X25519](https://www.rfc-editor.org/rfc/rfc7748) key. To claim, the recipient must:
+
+1. Fetch all ciphertexts from the indexer
+2. Attempt to decrypt each one using their X25519 private key
+3. Successfully decrypted ciphertexts are their claimable UTXOs
+4. Fetch the Merkle proof for each claimable UTXO
+
+`getFetchClaimableUtxosFunction` handles all of these steps automatically.
+
+<Warning>
+This function requires the indexer. Ensure `indexerApiEndpoint` is set when creating the client, or the function will throw.
+</Warning>
+
+## Usage
+
+```typescript
+import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+
+const fetch = getFetchClaimableUtxosFunction({ client });
+
+const result = await fetch(
+  treeIndex,           // which Merkle tree to scan
+  startInsertionIndex, // start scanning from this leaf position
+  endInsertionIndex?,  // optional upper bound
+);
+```
+
+## Parameters
+
+<ParamField path="treeIndex" type="number" required>
+  The zero-based index of the Merkle tree to scan. Start with `0` for the first tree. If the current tree is filling up, increment to check the next one.
+</ParamField>
+
+<ParamField path="startInsertionIndex" type="number" required>
+  The leaf position to start scanning from (inclusive). Pass `0` to scan from the beginning. To resume from where you left off, pass the insertion index of the last UTXO you have already seen.
+</ParamField>
+
+<ParamField path="endInsertionIndex" type="number">
+  The leaf position to stop at (inclusive). If omitted, scans to the end of the current tree. Use this to limit the scan range when you know the approximate insertion window of your UTXOs.
+</ParamField>
+
+## Return Value
+
+```typescript
+type ClaimableUtxoResult = {
+  ephemeral: ClaimableUtxoData[];       // self-claimable UTXOs from encrypted balance
+  receiver: ClaimableUtxoData[];        // receiver-claimable UTXOs from encrypted balance
+  publicEphemeral: ClaimableUtxoData[]; // self-claimable UTXOs from public balance
+  publicReceiver: ClaimableUtxoData[];  // receiver-claimable UTXOs from public balance
+};
+```
+
+Each `ClaimableUtxoData` is a flat structure containing both the UTXO data and its Merkle proof. These objects are passed directly to the claim functions — no destructuring needed.
+
+
+## Example: Fetch All UTXOs for Tree 0
+
+```typescript
+import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+
+const fetch = getFetchClaimableUtxosFunction({ client });
+
+const result = await fetch(0, 0); // scan all of tree 0
+
+console.log("Self-claimable UTXOs:", result.ephemeral.length);
+console.log("Received UTXOs:", result.receiver.length);
+
+for (const utxo of result.ephemeral) {
+  console.log(
+    `UTXO: amount=${utxo.amount}`
+  );
+}
+```
+
+## Example: Paginated Scan
+
+For large trees, scan in chunks to avoid timeouts:
+
+```typescript
+const CHUNK_SIZE = 10_000;
+
+async function fetchAllUtxos(treeIndex: number) {
+  const fetch = getFetchClaimableUtxosFunction({ client });
+  const allEphemeral = [];
+  const allReceiver = [];
+
+  let cursor = 0;
+  while (true) {
+    const result = await fetch(treeIndex, cursor, cursor + CHUNK_SIZE - 1);
+    allEphemeral.push(...result.ephemeral);
+    allReceiver.push(...result.receiver);
+
+    // Stop if we've reached the end of the tree
+    if (result.ephemeral.length + result.receiver.length === 0
+        && cursor + CHUNK_SIZE >= 1_048_576) {
+      break;
+    }
+    cursor += CHUNK_SIZE;
+  }
+
+  return { ephemeral: allEphemeral, receiver: allReceiver };
+}
+```
+
+## How Decryption Works
+
+The SDK derives your X25519 private key from the master seed, then for each UTXO ciphertext:
+
+1. Extracts the depositor's ephemeral X25519 public key from the ciphertext header
+2. Computes an [X25519 ECDH](https://www.rfc-editor.org/rfc/rfc7748) shared secret
+3. Derives an [AES-GCM](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) key from the shared secret
+4. Attempts to decrypt the 68-byte payload
+5. If decryption succeeds, checks the 12-byte domain separator to categorize the UTXO type
+
+Your private key never leaves your device. The decryption happens entirely in the SDK.
+
+## Error Handling
+
+Fetching UTXOs involves two distinct infrastructure dependencies: the Umbra indexer (for ciphertext discovery) and the RPC node (for Merkle proof data). Use `isFetchUtxosError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each failure point.
+
+```typescript
+import { isFetchUtxosError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const result = await fetch(treeIndex, startInsertionIndex);
+} catch (err) {
+  if (isFetchUtxosError(err)) {
+    switch (err.stage) {
+      case "initialization":
+        // Factory construction failed - indexerApiEndpoint was not configured.
+        // Ensure indexerApiEndpoint is set when calling getUmbraClientFromSigner.
+        console.error("Indexer not configured:", err.message);
+        break;
+
+      case "validation":
+        // Invalid treeIndex or insertion index parameters.
+        console.error("Invalid fetch parameters:", err.message);
+        break;
+
+      case "key-derivation":
+        // X25519 private key derivation from master seed failed.
+        console.error("Key derivation failed:", err.message);
+        break;
+
+      case "indexer-fetch":
+        // Indexer HTTP call failed - unreachable, rate-limited, or returned an error.
+        console.error("Indexer fetch failed:", err.message);
+        showNotification("Could not reach the network. Please check your connection.");
+        break;
+
+      case "proof-fetch":
+        // Merkle proof HTTP call failed.
+        console.error("Proof fetch failed:", err.message);
+        break;
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+<Note>
+An empty result (`ephemeral: [], receiver: []`) is not an error - it means no UTXOs addressed to you were found in that scan range. Errors are only thrown for infrastructure failures.
+</Note>
+
+See [Error Handling](/reference/errors) for a full reference of all error types.
+
+## Storing UTXO State
+
+The SDK does not persist UTXO state between calls. If your application needs to track which UTXOs have been claimed, maintain your own list (keyed by `insertionIndex` + `treeIndex`) and exclude already-claimed entries from future claims.
+
+A claimed UTXO's nullifier is burned on-chain - attempting to claim it again will fail at the on-chain program level.

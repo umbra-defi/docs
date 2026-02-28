@@ -1,0 +1,163 @@
+---
+title: "Deposit"
+description: "Move SPL and Token-2022 tokens from a public wallet into an encrypted balance."
+---
+
+## Overview
+
+The `deposit` operation moves tokens from a user's public **Associated Token Account (ATA)** into an encrypted **Encrypted Token Account (ETA)**. After a successful deposit, the balance is hidden on-chain.
+
+<Steps>
+  <Step title="Transfer from Public ATA">
+    Tokens are moved from the user's **Associated Token Account (ATA)** into the Shielded Pool - an on-chain SPL or Token-2022 custody account controlled by the Umbra program.
+  </Step>
+  <Step title="Fee Deduction">
+    Protocol fees and any Token-2022 transfer fees are subtracted from the incoming amount. The net amount is what gets credited to the encrypted balance.
+  </Step>
+  <Step title="Credit Encrypted Token Account">
+    The net amount is added to the destination user's **Encrypted Token Account (ETA)**. The balance is hidden on-chain - it can only be decrypted by the Arcium MPC network and, in Shared mode, by the user's own X25519 key.
+  </Step>
+</Steps>
+
+<Note>
+The user must be [registered](/sdk/registration) before depositing. An `EncryptedUserAccount` PDA must exist for their wallet address.
+</Note>
+
+<Warning>
+Deposit transactions are publicly visible on-chain. The depositor's wallet address, the destination address, and the gross transfer amount are all readable from the transaction. Only the resulting encrypted balance is hidden - the act of shielding itself is not private.
+</Warning>
+
+## Usage
+
+```typescript
+import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+const signature = await deposit(
+  destinationAddress,  // whose encrypted balance to credit
+  mint,                // SPL or Token-2022 mint address
+  transferAmount,      // amount in native token units (U64)
+  options?,            // optional
+);
+```
+
+## Parameters
+
+<ParamField path="destinationAddress" type="Address" required>
+  The wallet address whose encrypted balance is credited. This is usually `client.signer.address` (depositing to yourself), but you can deposit into any registered user's account - the funds will be encrypted under *their* X25519 key.
+</ParamField>
+
+<ParamField path="mint" type="Address" required>
+  The SPL token mint address. Works with any standard SPL token and Token-2022 mints (see [Token-2022 Support](/advanced/token-2022) for transfer fee handling).
+</ParamField>
+
+<ParamField path="transferAmount" type="bigint" required>
+  The gross amount to transfer, in the token's native units (accounting for decimals). For example, `1_000_000n` for 1 USDC (6 decimals). Protocol fees and Token-2022 transfer fees are **subtracted** from this amount before the ETA is credited.
+</ParamField>
+
+<ParamField path="options.priorityFees" type="bigint" default="0n">
+  Additional compute unit price in microlamports. Increase this if transactions are timing out during periods of high network congestion.
+</ParamField>
+
+<ParamField path="options.purpose" type="number" default="0">
+  A purpose flag stored alongside the deposit. Reserved for protocol use; leave at `0` unless instructed otherwise.
+</ParamField>
+
+<ParamField path="options.optionalData" type="Uint8Array">
+  32 bytes of arbitrary metadata stored with the deposit. Defaults to all zeros.
+</ParamField>
+
+## Return Value
+
+Returns a `Promise<TransactionSignature>` - the signature of the confirmed deposit transaction.
+
+## Encryption Mode Selection
+
+The SDK automatically selects the correct instruction variant based on the state of the destination user's account:
+
+- **New MXE-only balance** - destination has no X25519 key registered; first deposit
+- **Existing MXE-only balance** - destination has no X25519 key; balance already exists
+- **New Shared balance** - destination has X25519 key registered; first deposit
+- **Existing Shared balance** - destination has X25519 key; balance already exists
+
+You do not need to specify the mode manually.
+
+## Protocol Fees
+
+Fees are deducted from the `transferAmount` before crediting the ETA. The amount credited is:
+
+```
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) × commissionBps / 10000)
+```
+
+Protocol fee configuration is set on-chain by the pool admin and may vary per pool. The current default is a small fixed base fee plus a 0.3% commission.
+
+<Note>
+In most cases, direct deposits from your own ATA to your own ETA carry **zero protocol fees** - the `baseFee` and `commissionBps` are both set to 0 for standard self-shielding. Fees may apply for deposits routed through relayers or for specific pool configurations.
+</Note>
+
+## Example: Self-Deposit
+
+```typescript
+import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+// Deposit 100 USDC into your own encrypted balance
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const ONE_HUNDRED_USDC = 100_000_000n; // 6 decimals
+
+const signature = await deposit(client.signer.address, USDC, ONE_HUNDRED_USDC);
+console.log("Deposit signature:", signature);
+```
+
+## Example: Deposit to Another User
+
+You can shield tokens directly into another registered user's encrypted balance:
+
+```typescript
+const RECIPIENT = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";
+
+const signature = await deposit(RECIPIENT, USDC, ONE_HUNDRED_USDC);
+```
+
+The tokens are encrypted under the recipient's X25519 key. Only they can withdraw them.
+
+## Error Handling
+
+Deposit errors include a `stage` field identifying where the failure occurred:
+
+```typescript
+import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
+
+try {
+  await deposit(destinationAddress, mint, amount);
+} catch (err) {
+  if (isEncryptedDepositError(err)) {
+    switch (err.stage) {
+      case "validation":
+        // Invalid arguments - check destinationAddress, mint, amount
+        break;
+      case "mint-fetch":
+        // Could not fetch mint account - check RPC connectivity and mint address
+        break;
+      case "fee-calculation":
+        // Token-2022 transfer fee calculation failed
+        break;
+      case "account-fetch":
+        // Could not fetch the destination user account or token account
+        break;
+      case "transaction-send":
+        // Transaction submitted but confirmation failed - may still have landed
+        break;
+      default:
+        // Other stages: pda-derivation, instruction-build, transaction-build,
+        // transaction-compile, transaction-sign, transaction-validate
+        console.error("Deposit failed at stage:", err.stage, err);
+    }
+  }
+}
+```
+
+See [Error Handling](/reference/errors) for a full reference.

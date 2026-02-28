@@ -1,0 +1,131 @@
+---
+title: "Withdraw"
+description: "Move tokens from an encrypted balance back to a public wallet."
+---
+
+## Overview
+
+The `withdraw` operation is the reverse of a deposit. It moves tokens from a user's encrypted **ETA** back to their public **ATA**.
+
+```
+Encrypted Token Account (ETA)
+          │
+          ▼
+  Umbra Vault (on-chain SPL)  ──withdraw──►  Your Public ATA
+```
+
+Arcium MPC verifies the withdrawal authorization. The operation follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK waits for both the handler and the callback transactions to confirm before returning.
+
+## Usage
+
+```typescript
+import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+
+const signature = await withdraw(
+  destinationAddress, // where tokens go (typically client.signer.address)
+  mint,               // SPL or Token-2022 mint address
+  amount,             // amount in native token units (U64)
+  options?,           // optional
+);
+```
+
+## Parameters
+
+<ParamField path="destinationAddress" type="Address" required>
+  The Solana address to receive the withdrawn tokens. This is typically `client.signer.address`.
+</ParamField>
+
+<ParamField path="mint" type="Address" required>
+  The SPL or Token-2022 mint address. Must match a mint for which the user has an existing encrypted balance.
+</ParamField>
+
+<ParamField path="amount" type="bigint" required>
+  The amount to withdraw, in the token's native units. Must not exceed the current encrypted balance.
+</ParamField>
+
+<ParamField path="options.priorityFees" type="bigint" default="0n">
+  Additional compute unit price in microlamports. Recommended during high network load.
+</ParamField>
+
+<ParamField path="options.optionalData" type="Uint8Array">
+  32 bytes of arbitrary metadata stored with the withdrawal. Defaults to all zeros.
+</ParamField>
+
+## Return Value
+
+Returns a `Promise<TransactionSignature>` - the signature of the confirmed withdrawal transaction (the callback instruction).
+
+## Example
+
+```typescript
+import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+const signature = await withdraw(client.signer.address, USDC, 50_000_000n); // 50 USDC
+console.log("Withdrawal confirmed:", signature);
+```
+
+## Withdrawal Destination
+
+The tokens are sent to the ATA associated with the `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail with an account-not-found error. Create the ATA first using standard token tooling if needed.
+
+## Error Handling
+
+Withdrawal errors are typed with a `stage` field identifying exactly where in the pipeline the failure occurred:
+
+```typescript
+import { isEncryptedWithdrawalError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const signature = await withdraw(mint, amount);
+} catch (err) {
+  if (isEncryptedWithdrawalError(err)) {
+    switch (err.stage) {
+      case "validation":
+        // Zero amount, or no encrypted balance exists for this mint.
+        console.error("Withdrawal validation failed:", err.message);
+        break;
+
+      case "mint-fetch":
+        // Could not fetch the mint account - check RPC connectivity and mint address.
+        break;
+
+      case "pda-derivation":
+        // Could not derive required program addresses - unexpected on-chain state.
+        break;
+
+      case "instruction-build":
+        // Could not construct the instruction - protocol state mismatch.
+        break;
+
+      case "transaction-sign":
+        // User rejected the transaction in their wallet.
+        showNotification("Withdrawal cancelled.");
+        break;
+
+      case "transaction-send":
+        // Transaction submitted but confirmation timed out.
+        // The transaction may have landed - check on-chain before retrying.
+        console.warn("Confirmation timeout. Check signature on-chain:", err.cause);
+        break;
+
+      default:
+        // Other stages: initialization, transaction-build, transaction-compile.
+        console.error("Withdrawal failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+See [Error Handling](/reference/errors) for retry guidance and a full stage reference.
+
+## Timing
+
+Withdrawals follow the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern). The SDK submits the handler transaction, waits for Arcium to complete the MPC computation, then waits for the callback transaction to confirm. Total wall-clock time is typically a few seconds on a well-connected network.

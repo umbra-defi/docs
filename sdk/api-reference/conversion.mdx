@@ -1,0 +1,88 @@
+---
+title: "Conversion API Reference"
+description: "Complete reference for converting MXE-only encrypted balances to Shared mode."
+---
+
+## `getConvertToSharedEncryptionFunction`
+
+```typescript
+import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+
+function getConvertToSharedEncryptionFunction(
+  args: GetConvertToSharedEncryptionFunctionArgs,
+  deps?: GetConvertToSharedEncryptionFunctionDeps,
+): ConvertToSharedEncryptionFunction
+```
+
+Factory function that returns a callable conversion function.
+
+### `GetConvertToSharedEncryptionFunctionArgs`
+
+<ParamField path="client" type="IUmbraClient" required>
+  The Umbra client instance. Must have an X25519 key registered on-chain (via `register({ confidential: true })`).
+</ParamField>
+
+### Returned Function
+
+```typescript
+async function convertToSharedEncryption(
+  mints: readonly Address[],
+  optionalData?: Uint8Array,
+  callbacks?: TransactionCallbacks,
+): Promise<ConvertToSharedEncryptionResult>
+```
+
+Upgrades MXE-only encrypted token accounts to Shared mode. Processes each mint in the array, skipping any that are not eligible.
+
+### Parameters
+
+<ParamField path="mints" type="readonly Address[]" required>
+  Mint addresses to convert. Each must have an initialized encrypted token account in MXE-only mode.
+</ParamField>
+
+<ParamField path="optionalData" type="Uint8Array">
+  32 bytes of optional metadata. Defaults to zero bytes.
+</ParamField>
+
+<ParamField path="callbacks" type="TransactionCallbacks">
+  Lifecycle hooks fired before and after each per-mint conversion transaction.
+</ParamField>
+
+### Return Value
+
+```typescript
+type ConvertToSharedEncryptionResult = {
+  converted: Map<Address, TransactionSignature>;
+  skipped: Map<Address, ConvertToSharedEncryptionSkipReason>;
+};
+
+type ConvertToSharedEncryptionSkipReason =
+  | "non_existent"           // No ETA exists for this mint
+  | "not_initialised"        // ETA exists but is not initialized
+  | "already_shared"         // ETA is already in Shared mode
+  | "balance_not_initialised"; // Arcium balance not yet initialized
+```
+
+---
+
+## Eligibility Check
+
+For each mint in the input array, the SDK checks the token account's status bits:
+
+- Account must be initialized (`IS_INITIALISED` bit set)
+- Account must be in MXE mode (`IS_SHARED_MODE` bit unset)
+- Arcium balance must be initialized (`IS_ARCIUM_BALANCE_INITIALISED` bit set)
+
+Ineligible accounts are added to `result.skipped` with the appropriate reason. Eligible accounts are re-encrypted on Arcium MPC and updated to Shared mode.
+
+---
+
+## How Conversion Works
+
+Each conversion follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern):
+
+1. Handler instruction - queues an Arcium re-encryption computation
+2. Arcium MPC - decrypts the MXE-only balance and re-encrypts under both the MPC key and the user's X25519 key
+3. Callback instruction - sets the `IS_SHARED_MODE` bit on the encrypted token account
+
+After conversion, the account is in Shared mode and future balance queries will be able to decrypt locally using the user's X25519 private key (once local decryption utilities are available in the SDK).

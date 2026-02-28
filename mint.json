@@ -1,0 +1,182 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Umbra Privacy",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "theme": "prism",
+  "rounded": "sharp",
+  "search": {
+    "location": "side"
+  },
+  "colors": {
+    "primary": "#00b3ff",
+    "light": "#00b3ff",
+    "dark": "#00b3ff",
+    "anchors": {
+      "from": "#00b3ff",
+      "to": "#00b3ff"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/umbra-defi"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "/quickstart"
+  },
+  "anchors": [
+    {
+      "name": "Reference",
+      "icon": "book-open",
+      "url": "reference"
+    },
+    {
+      "name": "Indexer API",
+      "icon": "server",
+      "url": "indexer"
+    }
+  ],
+  "openapi": "openapi-read-service.yaml",
+  "api": {
+    "baseUrl": "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+    "playground": {
+      "mode": "hide"
+    }
+  },
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": ["introduction", "quickstart", "supported-tokens"]
+    },
+    {
+      "group": "Concepts",
+      "pages": [
+        "concepts/how-umbra-works",
+        "concepts/encrypted-balances",
+        "concepts/utxos-and-mixer"
+      ]
+    },
+    {
+      "group": "Foundations",
+      "pages": [
+        "sdk/understanding-the-sdk/overview",
+        "sdk/understanding-the-sdk/types"
+      ]
+    },
+    {
+      "group": "Setup",
+      "pages": [
+        "sdk/installation",
+        "sdk/creating-a-client",
+        "sdk/wallet-adapters"
+      ]
+    },
+    {
+      "group": "Registration",
+      "pages": [
+        "sdk/registration",
+        "sdk/account-state"
+      ]
+    },
+    {
+      "group": "Transfer Models",
+      "pages": [
+        "sdk/transfers"
+      ]
+    },
+    {
+      "group": "Encrypted Balances",
+      "pages": [
+        "sdk/deposit",
+        "sdk/withdraw",
+        "sdk/query",
+        "sdk/conversion"
+      ]
+    },
+    {
+      "group": "Mixer",
+      "pages": [
+        "sdk/mixer/overview",
+        "sdk/mixer/creating-utxos",
+        "sdk/mixer/fetching-utxos",
+        "sdk/mixer/claiming-utxos",
+        "sdk/mixer/privacy-analysis"
+      ]
+    },
+    {
+      "group": "Compliance",
+      "pages": [
+        "sdk/compliance",
+        "sdk/compliance-viewing-keys",
+        "sdk/compliance-x25519-grants"
+      ]
+    },
+    {
+      "group": "Advanced",
+      "pages": [
+        "sdk/understanding-the-sdk/dependency-injection",
+        "sdk/understanding-the-sdk/key-generators",
+        "sdk/understanding-the-sdk/zk-provers",
+        "sdk/understanding-the-sdk/callbacks",
+        "sdk/understanding-the-sdk/key-rotation"
+      ]
+    },
+    {
+      "group": "Reference",
+      "pages": [
+        "reference/overview",
+        "reference/client",
+        "reference/registration",
+        "reference/deposit",
+        "reference/withdraw",
+        "reference/query",
+        "reference/conversion",
+        "reference/mixer",
+        "reference/compliance",
+        "reference/errors"
+      ]
+    },
+    {
+      "group": "Indexer API",
+      "pages": [
+        "indexer/overview",
+        "indexer/api-reference/stats",
+        {
+          "group": "Health",
+          "pages": [
+            "indexer/api-reference/health/basic",
+            "indexer/api-reference/health/detailed",
+            "indexer/api-reference/health/liveness",
+            "indexer/api-reference/health/readiness"
+          ]
+        },
+        {
+          "group": "Trees",
+          "pages": [
+            "indexer/api-reference/tree-metadata",
+            "indexer/api-reference/tree-utxos",
+            "indexer/api-reference/merkle-proofs"
+          ]
+        },
+        {
+          "group": "UTXOs",
+          "pages": [
+            "indexer/api-reference/utxos",
+            "indexer/api-reference/utxo-single"
+          ]
+        }
+      ]
+    }
+  ],
+  "footerSocials": {
+    "x": "https://x.com/UmbraPrivacy",
+    "github": "https://github.com/umbra-defi",
+    "website": "https://docs.umbraprivacy.com"
+  }
+}

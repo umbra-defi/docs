@@ -1,0 +1,102 @@
+---
+title: "Query API Reference"
+description: "Complete reference for read-only state query functions."
+---
+
+## `getQueryUserAccountFunction`
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+function getQueryUserAccountFunction(args: {
+  accountInfoProvider: AccountInfoProviderFunction;
+}): QueryUserAccountFunction
+```
+
+Factory function returning a read-only query for any user's registration state.
+
+### Returned Function
+
+```typescript
+async function queryUserAccount(userAddress: Address): Promise<QueryUserAccountResult>
+```
+
+### `QueryUserAccountResult`
+
+```typescript
+type QueryUserAccountResult =
+  | { state: "non_existent" }
+  | { state: "exists"; data: EncryptedUserAccount };
+```
+
+**`EncryptedUserAccount` fields when `state === "exists"`:**
+
+<ResponseField name="isInitialised" type="boolean">
+  Base account has been created on-chain.
+</ResponseField>
+
+<ResponseField name="isUserAccountX25519KeyRegistered" type="boolean">
+  X25519 key registered; Shared-mode deposits are enabled.
+</ResponseField>
+
+<ResponseField name="isUserCommitmentRegistered" type="boolean">
+  Poseidon user commitment registered; mixer participation is enabled.
+</ResponseField>
+
+<ResponseField name="isActiveForAnonymousUsage" type="boolean">
+  Both X25519 and commitment are registered. Account is fully ready for all features.
+</ResponseField>
+
+<ResponseField name="x25519PublicKey" type="Uint8Array">
+  32-byte X25519 public key. Used by senders to encrypt UTXOs addressed to this account.
+</ResponseField>
+
+<ResponseField name="generationIndex" type="bigint">
+  Monotonic counter for nonce derivation. Incremented on each deposit/withdrawal.
+</ResponseField>
+
+---
+
+## `getQueryEncryptedBalanceFunction`
+
+```typescript
+import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+function getQueryEncryptedBalanceFunction(args: {
+  client: IUmbraClient;
+}): QueryEncryptedBalanceFunction
+```
+
+Factory function returning a query for the signing user's encrypted balances across multiple mints.
+
+### Returned Function
+
+```typescript
+async function queryEncryptedBalance(
+  mints: readonly Address[],
+): Promise<Map<Address, QueryEncryptedBalanceResult>>
+```
+
+Queries the calling user's encrypted token account PDAs for each mint in the array. Returns a `Map` from mint address to result.
+
+### `QueryEncryptedBalanceResult`
+
+```typescript
+type QueryEncryptedBalanceResult =
+  | { state: "non_existent" }
+  | { state: "exists"; data: EncryptedTokenAccountData };
+```
+
+**`EncryptedTokenAccountData` fields when `state === "exists"`:**
+
+<ResponseField name="mode" type='"mxe" | "shared"'>
+  Encryption mode. `"shared"` means the balance is also encrypted under the user's X25519 key (registered via `register({ confidential: true })`).
+</ResponseField>
+
+<ResponseField name="nonce" type="bigint">
+  Current operation nonce for this token account.
+</ResponseField>
+
+<ResponseField name="encryptedBalance" type="Uint8Array">
+  Raw ciphertext of the balance. Not directly readable - decryption requires Arcium MPC (MXE mode) or the user's X25519 private key (Shared mode).
+</ResponseField>

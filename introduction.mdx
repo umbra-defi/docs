@@ -1,0 +1,75 @@
+---
+title: "Introduction"
+description: "Umbra is a privacy protocol for Solana that lets users shield token balances and transfer value anonymously - without trusting a third party with their funds."
+---
+
+## What is Umbra?
+
+Umbra adds a privacy layer on top of standard Solana [SPL and Token-2022 tokens](https://spl.solana.com/token). It lets you:
+
+- **Shield balances** - move tokens from a public SPL or Token-2022 account into an encrypted account where the balance is hidden from everyone except authorized viewers
+- **Transfer anonymously** - move tokens in and out of a shared mixer pool with no on-chain linkage revealed between the entry and exit points
+- **Control who sees what** - grant selective viewing access to auditors or compliance systems without exposing your full history
+
+Everything runs on Solana mainnet using a combination of on-chain programs and [Arcium](https://arcium.com) multi-party computation (MPC) for the confidential arithmetic.
+
+<Note>
+You do **not** need to understand MPC or zero-knowledge proofs to use Umbra. The SDK handles all cryptographic operations for you.
+</Note>
+
+## Core Concepts at a Glance
+
+<CardGroup cols={2}>
+  <Card title="Encrypted Balances" icon="shield" href="/concepts/encrypted-balances">
+    Shield any SPL or Token-2022 token balance in a confidential account. Only you - and anyone you explicitly grant access to - can see the amount.
+  </Card>
+  <Card title="Mixer / UTXOs" icon="shuffle" href="/concepts/utxos-and-mixer">
+    Break the on-chain link between a deposit and a withdrawal using a shared Merkle tree and zero-knowledge proofs.
+  </Card>
+  <Card title="SDK" icon="code" href="/sdk/installation">
+    A TypeScript SDK that wraps all protocol operations into simple async functions. Works in Node.js and browser environments.
+  </Card>
+  <Card title="Indexer API" icon="server" href="/indexer/overview">
+    A read-only REST API for querying UTXO records and Merkle proofs - used internally by the SDK and available for direct integration.
+  </Card>
+</CardGroup>
+
+## How It Fits Into Your Stack
+
+Umbra is designed to slot into an existing Solana application. You bring your wallet adapter; Umbra handles the rest.
+
+```
+Your App
+  └── Wallet (Phantom, Solflare, etc.)
+        └── Umbra SDK (@umbra-privacy/sdk)
+              ├── Solana RPC    - sends and confirms transactions
+              ├── Arcium MPC    - performs confidential computation off-chain
+              └── Umbra Indexer - indexes UTXOs and generates Merkle proofs
+```
+
+## Program ID
+
+The Umbra on-chain program is deployed at:
+
+```
+UMBRAkrfUTHuPAjDQXgmpoQjGGyhtqiRqWNrMroEijV
+```
+
+This address is the same on mainnet, devnet, and localnet test deployments.
+
+## Supported Networks
+
+- `mainnet` - Production
+- `devnet` - Development and integration testing
+- `localnet` - Local validator for unit tests
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the SDK and run your first deposit in under 5 minutes.
+  </Card>
+  <Card title="How Umbra Works" icon="book-open" href="/concepts/how-umbra-works">
+    Understand the privacy model before you start building.
+  </Card>
+</CardGroup>

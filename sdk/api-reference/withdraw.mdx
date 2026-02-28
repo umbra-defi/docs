@@ -1,0 +1,95 @@
+---
+title: "Withdraw API Reference"
+description: "Complete reference for direct withdrawal from encrypted balance."
+---
+
+## `getDirectWithdrawIntoPublicBalanceV3Function`
+
+```typescript
+import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+
+function getDirectWithdrawIntoPublicBalanceV3Function(
+  args: GetDirectWithdrawIntoPublicBalanceFunctionArgs,
+  deps?: GetDirectWithdrawIntoPublicBalanceFunctionDeps,
+): DirectWithdrawIntoPublicBalanceFunction
+```
+
+Factory function that returns a callable withdrawal function.
+
+### `GetDirectWithdrawIntoPublicBalanceFunctionArgs`
+
+<ParamField path="client" type="IUmbraClient" required>
+  The Umbra client instance.
+</ParamField>
+
+### Returned Function
+
+```typescript
+async function withdraw(
+  mint: Address,
+  amount: bigint,
+  options?: DirectWithdrawOptions,
+): Promise<TransactionSignature>
+```
+
+Moves tokens from the signer's encrypted token account (ETA) back to their public ATA.
+
+Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - waits for both the handler transaction and the Arcium MPC callback transaction to confirm before resolving. Total wall-clock time is typically a few seconds.
+
+Returns the confirmed callback transaction signature.
+
+### Parameters
+
+<ParamField path="mint" type="Address" required>
+  SPL or Token-2022 mint address. Must match a mint for which the signer has an existing encrypted balance.
+</ParamField>
+
+<ParamField path="amount" type="bigint" required>
+  Amount to withdraw in native token units. Must not exceed the current encrypted balance.
+</ParamField>
+
+<ParamField path="options.priorityFees" type="bigint" default="0n">
+  Additional compute unit price in microlamports.
+</ParamField>
+
+<ParamField path="options.optionalData" type="Uint8Array">
+  32 bytes of optional metadata stored with the withdrawal. Defaults to zero bytes.
+</ParamField>
+
+---
+
+## Withdrawal Destination
+
+Tokens are always sent to the ATA associated with `client.signer.address` for the given mint. The destination cannot be changed. To send to a different address, use the [mixer flow](/sdk/mixer/overview).
+
+---
+
+## MPC Timing
+
+The withdrawal uses the dual-instruction pattern:
+
+1. Handler instruction - sent and confirmed immediately
+2. Arcium MPC computation - runs off-chain (typically 1–5 seconds)
+3. Callback instruction - sent and confirmed by the SDK after MPC completes
+
+The SDK's `await withdraw(...)` call spans all three steps.
+
+---
+
+## Error Class
+
+Throws `EncryptedWithdrawalError` on failure.
+
+```typescript
+import { isEncryptedWithdrawalError } from "@umbra-privacy/sdk/errors";
+
+try {
+  await withdraw(mint, amount);
+} catch (err) {
+  if (isEncryptedWithdrawalError(err)) {
+    console.error("Stage:", err.stage, "Message:", err.message);
+  }
+}
+```
+
+See [Error Handling](/reference/errors) for the full list of stages.

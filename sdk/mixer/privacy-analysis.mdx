@@ -1,0 +1,156 @@
+---
+title: "Privacy Analysis"
+description: "A complete breakdown of every source and destination combination in the mixer and the privacy guarantees each provides."
+---
+
+## Summary
+
+The mixer's privacy strength is determined by three independent choices: where tokens come from, where they land, and who controls the burn.
+
+- Shielding both ends (ETA → ETA) eliminates amount correlation entirely and makes the sender completely unlinkable at burn time - the strongest possible configuration.
+- Shielding one end (mixed flows) partially limits what an observer can correlate, depending on which side is visible.
+- Public flows (ATA → ATA) expose amounts at both ends; the only remaining privacy property is the absence of a direct on-chain link between the two addresses.
+- Receiver-claimable UTXOs are cryptographically equivalent to self-claimable UTXOs with the same source and destination, but are stronger in practice - recipients naturally claim later and independently, widening the anonymity set without any deliberate effort.
+
+For a complete breakdown of all eight combinations see the [Privacy Ranking](#privacy-ranking) below.
+
+---
+
+## How to Read This Page
+
+Every UTXO flow through the mixer has two independent axes that determine its privacy profile:
+
+- **Source** - where the tokens come from: a public ATA or an encrypted balance (ETA)
+- **Destination** - where the tokens land after the UTXO is burned: a public ATA or an encrypted balance (ETA)
+- **Claimant type** - whether the sender or the recipient is the unlocker
+
+Creating a UTXO from an ETA hides the deposited amount - no observer can see how much entered the shielded pool. Burning a UTXO into an ETA hides the claimed amount - no observer can see how much left the shielded pool. When both ends are shielded, amounts cannot be correlated at all, and the sender is completely unlinkable at burn time.
+
+### Self-claimable vs receiver-claimable
+
+Cryptographically, self-claimable and receiver-claimable UTXOs with the same source and destination are equivalent - the same information is visible or hidden on-chain in both cases. The practical difference is behavioural. A sender burning their own UTXO tends to do so relatively promptly. A recipient, acting independently, will typically claim at a time of their own choosing - often much later, and without any coordination with the sender. This natural timing gap widens the anonymity set and makes temporal correlation significantly harder in practice. Receiver-claimable is therefore the stronger choice, not because of what is on the chain, but because of how humans use it.
+
+Each of the eight combinations below is assessed on:
+
+- **Visible on-chain** - what any observer can read from the chain
+- **Hidden** - what an observer cannot determine
+- **Timing risk** - how susceptible the flow is to correlation by time
+- **Best for** - the use case this combination suits
+
+---
+
+## Privacy Ranking
+
+Pairs share the same cryptographic strength. Within each pair, receiver-claimable is stronger in practice due to natural timing behaviour.
+
+- **Tier 1** - ETA → ETA (both ends shielded, no amounts observable)
+  - ETA → Receiver-claimable → ETA
+  - ETA → Self-claimable → ETA
+- **Tier 2** - Mixed (one end shielded, amounts partially observable)
+  - ETA → Receiver-claimable → ATA
+  - ETA → Self-claimable → ATA
+  - ATA → Receiver-claimable → ETA
+  - ATA → Self-claimable → ETA
+- **Tier 3** - ATA → ATA (both ends public, amounts fully observable)
+  - ATA → Receiver-claimable → ATA
+  - ATA → Self-claimable → ATA
+
+---
+
+## Tier 1 - ETA → ETA
+
+Both the deposit and the claim are shielded. No amounts are visible at either end. This is the strongest category regardless of claimant type.
+
+### ETA → Receiver-claimable → ETA
+
+The strongest possible flow. No amounts are visible at either end, and the exit happens entirely on the recipient's timeline with no involvement from the sender.
+
+- **Visible on-chain** - a UTXO commitment was inserted into the tree; a nullifier was burned at some later time
+- **Hidden** - the deposited amount, the claimed amount, the depositor's identity, the recipient's identity, and any temporal relationship between the two events
+- **Timing risk** - minimal. No amounts are observable at either end, making correlation by value impossible. The recipient burns the UTXO at a time of their own choosing with no signal from the sender.
+- **Best for** - anonymous payments to a recipient where maximum privacy is required for both parties
+
+---
+
+### ETA → Self-claimable → ETA
+
+Cryptographically identical to the receiver-claimable variant above. The only difference is that the same party controls both the deposit and the burn, so the timing gap between the two events is down to the sender's own discipline.
+
+- **Visible on-chain** - a UTXO commitment was inserted; a nullifier was burned
+- **Hidden** - the deposited amount, the claimed amount, and any link between the deposit and burn events
+- **Timing risk** - low. Amounts cannot be correlated. The sender controls burn timing and can delay it to widen the anonymity set, though this requires deliberate effort rather than happening naturally.
+- **Best for** - moving your own funds through the mixer with no on-chain amount trail at either end
+
+---
+
+## Tier 2 - Mixed (One End Shielded)
+
+One side is visible, one is hidden. Amounts can be partially observed but not fully correlated across the pool boundary.
+
+### ETA → Receiver-claimable → ATA
+
+The deposit is hidden but the claim exits publicly. No amount is visible at entry, so the visible exit cannot be tied back to any specific deposit with certainty.
+
+- **Visible on-chain** - the claimed amount and the destination ATA at burn time
+- **Hidden** - the deposited amount, the depositor's identity, and any link from the visible claim back to the original deposit
+- **Timing risk** - low-medium. No inflow amount is observable to match against the claim. The recipient controls burn timing independently of the sender, naturally introducing a gap.
+- **Best for** - sending to a recipient who needs tokens in a public wallet, where protecting the sender's identity and deposit amount is the priority
+
+---
+
+### ETA → Self-claimable → ATA
+
+Cryptographically identical to the receiver-claimable variant above. The deposit is hidden and the exit is public, but the same party controls both events, so the timing gap is self-imposed.
+
+- **Visible on-chain** - the claimed amount and destination ATA at burn time
+- **Hidden** - the deposited amount and any quantitative link from the burn back to the deposit
+- **Timing risk** - medium. The claim amount is visible but no matching deposit amount can be observed. Timing correlation is possible but requires the sender to burn promptly after depositing.
+- **Best for** - surfacing funds into a public wallet where hiding the deposit amount matters more than hiding the exit
+
+---
+
+### ATA → Receiver-claimable → ETA
+
+The deposit is public but the claim is hidden. An observer can see who deposited and how much, but the burn produces no visible exit - no amount, no destination. The recipient acts independently, naturally introducing timing separation.
+
+- **Visible on-chain** - the deposited amount and the depositing ATA at UTXO creation time
+- **Hidden** - the claimed amount, the claim destination, and any link from the visible deposit to the eventual claim
+- **Timing risk** - low-medium. The exit is invisible, so even though the deposit is known, there is no observable claim event to correlate it against. The recipient controls when to burn.
+- **Best for** - scenarios where the sender's identity is not sensitive but the recipient's privacy must be protected
+
+---
+
+### ATA → Self-claimable → ETA
+
+Cryptographically identical to the receiver-claimable variant above. The deposit is public and the exit is hidden, but the same party controls both events.
+
+- **Visible on-chain** - the deposited amount and depositing ATA at UTXO creation time
+- **Hidden** - the claimed amount and the destination
+- **Timing risk** - medium. The deposit is fully visible. The exit leaves no trace, but the sender burning their own UTXO may do so in a way that is temporally close to the deposit, narrowing the window of uncertainty.
+- **Best for** - moving funds into a private encrypted balance from a known public wallet, where the source is not sensitive but the destination must be hidden
+
+---
+
+## Tier 3 - ATA → ATA
+
+Both ends are public. Amounts are fully observable at deposit and claim. The only privacy property is the absence of a direct on-chain link between the two addresses.
+
+### ATA → Receiver-claimable → ATA
+
+Both ends are public. The sole privacy property is that the sender and recipient are different parties with no observable on-chain link connecting them. The recipient's natural timing behaviour provides some practical separation.
+
+- **Visible on-chain** - the deposited amount, the depositing ATA, the claimed amount, and the destination ATA
+- **Hidden** - the relationship between the depositor and the recipient; no on-chain record connects the two addresses
+- **Timing risk** - medium-high. Both amounts are visible and can be matched if equal or closely related. The recipient controlling burn timing reduces but does not eliminate amount-based correlation.
+- **Best for** - anonymous payments where neither party's balance needs to stay shielded and the sole goal is unlinking sender from recipient
+
+---
+
+### ATA → Self-claimable → ATA
+
+The weakest flow. Both the deposit and claim are fully visible and the same party controls both, making timing and amount correlation straightforward.
+
+- **Visible on-chain** - the deposited amount, the depositing ATA, the claimed amount, and the destination ATA
+- **Hidden** - the direct on-chain link between the two addresses; a ZK proof still prevents anyone from proving which deposit maps to which claim without the secret inputs
+- **Timing risk** - high. Amounts are visible at both ends. Matching equal amounts deposited and claimed within a short window is easy when the anonymity set is small.
+- **Best for** - the minimum viable case where address unlinking is the only goal and privacy of amounts or timing is not a concern; use round, pool-common amounts to maximise the anonymity set

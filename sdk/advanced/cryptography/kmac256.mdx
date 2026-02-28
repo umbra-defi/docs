@@ -1,0 +1,36 @@
+---
+title: "KMAC256"
+description: "NIST-standardised keyed hash used as the sole key derivation function across all of Umbra's key hierarchy."
+---
+
+[KMAC256](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-185.pdf) is a keyed hash function standardised by NIST in SP 800-185. It is built on the SHA-3 Keccak sponge and provides both message authentication and key derivation in a single, domain-separable construction.
+
+Umbra uses KMAC256 as the **sole key derivation function** across the entire key hierarchy. Every derived key in the system - master viewing key, X25519 keypairs, Poseidon private key, and all rotation offsets - is produced by the same primitive:
+
+```
+output = KMAC256(
+  key   = UTF8("Umbra Privacy - {domain_separator}"),
+  msg   = master_seed,
+  dkLen = 64,
+  S     = personalization_string,
+)
+```
+
+## Customisation Parameter
+
+The `S` (customization) parameter encodes the protocol version, algorithm name, scheme name, and network:
+
+```
+umbra/1.0.0|kmac256/1.0.0|kdf/1.0.0|mainnet
+```
+
+This ensures that:
+
+- Changing the network produces a completely different key space
+- Upgrading the protocol version rotates all keys without changing the wallet
+- Domain separation prevents key reuse across different key types within the same session
+
+## References
+
+- [NIST SP 800-185 - SHA-3 Derived Functions: cSHAKE, KMAC, TupleHash, and ParallelHash](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-185.pdf)
+- [Key Derivation - full hierarchy](/sdk/advanced/key-derivation)

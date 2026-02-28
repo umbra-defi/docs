@@ -1,0 +1,15 @@
+---
+title: "Single UTXO"
+openapi: "GET /v1/utxos/{absolute_index}"
+description: "Returns the single UTXO record at the specified global absolute index."
+---
+
+The absolute index uniquely identifies a UTXO across all trees:
+
+```
+absolute_index = tree_index x 1,048,576 + insertion_index
+```
+
+For example, the 5th leaf of tree 2 has absolute index `2 x 1,048,576 + 4 = 2,097,156`.
+
+Response is a `SingleUtxoResponse` wrapper containing one `UtxoDataItem`. The `X-Response-Layout` header has no effect on this endpoint.

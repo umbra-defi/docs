@@ -1,0 +1,25 @@
+---
+title: "Groth16 ZK Proofs"
+description: "Succinct non-interactive zero-knowledge proofs for commitment registration and UTXO claiming."
+---
+
+[Groth16](https://eprint.iacr.org/2016/260.pdf) is a succinct non-interactive zero-knowledge proof system (zk-SNARK) that produces constant-size proofs verifiable in constant time, regardless of the complexity of the statement being proved. It is one of the most widely deployed zk-SNARK constructions in production systems.
+
+## Uses in Umbra
+
+**User commitment registration**: Proves that the on-chain user commitment was constructed correctly from the user's Poseidon private key and X25519 public key - without revealing either input. This is required once during [registration](/sdk/registration) with `anonymous: true`.
+
+**UTXO claiming**: Proves knowledge of the secret inputs to a specific Merkle tree leaf (the UTXO commitment), that the Merkle inclusion path is valid and reaches the current root, and that the nullifier produced is correct. This is the proof that entitles the unlocker to receive the tokens.
+
+## Verification
+
+Proofs are generated client-side in the browser or on device, and verified on-chain by the Umbra Solana program using the `groth16-solana` verifier. Invalid proofs are rejected at the transaction level.
+
+## Trusted Setup
+
+Groth16 requires a trusted setup - a one-time ceremony that produces the proving and verifying keys for each circuit. Umbra's proving keys are fixed at deployment. The verifying keys are stored on-chain and can be updated via governance if circuits change.
+
+## References
+
+- [On the Size of Pairing-Based Non-interactive Arguments](https://eprint.iacr.org/2016/260.pdf) - Groth, 2016
+- [ZK Provers - override the default prover](/sdk/advanced/zk-provers)

@@ -1,0 +1,23 @@
+---
+title: "X25519 Key Exchange"
+description: "Diffie-Hellman over Curve25519 for token account encryption and UTXO ciphertext addressing."
+---
+
+[X25519](https://www.rfc-editor.org/rfc/rfc7748) is the Diffie-Hellman function over Curve25519, standardised in [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748). See the [X25519 Keypair architecture page](https://docs.umbraprivacy.com/docs/key-architecture/x25519-keypair) for a full breakdown of how this key fits into Umbra's key hierarchy.
+
+## Uses in Umbra
+
+**[Encrypted token accounts](https://docs.umbraprivacy.com/docs/core-concepts/encrypted-token-accounts) (Shared mode)**: Each user's X25519 public key is registered on-chain. When a deposit arrives, the balance is encrypted under both the Arcium MPC key and the user's X25519 key. This allows the user to independently decrypt their balance without relying on Arcium.
+
+**UTXO ciphertext addressing**: When creating a UTXO for a recipient, the SDK generates an ephemeral X25519 keypair, performs ECDH with the recipient's registered public key, and derives an AES-GCM key from the shared secret. The 68-byte UTXO payload (amount + recipient + type tag) is encrypted and stored on-chain. Only the intended recipient - who holds the matching X25519 private key - can decrypt it.
+
+## Key Security
+
+The X25519 private key is never stored on-chain or transmitted anywhere. It is derived deterministically from the user's master seed (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). See [Key Derivation](/sdk/advanced/key-derivation) for the full derivation path.
+
+## References
+
+- [RFC 7748 - Elliptic Curves for Security](https://www.rfc-editor.org/rfc/rfc7748)
+- [Curve25519: New Diffie-Hellman Speed Records](https://cr.yp.to/ecdh/curve25519-20060209.pdf) - Bernstein, 2006
+- [X25519 Keypair - Umbra Architecture](https://docs.umbraprivacy.com/docs/key-architecture/x25519-keypair)
+- [Encrypted Token Accounts - Core Concepts](https://docs.umbraprivacy.com/docs/core-concepts/encrypted-token-accounts)

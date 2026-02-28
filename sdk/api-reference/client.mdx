@@ -1,0 +1,201 @@
+---
+title: "Client API Reference"
+description: "Complete reference for getUmbraClientFromSigner and the IUmbraClient interface."
+---
+
+## `getUmbraClientFromSigner`
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+async function getUmbraClientFromSigner(
+  args: GetUmbraClientFromSignerArgs,
+  deps?: GetUmbraClientFromSignerDeps,
+): Promise<IUmbraClient>
+```
+
+Factory function that constructs an `IUmbraClient`. All Umbra SDK service functions accept a client and use it as their shared context.
+
+### `GetUmbraClientFromSignerArgs`
+
+<ParamField path="signer" type="IUmbraSigner" required>
+  The wallet signer. See [Wallet Adapters](/sdk/wallet-adapters) for adapter options.
+</ParamField>
+
+<ParamField path="network" type='"mainnet" | "devnet" | "localnet"' required>
+  Target Solana network. Resolves program addresses, Arcium cluster endpoints, and default RPC URLs.
+</ParamField>
+
+<ParamField path="rpcUrl" type="string" required>
+  Solana JSON-RPC HTTP endpoint. Used for account fetching, blockhash, and transaction submission.
+</ParamField>
+
+<ParamField path="rpcSubscriptionsUrl" type="string" required>
+  Solana WebSocket endpoint. Used for signature confirmation subscriptions.
+</ParamField>
+
+<ParamField path="indexerApiEndpoint" type="string">
+  Umbra indexer base URL. Required for all mixer operations. Omit for deposit/withdraw-only usage.
+</ParamField>
+
+<ParamField path="commitment" type='"processed" | "confirmed" | "finalized"' default='"confirmed"'>
+  Transaction confirmation level.
+</ParamField>
+
+<ParamField path="deferMasterSeedSignature" type="boolean" default="true">
+  When `true` (default): master seed derivation is lazy - the wallet prompt fires on first use. When `false`: master seed is eagerly derived at construction time, before the returned `Promise` resolves.
+</ParamField>
+
+<ParamField path="offsets" type="object">
+  U512 rotation offsets for each derived key. All default to `0n`. Incrementing an offset rotates that key without changing the wallet or re-registering.
+
+  Fields: `masterViewingKey`, `poseidonPrivateKey`, `x25519UserAccountPrivateKey`, `x25519MasterViewingKeyEncryptingPrivateKey`, `mintX25519PrivateKey`, `rescueCommitmentBlindingFactor`, `randomCommitmentFactor`.
+</ParamField>
+
+<ParamField path="versions" type="object">
+  Version specifier overrides for protocol, algorithm, and scheme versioning. Used for key space migrations. Leave unset unless instructed.
+</ParamField>
+
+### `GetUmbraClientFromSignerDeps`
+
+<ParamField path="deps.accountInfoProvider" type="AccountInfoProviderFunction">
+  Override the account fetcher. Defaults to RPC-based fetcher built from `rpcUrl`.
+</ParamField>
+
+<ParamField path="deps.blockhashProvider" type="GetLatestBlockhash">
+  Override the blockhash provider. Defaults to RPC-based implementation.
+</ParamField>
+
+<ParamField path="deps.transactionForwarder" type="TransactionForwarder">
+  Override how transactions are sent and confirmed. Swap to use Jito bundles or custom priority fee strategies.
+</ParamField>
+
+<ParamField path="deps.epochInfoProvider" type="GetEpochInfo">
+  Override epoch info provider for Token-2022 transfer fee calculations.
+</ParamField>
+
+<ParamField path="deps.masterSeedStorage.load" type="MasterSeedLoaderFunction">
+  Custom seed loader. Return `{ exists: false }` if nothing is stored, or `{ exists: true, seed }` if found.
+</ParamField>
+
+<ParamField path="deps.masterSeedStorage.store" type="MasterSeedStorerFunction">
+  Custom seed storer. Called after first derivation.
+</ParamField>
+
+<ParamField path="deps.masterSeedStorage.generate" type="MasterSeedGeneratorFunction">
+  Override the seed generation function entirely. Useful for testing with a fixed deterministic seed.
+</ParamField>
+
+---
+
+## `IUmbraClient`
+
+The client object returned by `getUmbraClientFromSigner`. All fields are read-only.
+
+### Identity and Network
+
+<ResponseField name="signer" type="IUmbraSigner">
+  The wallet signer passed at construction.
+</ResponseField>
+
+<ResponseField name="network" type='"mainnet" | "devnet" | "localnet"'>
+  The resolved network.
+</ResponseField>
+
+<ResponseField name="networkConfig" type="NetworkConfig">
+  Resolved Solana program addresses and Arcium cluster endpoints for the selected network.
+</ResponseField>
+
+<ResponseField name="offsets" type="object">
+  Active U512 offsets for each derived key. All `0n` by default.
+</ResponseField>
+
+<ResponseField name="versions" type="object">
+  Active version specifiers: `protocol`, `algorithm`, `scheme`, `network`.
+</ResponseField>
+
+### Infrastructure Providers
+
+<ResponseField name="accountInfoProvider" type="AccountInfoProviderFunction">
+  Pre-built RPC-based account info fetcher. Accepts an array of `Address` values and returns account data.
+</ResponseField>
+
+<ResponseField name="blockhashProvider" type="GetLatestBlockhash">
+  Pre-built blockhash fetcher. Returns the latest blockhash and last-valid block height.
+</ResponseField>
+
+<ResponseField name="transactionForwarder" type="TransactionForwarder">
+  Pre-built transaction broadcaster and confirmation waiter.
+</ResponseField>
+
+<ResponseField name="epochInfoProvider" type="GetEpochInfo">
+  Pre-built epoch info provider. Used for Token-2022 transfer fee calculations.
+</ResponseField>
+
+<ResponseField name="fetchMerkleProof" type="MerkleProofFetcherFunction | undefined">
+  Indexer-based Merkle proof fetcher. `undefined` if `indexerApiEndpoint` was not provided.
+</ResponseField>
+
+<ResponseField name="fetchUtxoData" type="UtxoDataFetcherFunction | undefined">
+  Indexer-based UTXO data fetcher. `undefined` if `indexerApiEndpoint` was not provided.
+</ResponseField>
+
+### Master Seed
+
+<ResponseField name="masterSeed.getMasterSeed" type="() => Promise<MasterSeed>">
+  Derives (or returns the cached) master seed. The first call triggers the wallet signing prompt. All subsequent calls return the cached 64-byte seed synchronously within the Promise.
+</ResponseField>
+
+<ResponseField name="masterSeed.load" type="MasterSeedLoaderFunction">
+  The configured seed loader function.
+</ResponseField>
+
+<ResponseField name="masterSeed.store" type="MasterSeedStorerFunction">
+  The configured seed storer function.
+</ResponseField>
+
+<ResponseField name="masterSeed.generate" type="MasterSeedGeneratorFunction">
+  The configured seed generator function.
+</ResponseField>
+
+### Derived Key Stores
+
+Each derived key type has its own `{ load, store, generate }` triple on the client. These are the per-key storage functions used internally by the key derivation layer.
+
+- `client.masterViewingKey` - master viewing key (BN254 field element)
+- `client.poseidonPrivateKey` - Poseidon cipher key
+- `client.x25519PrivateKey` - X25519 keypair for token account encryption
+- `client.yearlyViewingKey` - yearly sub-key of the MVK hierarchy
+- `client.monthlyViewingKey` - monthly sub-key
+- `client.dailyViewingKey` - daily sub-key
+- `client.mintViewingKey` - per-mint sub-key
+- `client.rescueCommitmentBlindingFactor` - blinding factor for Rescue commitments
+- `client.randomCommitmentFactor` - random factor for polynomial commitments
+
+See [Key Derivation](/sdk/advanced/key-derivation) for a full explanation of the key hierarchy.
+
+### Commitment Level
+
+<ResponseField name="commitment" type='"processed" | "confirmed" | "finalized" | undefined'>
+  The configured commitment level. `undefined` falls back to `"confirmed"`.
+</ResponseField>
+
+---
+
+## `IUmbraSigner`
+
+```typescript
+interface IUmbraSigner {
+  readonly address: Address;
+  signTransaction(tx: SignableTransaction): Promise<SignedTransaction>;
+  signTransactions(txs: readonly SignableTransaction[]): Promise<SignedTransaction[]>;
+  signMessage(message: Uint8Array): Promise<SignedMessage>;
+}
+```
+
+- `address` - the `@solana/kit` `Address` (base58 string brand) of the signing key
+- `signTransaction` - signs a single transaction
+- `signTransactions` - signs a batch of transactions atomically
+- `signMessage` - signs arbitrary bytes; used for master seed derivation
+
+See [Wallet Adapters](/sdk/wallet-adapters) for ready-made implementations.

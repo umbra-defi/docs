@@ -1,0 +1,53 @@
+---
+title: "Supported Tokens"
+description: "SPL and Token-2022 tokens with active shielded pools on each network."
+---
+
+## Overview
+
+Each shielded pool is deployed per token mint. A pool supports both the **confidential balance** feature (encrypted deposits and withdrawals) and the **mixer** feature (anonymous transfers via the Indexed Merkle Tree).
+
+Token-2022 mints with a transfer fee extension are fully supported - the SDK automatically accounts for the transfer fee before calculating protocol fees. See [Token-2022 Support](/advanced/token-2022).
+
+---
+
+## Mainnet
+
+- **wSOL** (Wrapped SOL)
+  - Mint: `So11111111111111111111111111111111111111112`
+  - Confidentiality: enabled
+  - Mixer: enabled
+
+- **USDC**
+  - Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
+  - Confidentiality: enabled
+  - Mixer: enabled
+
+- **USDT**
+  - Mint: `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`
+  - Confidentiality: enabled
+  - Mixer: enabled
+
+---
+
+## Using a Supported Mint
+
+Pass the mint address directly to any SDK function that accepts a `mint` parameter:
+
+```typescript
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// Deposit into encrypted balance
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+await deposit(client.signer.address, USDC, 1_000_000n);
+
+// Withdraw from encrypted balance
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+await withdraw(client.signer.address, USDC, 1_000_000n);
+```
+
+The SDK will fetch the pool configuration on-chain and select the correct instruction variant automatically.
+
+<Note>
+Attempting to deposit into a mint that has no active pool will fail at the account-fetch stage with an account-not-found error.
+</Note>

@@ -1,0 +1,309 @@
+---
+title: "Registration"
+description: "User registration, key rotation, generation seed updates, and staged fund recovery."
+---
+
+## getUserRegistrationFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getUserRegistrationFunction(
+  args: GetUserRegistrationFunctionArgs,
+  deps?: GetUserRegistrationFunctionDeps,
+): UserRegistrationFunction
+```
+
+Registers the caller on-chain. Registration is a multi-step idempotent flow that enables confidential token accounts (encrypted balances) and anonymous usage (mixer eligibility). Steps already completed in a previous session are skipped.
+
+---
+
+### GetUserRegistrationFunctionArgs
+
+- `client: IUmbraClient` - The configured client.
+
+---
+
+### GetUserRegistrationFunctionDeps
+
+All fields are optional overrides for SDK defaults.
+
+RPC overrides:
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+Key derivation overrides:
+- `userAccountX25519KeypairGenerator?: Curve25519KeypairGeneratorFunction`
+- `masterViewingKeyEncryptingX25519KeypairGenerator?: Curve25519KeypairGeneratorFunction`
+- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction`
+- `masterViewingKeyGenerator?: MasterViewingKeyGeneratorFunction`
+- `masterViewingKeyBlindingFactorGenerator?: MasterViewingKeyBlindingFactorGeneratorFunction`
+- `poseidonPrivateKeyGenerator?: PoseidonPrivateKeyGeneratorFunction`
+- `poseidonBlindingFactorGenerator?: PoseidonBlindingFactorGeneratorFunction`
+- `rescueCommitmentBlindingFactorGenerator?: RescueEncryptionCommitmentBlindingFactorGeneratorFunction`
+- `randomFactorGenerator?: RandomFactorForPolynomialCommitmentGeneratorFunction`
+
+Rescue cipher overrides:
+- `getRcKeyGenerator?: (privateKey: X25519PrivateKey) => RcKeyGeneratorFunction`
+- `getRcEncryptor?: (privateKey: X25519PrivateKey) => RcEncryptorWithNonceFunction`
+- `rescueCommitmentGenerator?: RescueEncryptionCommitmentGeneratorFunction`
+
+Commitment overrides:
+- `userCommitmentGenerator?: UserCommitmentGeneratorFunction`
+
+Challenge / polynomial overrides:
+- `fiatShamirChallengeGenerator?: FiatShamirChallengeGeneratorFunction`
+- `challengePowersFunction?: ChallengePowersFunction`
+- `polynomialEvaluator?: PolynomialEvaluatorFunction`
+
+Poseidon / BN254 overrides:
+- `poseidonAggregator?: PoseidonAggregatorHashFunction`
+- `bn254ModInverter?: ModuleInvFunction`
+- `computeLimbwiseSumInverse?: (limbs: Base85LimbTuple) => Bn254FieldElement`
+
+ZK prover:
+- `zkProver?: IZkProverForUserRegistration` - ZK proof generator for the anonymous registration step. Required only when `options.anonymous` is `true`. Use `getRegistrationProver()` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+
+---
+
+### Returns
+
+`UserRegistrationFunction`
+
+```typescript
+type UserRegistrationFunction = (
+  options?: UserRegistrationOptions,
+) => Promise<TransactionSignature[]>
+```
+
+Returns the signatures of all transactions submitted during the registration flow. Already-completed steps produce no transactions.
+
+### UserRegistrationOptions
+
+- `confidential?: boolean` - Register for confidential (encrypted) token account usage. Default: `true`.
+- `anonymous?: boolean` - Register for anonymous (mixer) usage. Requires a ZK proof. Default: `true`.
+- `callbacks?: UserRegistrationCallbacks` - Per-transaction lifecycle hooks.
+- `optionalData?: OptionalData32` - 32-byte caller metadata attached to on-chain instructions.
+
+---
+
+### Errors
+
+Throws `RegistrationError`. See [Errors](./errors#registrationerror) for all stages.
+
+### Example
+
+```typescript
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getRegistrationProver();
+
+const register = getUserRegistrationFunction({ client }, { zkProver });
+const signatures = await register({ confidential: true, anonymous: true });
+```
+
+---
+
+## getRotateUserAccountX25519KeyFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getRotateUserAccountX25519KeyFunction(
+  args: GetUserRegistrationFunctionArgs,
+  deps?: GetUserRegistrationFunctionDeps,
+): () => Promise<TransactionSignature[]>
+```
+
+Rotates the X25519 public key stored in the on-chain user account. Use this when the existing key may have been compromised. Accepts the same `args` and `deps` as `getUserRegistrationFunction`.
+
+Returns a zero-argument function. Call it with no arguments to execute the rotation.
+
+---
+
+## getRotateMvkX25519KeyFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getRotateMvkX25519KeyFunction(
+  args: GetUserRegistrationFunctionArgs,
+  deps?: GetUserRegistrationFunctionDeps,
+): () => Promise<TransactionSignature[]>
+```
+
+Rotates the Master Viewing Key (MVK) X25519 encryption key. Accepts the same `args` and `deps` as `getUserRegistrationFunction`.
+
+Returns a zero-argument function. Call it with no arguments to execute the rotation.
+
+---
+
+## getUpdateRandomGenerationSeedFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getUpdateRandomGenerationSeedFunction(
+  args: GetUpdateRandomGenerationSeedFunctionArgs,
+  deps?: GetUpdateRandomGenerationSeedFunctionDeps,
+): UpdateRandomGenerationSeedFunction
+```
+
+Updates the random generation seed stored in the on-chain user account. This seed contributes to commitment randomness in UTXO operations.
+
+### GetUpdateRandomGenerationSeedFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetUpdateRandomGenerationSeedFunctionDeps
+
+- `blockhashProvider?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+### Returns
+
+`UpdateRandomGenerationSeedFunction`
+
+```typescript
+type UpdateRandomGenerationSeedFunction = (
+  newSeed: Uint8Array,
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<TransactionSignature>
+```
+
+- `newSeed: Uint8Array` - The 32-byte replacement seed.
+
+---
+
+## getUpdateTokenAccountRandomGenerationSeedFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getUpdateTokenAccountRandomGenerationSeedFunction(
+  args: GetUpdateTokenAccountRandomGenerationSeedFunctionArgs,
+  deps?: GetUpdateTokenAccountRandomGenerationSeedFunctionDeps,
+): UpdateTokenAccountRandomGenerationSeedFunction
+```
+
+Updates the random generation seed on a per-mint encrypted token account.
+
+### GetUpdateTokenAccountRandomGenerationSeedFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetUpdateTokenAccountRandomGenerationSeedFunctionDeps
+
+- `blockhashProvider?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+### Returns
+
+`UpdateTokenAccountRandomGenerationSeedFunction`
+
+```typescript
+type UpdateTokenAccountRandomGenerationSeedFunction = (
+  mint: Address,
+  newSeed: Uint8Array,
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<TransactionSignature>
+```
+
+- `mint: Address` - The token mint whose account seed to update.
+- `newSeed: Uint8Array` - The 32-byte replacement seed.
+
+---
+
+## getClaimStagedSolFromPoolFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getClaimStagedSolFromPoolFunction(
+  args: GetClaimStagedSolFromPoolFunctionArgs,
+  deps?: GetClaimStagedSolFromPoolFunctionDeps,
+): ClaimStagedSolFromPoolFunction
+```
+
+Recovers SOL that was staged in the protocol's unified fee pool during a failed MPC callback. Call this if a confidential operation's callback never landed and you need to reclaim the staged SOL.
+
+### GetClaimStagedSolFromPoolFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetClaimStagedSolFromPoolFunctionDeps
+
+- `blockhashProvider?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+### Returns
+
+`ClaimStagedSolFromPoolFunction`
+
+```typescript
+type ClaimStagedSolFromPoolFunction = (
+  mint: Address,
+  amount: U64,
+  destination: Address,
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<TransactionSignature>
+```
+
+- `mint: Address` - The mint of the failed operation.
+- `amount: U64` - The SOL amount (in lamports) to recover.
+- `destination: Address` - The SOL recipient account.
+
+---
+
+## getClaimStagedSplFromPoolFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getClaimStagedSplFromPoolFunction(
+  args: GetClaimStagedSplFromPoolFunctionArgs,
+  deps?: GetClaimStagedSplFromPoolFunctionDeps,
+): ClaimStagedSplFromPoolFunction
+```
+
+Recovers SPL tokens that were staged in the protocol's unified fee pool during a failed MPC callback.
+
+### GetClaimStagedSplFromPoolFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetClaimStagedSplFromPoolFunctionDeps
+
+- `blockhashProvider?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+### Returns
+
+`ClaimStagedSplFromPoolFunction`
+
+```typescript
+type ClaimStagedSplFromPoolFunction = (
+  mint: Address,
+  amount: U64,
+  destinationAta: Address,
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<TransactionSignature>
+```
+
+- `mint: Address` - The token mint of the staged SPL tokens.
+- `amount: U64` - Token amount (in base units) to recover.
+- `destinationAta: Address` - The associated token account to receive the recovered tokens.
+
+---
+
+## RegistrationError
+
+Thrown by `getUserRegistrationFunction`. See [Errors](./errors#registrationerror).
+
+Stage values: `"initialization"` | `"master-seed-derivation"` | `"account-fetch"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`

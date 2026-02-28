@@ -1,0 +1,170 @@
+---
+title: "Recovery"
+description: "Recover access to encrypted balances and mixer UTXOs from a wallet after a session is lost."
+---
+
+## Overview
+
+Because all Umbra cryptographic keys are derived deterministically from a wallet signature, recovery is straightforward: recreate the client from the same wallet on the same network, and all keys are automatically restored.
+
+No seed phrases, no backup files, no recovery codes. The wallet is the single source of truth.
+
+## What "Recovery" Means
+
+When a user loses access to a session (page refresh, browser restart, new device), the following state is lost:
+
+- **Master seed** - cached in memory. Must be re-derived.
+- **Derived keys** - computed on demand from the master seed. Automatically re-derived.
+- **UTXO data** - the list of claimable UTXOs the SDK has previously decrypted.
+
+The following state is **never lost** (stored on-chain):
+
+- Registered user account (`EncryptedUserAccount` PDA)
+- Registered X25519 public key
+- Registered user commitment
+- Encrypted token account balances
+- UTXO commitments in the Merkle tree
+- Active compliance grants
+
+## Re-Deriving Keys
+
+Re-creating the client from the same wallet automatically re-derives the same master seed and all keys:
+
+```typescript
+// On a new session, device, or after a refresh
+const signer = createSignerFromWalletAccount(wallet, account);
+
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+  deferMasterSeedSignature: false, // prompt wallet immediately
+});
+
+// All keys are now restored
+// Encrypted balances remain accessible
+// UTXOs can be re-fetched from the indexer
+```
+
+The user will be prompted once for the master seed derivation signature. After that, all keys are available for the session lifetime.
+
+## Re-Fetching UTXOs
+
+The indexer stores all UTXO ciphertexts permanently. After recovery, rescan from insertion index 0 to find all claimable UTXOs:
+
+```typescript
+import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+
+const fetch = getFetchClaimableUtxosFunction({ client });
+
+// Scan tree 0 from the beginning
+const result = await fetch(0, 0);
+
+console.log("Recovered self-claimable UTXOs:", result.ephemeral.length);
+console.log("Recovered receiver UTXOs:", result.receiver.length);
+```
+
+For users with many UTXOs or large trees, use paginated scanning:
+
+```typescript
+async function recoverAllUtxos(treeIndex: number) {
+  const fetch = getFetchClaimableUtxosFunction({ client });
+  const allUtxos = [];
+  const CHUNK_SIZE = 10_000;
+  let cursor = 0;
+
+  while (true) {
+    const result = await fetch(treeIndex, cursor, cursor + CHUNK_SIZE - 1);
+    allUtxos.push(...result.ephemeral, ...result.receiver);
+
+    if (result.ephemeral.length === 0 && result.receiver.length === 0) {
+      break; // No more UTXOs in this range
+    }
+    cursor += CHUNK_SIZE;
+  }
+
+  return allUtxos;
+}
+```
+
+## Persisting the Master Seed to Avoid Re-Prompting
+
+If you want to avoid the wallet signing prompt on every page load, persist the master seed using the `masterSeedStorage` override. The seed should be treated with the same care as a private key:
+
+```typescript
+// Session storage: cleared when the tab closes
+const client = await getUmbraClientFromSigner(
+  { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
+  {
+    masterSeedStorage: {
+      load: async () => {
+        const stored = sessionStorage.getItem("umbra:seed");
+        if (!stored) return { exists: false };
+        return { exists: true, seed: new Uint8Array(JSON.parse(stored)) };
+      },
+      store: async (seed) => {
+        sessionStorage.setItem("umbra:seed", JSON.stringify(Array.from(seed)));
+      },
+    },
+  }
+);
+```
+
+For React Native / mobile applications, use the platform's secure storage:
+
+```typescript
+import * as SecureStore from "expo-secure-store";
+
+const client = await getUmbraClientFromSigner(
+  { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
+  {
+    masterSeedStorage: {
+      load: async () => {
+        const stored = await SecureStore.getItemAsync("umbra:seed");
+        if (!stored) return { exists: false };
+        return { exists: true, seed: new Uint8Array(JSON.parse(stored)) };
+      },
+      store: async (seed) => {
+        await SecureStore.setItemAsync("umbra:seed", JSON.stringify(Array.from(seed)));
+      },
+    },
+  }
+);
+```
+
+<Warning>
+The master seed is a 64-byte root secret - the root of your entire key hierarchy. Storing it insecurely is equivalent to storing a private key in plaintext. Only use platform-recommended secure storage APIs, and never store it in `localStorage`.
+</Warning>
+
+## Key Rotation
+
+If you suspect a key may be compromised, rotate it by incrementing its offset and re-registering on-chain:
+
+```typescript
+// Rotate the X25519 encryption key
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  offsets: {
+    x25519UserAccountPrivateKey: 1n, // incremented from default 0n
+  },
+});
+
+// Re-register the new X25519 public key on-chain
+const register = getUserRegistrationFunction({ client });
+await register({ confidential: true, anonymous: false });
+```
+
+<Warning>
+After rotating the X25519 key, existing encrypted token accounts that were created with the old key will no longer be decryptable with the new key. You must withdraw any remaining balance first, or use the old key offset to do so. Conversion to Shared mode (if balances were in MXE mode) will also need to be re-done with the new key.
+</Warning>
+
+## Multi-Device Access
+
+Because all keys are derived from the wallet, the same wallet on any device will produce the same keys. There is no special sync protocol - just connect the same wallet on the new device and create a client.
+
+The only exception is persisted state like the master seed in session/secure storage, which is device-local by design. On a new device, the user will be prompted once to re-derive the seed.

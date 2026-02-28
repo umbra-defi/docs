@@ -1,0 +1,154 @@
+---
+title: "Signers API Reference"
+description: "Complete reference for all IUmbraSigner factory functions."
+---
+
+## In-Memory Signer Functions
+
+### `createInMemorySigner`
+
+```typescript
+import { createInMemorySigner } from "@umbra-privacy/sdk";
+
+async function createInMemorySigner(): Promise<IUmbraSigner>
+```
+
+Generates a fresh Ed25519 keypair using the platform's CSPRNG (Web Crypto API). The private key is non-extractable.
+
+Use for: tests, CI pipelines, local scripts.
+
+```typescript
+const signer = await createInMemorySigner();
+console.log(signer.address); // base58 public key
+```
+
+---
+
+### `createSignerFromPrivateKeyBytes`
+
+```typescript
+import { createSignerFromPrivateKeyBytes } from "@umbra-privacy/sdk";
+
+async function createSignerFromPrivateKeyBytes(bytes: Uint8Array): Promise<IUmbraSigner>
+```
+
+Constructs a signer from raw key material.
+
+<ParamField path="bytes" type="Uint8Array" required>
+  Either 64 bytes (combined private key + public key, Solana CLI format) or 32 bytes (seed). `@solana/kit` handles both formats.
+</ParamField>
+
+```typescript
+import { readFileSync } from "fs";
+
+const keyFile = JSON.parse(readFileSync("/path/to/id.json", "utf8"));
+const signer = await createSignerFromPrivateKeyBytes(new Uint8Array(keyFile));
+```
+
+---
+
+### `createSignerFromKeyPair`
+
+```typescript
+import { createSignerFromKeyPair } from "@umbra-privacy/sdk";
+import type { KeyPairSigner } from "@solana/kit";
+
+function createSignerFromKeyPair(kps: KeyPairSigner): IUmbraSigner
+```
+
+Synchronous adapter for an existing `@solana/kit` `KeyPairSigner`.
+
+<ParamField path="kps" type="KeyPairSigner" required>
+  A `KeyPairSigner` from `generateKeyPairSigner()` or `createKeyPairSignerFromBytes()`.
+</ParamField>
+
+```typescript
+import { generateKeyPairSigner } from "@solana/kit";
+import { createSignerFromKeyPair } from "@umbra-privacy/sdk";
+
+const kps = await generateKeyPairSigner();
+const signer = createSignerFromKeyPair(kps);
+```
+
+---
+
+## Browser Wallet Functions
+
+### `createSignerFromWalletAccount`
+
+```typescript
+import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
+import type { Wallet, WalletAccount } from "@wallet-standard/core";
+
+function createSignerFromWalletAccount(wallet: Wallet, account: WalletAccount): IUmbraSigner
+```
+
+Adapts a [Wallet Standard](https://github.com/wallet-standard/wallet-standard) `WalletAccount` to `IUmbraSigner`. Compatible with Phantom, Backpack, Solflare, and any wallet implementing the standard.
+
+<ParamField path="wallet" type="Wallet" required>
+  The Wallet Standard `Wallet` object. Provides feature implementations (`solana:signTransaction`, `solana:signMessage`).
+</ParamField>
+
+<ParamField path="account" type="WalletAccount" required>
+  The specific account to sign with. Obtained from `wallet.accounts[0]` or a user-selected account.
+</ParamField>
+
+Throws immediately if the wallet does not support `"solana:signTransaction"` or `"solana:signMessage"`.
+
+```typescript
+import { useWallet } from "@solana/react";
+import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
+
+const { wallet, account } = useWallet();
+const signer = createSignerFromWalletAccount(wallet, account);
+```
+
+**Transaction signing flow:**
+1. Serializes `@solana/kit` `Transaction` → wire bytes via `getTransactionEncoder()`
+2. Calls `wallet.features["solana:signTransaction"].signTransaction(wireBytes)`
+3. Decodes signed bytes via `getTransactionDecoder()`
+4. Merges returned signatures back into the original transaction object (preserving `lifetimeConstraint`)
+
+---
+
+### `createWalletAdapterSigner`
+
+```typescript
+import { createWalletAdapterSigner } from "@umbra-privacy/sdk";
+import type { WalletAdapterShape } from "@umbra-privacy/sdk";
+
+function createWalletAdapterSigner(adapter: WalletAdapterShape): IUmbraSigner
+```
+
+Adapts a `@solana/wallet-adapter-base`-style `StandardWalletAdapter` to `IUmbraSigner`. Use when your app already integrates `@solana/wallet-adapter-react`.
+
+<ParamField path="adapter" type="WalletAdapterShape" required>
+  The raw adapter object. Obtain via `useWallet().wallet.adapter`. The adapter must expose a `wallet` property (the underlying Wallet Standard object) - this is present on `StandardWalletAdapter` but not on legacy adapters.
+</ParamField>
+
+```typescript
+import { useWallet } from "@solana/wallet-adapter-react";
+import { createWalletAdapterSigner } from "@umbra-privacy/sdk";
+import type { WalletAdapterShape } from "@umbra-privacy/sdk";
+
+const { wallet: walletInfo } = useWallet();
+const signer = createWalletAdapterSigner(walletInfo.adapter as WalletAdapterShape);
+```
+
+---
+
+## `WalletAdapterShape` Interface
+
+```typescript
+import type { WalletAdapterShape } from "@umbra-privacy/sdk";
+
+interface WalletAdapterShape {
+  readonly publicKey: { toBase58: () => string } | null;
+  readonly signTransaction?: (tx: unknown) => Promise<unknown>;
+  readonly signAllTransactions?: (txs: unknown[]) => Promise<unknown[]>;
+  readonly signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
+  readonly wallet?: StandardWalletShape;
+}
+```
+
+`StandardWalletShape.wallet` is the raw Wallet Standard `Wallet` object. If this property is present and the wallet supports `solana:signTransaction`, the SDK uses the wire-format signing path. If absent, it falls back to the adapter's `signTransaction` method (legacy path).

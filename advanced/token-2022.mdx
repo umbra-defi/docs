@@ -1,0 +1,87 @@
+---
+title: "Token-2022 Support"
+description: "How the Umbra SDK handles Token-2022 mints with transfer fee extensions."
+---
+
+## Overview
+
+[Token-2022](https://spl.solana.com/token-2022) is Solana's next-generation token program. It supports extensions that add new behaviors to tokens - including a **transfer fee** extension that automatically deducts a percentage of each transfer.
+
+The Umbra SDK fully supports Token-2022 mints, including those with transfer fee extensions.
+
+## Transfer Fees
+
+When you deposit a Token-2022 token that has a transfer fee configured, the fee is deducted by the Token-2022 program before tokens reach the shielded pool. The SDK accounts for this by:
+
+1. Fetching the mint account to detect the `TransferFeeConfig` extension
+2. Calling the epoch info provider to determine the current epoch
+3. Selecting the applicable fee schedule (Token-2022 supports epoch-based fee changes)
+4. Computing `actualReceived = amount - transferFee`
+5. Applying Umbra protocol fees on top of `actualReceived`
+
+The amount credited to your ETA is `actualReceived - protocolFees`.
+
+## Epoch Info Provider
+
+Transfer fee schedule selection requires knowing the current Solana epoch. This is why `epochInfoProvider` is part of the `IUmbraClient` interface - it is fetched once per deposit operation for Token-2022 mints.
+
+For standard SPL tokens (Token program), the epoch info provider is not called.
+
+The provider defaults to an RPC-based implementation constructed from `rpcUrl`. You can override it if needed:
+
+```typescript
+import {
+  getUmbraClientFromSigner,
+  getRpcBasedEpochInfoProvider,
+} from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner(
+  { signer, network, rpcUrl, rpcSubscriptionsUrl },
+  {
+    // Custom epoch info provider (e.g., for testing with a fixed epoch)
+    epochInfoProvider: async () => ({
+      epoch: 500n,
+      slotIndex: 0n,
+      slotsInEpoch: 432000n,
+      absoluteSlot: 216000000n,
+      blockHeight: 210000000n,
+    }),
+  }
+);
+```
+
+## Fee Calculation
+
+The SDK uses the same fee calculation as the Token-2022 program:
+
+```
+transferFee = min(
+  floor(amount × feeBasisPoints / 10_000),
+  maximumFee
+)
+```
+
+Where `feeBasisPoints` and `maximumFee` are read from the epoch-appropriate fee schedule in the mint's `TransferFeeConfig` extension.
+
+## No Special Configuration Required
+
+You do not need to do anything special to use Token-2022 mints. Simply pass the Token-2022 mint address as you would any other mint:
+
+```typescript
+const TOKEN22_MINT = "TokenMintAddressHere...";
+
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const signature = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
+```
+
+The SDK detects that the mint is a Token-2022 program account, checks for a transfer fee extension, and handles the fee deduction automatically.
+
+## Affected Operations
+
+Transfer fee handling applies to these operations:
+
+- `getDirectDepositIntoEncryptedBalanceFunction` - fetches epoch info only when a Token-2022 transfer fee is detected
+- `getCreateSelfClaimableUtxoFromPublicBalanceFunction` - same
+- `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` - same
+
+Operations that draw from an encrypted balance (ETA) rather than a public ATA are not affected by Token-2022 transfer fees, because the transfer happens within the Umbra program and does not cross the Token-2022 transfer fee boundary.

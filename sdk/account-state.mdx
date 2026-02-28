@@ -1,0 +1,64 @@
+---
+title: "Account State"
+description: "Query a user's registration state on-chain and check what steps have been completed before calling register()."
+---
+
+## Checking Registration Status
+
+Use `getQueryUserAccountFunction` to inspect an account's current registration state without triggering any transactions:
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+const query = getQueryUserAccountFunction({
+  accountInfoProvider: client.accountInfoProvider,
+});
+
+const result = await query(client.signer.address);
+
+if (result.state === "non_existent") {
+  console.log("Not registered - call register() first");
+} else {
+  const { data } = result;
+  console.log("Account initialized:", data.isInitialised);
+  console.log("X25519 key registered:", data.isUserAccountX25519KeyRegistered);
+  console.log("Commitment registered:", data.isUserCommitmentRegistered);
+  console.log("Anonymous usage active:", data.isActiveForAnonymousUsage);
+}
+```
+
+## When to Register
+
+Register once, at account setup time. Check state before calling `register()` so you avoid unnecessary transaction prompts for users who are already fully set up:
+
+```typescript
+const query = getQueryUserAccountFunction({ client });
+const result = await query(client.signer.address);
+
+const isFullyRegistered =
+  result.state === "exists" &&
+  result.data.isUserAccountX25519KeyRegistered &&
+  result.data.isUserCommitmentRegistered;
+
+if (!isFullyRegistered) {
+  const register = getUserRegistrationFunction({ client });
+  await register({ confidential: true, anonymous: true });
+}
+```
+
+## Registration State Fields
+
+The `data` object returned when `result.state === "exists"`:
+
+- `isInitialised` - the base `EncryptedUserAccount` PDA has been created (Step 1 complete).
+- `isUserAccountX25519KeyRegistered` - the X25519 public key has been stored on-chain (Step 2 complete). Required for confidential deposits.
+- `isUserCommitmentRegistered` - the Poseidon user commitment has been stored (Step 3 complete). Required for the mixer.
+- `isActiveForAnonymousUsage` - the account is active and cleared for anonymous usage (both Step 2 and Step 3 complete and valid).
+- `x25519PublicKey` - the registered X25519 public key bytes, if Step 2 is complete.
+- `userCommitment` - the registered Poseidon commitment, if Step 3 is complete.
+- `generationIndex` - monotonic counter used for nonce derivation.
+- `randomGenerationSeed` - entropy bytes mixed into nonces.
+
+<Note>
+For the full type reference see [Query](/reference/query).
+</Note>

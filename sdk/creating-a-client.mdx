@@ -1,0 +1,207 @@
+---
+title: "Creating a Client"
+description: "Construct an IUmbraClient - the shared context passed to all Umbra SDK service functions."
+---
+
+## Overview
+
+`IUmbraClient` is the entry point to the SDK. It is a plain configuration object (not a class) that holds your wallet, network settings, and all pre-constructed Solana infrastructure providers.
+
+You create one client at startup and pass it to every service factory function throughout your application.
+
+## `getUmbraClientFromSigner`
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner(args, deps?);
+```
+
+`getUmbraClientFromSigner` is async. It returns a `Promise<IUmbraClient>`. By default the wallet is prompted to sign the master seed derivation message at construction time - the client resolves only after the seed is cached. Pass `deferMasterSeedSignature: true` to defer this prompt until the first operation that needs key material instead - see [Master Seed Derivation](#master-seed-derivation) below.
+
+### Required Arguments
+
+<ParamField path="signer" type="IUmbraSigner" required>
+  Your wallet signer. Must implement `signTransaction`, `signTransactions`, `signMessage`, and expose an `address` property. See [Wallet Adapters](/sdk/wallet-adapters).
+</ParamField>
+
+<ParamField path="network" type='"mainnet" | "devnet" | "localnet"' required>
+  The Solana network to connect to. Determines which program addresses and Arcium cluster endpoints are used.
+</ParamField>
+
+<ParamField path="rpcUrl" type="string" required>
+  HTTP endpoint for your Solana JSON-RPC node. Used to fetch account data, submit transactions, and query blockhashes.
+
+  ```
+  https://api.mainnet-beta.solana.com        # Solana public node
+  https://my-node.quiknode.pro/abc123/       # QuikNode
+  https://rpc.helius.xyz/?api-key=abc123     # Helius
+  ```
+</ParamField>
+
+<ParamField path="rpcSubscriptionsUrl" type="string" required>
+  WebSocket endpoint for the same RPC node. Used by the transaction forwarder to subscribe to signature confirmations instead of polling.
+
+  ```
+  wss://api.mainnet-beta.solana.com
+  wss://my-node.quiknode.pro/abc123/
+  ```
+</ParamField>
+
+<ParamField path="indexerApiEndpoint" type="string">
+  Base URL for the Umbra indexer. Required for UTXO discovery and Merkle proof generation when using the mixer. Omit if you are only using encrypted balances (deposit/withdraw) and not the mixer.
+
+  ```
+  https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com  # mainnet
+  ```
+</ParamField>
+
+<ParamField path="commitment" type='"processed" | "confirmed" | "finalized"' default="confirmed">
+  Transaction confirmation level. `"confirmed"` is recommended for most applications. Use `"finalized"` if you need absolute finality before proceeding.
+</ParamField>
+
+<ParamField path="deferMasterSeedSignature" type="boolean" default="false">
+  Controls when the wallet is prompted to sign the master seed derivation message.
+
+  - `false` (default) - eager derivation. `getUmbraClientFromSigner` awaits the wallet signature before resolving. The seed is cached before the function returns. Use this to surface the prompt at a predictable point in your onboarding flow (e.g., immediately after the user clicks "Connect Wallet").
+  - `true` - lazy derivation. The client is constructed instantly with no wallet prompt. The prompt fires on the first operation that needs cryptographic key material (typically `register()`).
+
+  ```typescript
+  // Default - wallet prompt fires at construction
+  const client = await getUmbraClientFromSigner({
+    signer,
+    network: "mainnet",
+    rpcUrl,
+    rpcSubscriptionsUrl,
+  });
+
+  // Seed is already cached - no prompt during any subsequent operation
+  await register({ confidential: true, anonymous: true });
+  ```
+</ParamField>
+
+<ParamField path="offsets" type="object">
+  U512 key rotation offsets. All default to `0n`. Increment a specific offset to rotate that key without changing your wallet. See the [Key Derivation](/sdk/advanced/key-derivation) guide for details.
+
+  Available keys: `masterViewingKey`, `poseidonPrivateKey`, `x25519UserAccountPrivateKey`, `x25519MasterViewingKeyEncryptingPrivateKey`, `mintX25519PrivateKey`, `rescueCommitmentBlindingFactor`, `randomCommitmentFactor`.
+</ParamField>
+
+### Optional Dependency Overrides
+
+The second argument, `deps`, lets you override individual infrastructure providers. This is primarily used for testing - you can inject mocks without a live RPC node or wallet.
+
+<ParamField path="deps.accountInfoProvider" type="AccountInfoProviderFunction">
+  Override the function used to fetch on-chain account data. Defaults to an RPC-based implementation constructed from `rpcUrl`.
+</ParamField>
+
+<ParamField path="deps.blockhashProvider" type="GetLatestBlockhash">
+  Override the function used to fetch the latest blockhash for transaction lifetime. Defaults to an RPC-based implementation.
+</ParamField>
+
+<ParamField path="deps.transactionForwarder" type="TransactionForwarder">
+  Override how transactions are broadcast and confirmed. Defaults to a WebSocket-based forwarder. Swap this out to use Jito bundles or a custom priority fee strategy.
+</ParamField>
+
+<ParamField path="deps.epochInfoProvider" type="GetEpochInfo">
+  Override the epoch info provider used for Token-2022 transfer fee calculations. Defaults to an RPC-based implementation.
+</ParamField>
+
+<ParamField path="deps.masterSeedStorage" type="object">
+  Custom persistence for the master seed. Defaults to in-memory storage (lost on reload). Override `load`, `store`, and `generate` to persist the seed in secure storage. See [Wallet Adapters - Persisting the Master Seed](/sdk/wallet-adapters#persisting-the-master-seed).
+</ParamField>
+
+## What the Client Stores
+
+Once constructed, the client exposes these properties (read-only):
+
+- `client.signer` - your wallet signer
+- `client.network` - `"mainnet"` | `"devnet"` | `"localnet"`
+- `client.networkConfig` - resolved program addresses and cluster config
+- `client.accountInfoProvider` - pre-built RPC account fetcher
+- `client.blockhashProvider` - pre-built blockhash fetcher
+- `client.transactionForwarder` - pre-built transaction broadcaster
+- `client.epochInfoProvider` - pre-built epoch info provider
+- `client.masterSeed.getMasterSeed()` - async function that derives (and caches) the master seed
+
+## Master Seed Derivation
+
+The master seed is a 64-byte root secret derived from a deterministic wallet signature. It is the root of Umbra's key hierarchy - all encryption keys and commitments flow from it.
+
+<Note>
+The signer is critical to this process. The master seed is generated by having the signer sign a deterministic message; the resulting signature is passed through KMAC256 to produce the seed. This means the signer's identity directly determines every derived key - the viewing keys, nullifier keys, X25519 keypairs, and all cryptographic commitments for that wallet.
+
+This requirement can be bypassed entirely by overriding `deps.masterSeedStorage.generate` with a custom implementation. If you supply your own `generate` function, the signer's `signMessage` is never called for seed derivation - your function is responsible for returning the master seed. In that case the signer is still used only for transaction signing. See [Understanding the SDK](/sdk/understanding-the-sdk/overview) for details.
+</Note>
+
+### Eager mode (default)
+
+With `deferMasterSeedSignature: false` (the default), the wallet prompt fires at `getUmbraClientFromSigner` call time. The seed is cached before the function resolves. All subsequent operations use the cached seed with no further prompts.
+
+```typescript
+// Wallet prompt fires here
+const client = await getUmbraClientFromSigner({ signer, network, rpcUrl, rpcSubscriptionsUrl });
+
+// No prompt - seed is already cached
+const register = getUserRegistrationFunction({ client });
+await register({ confidential: true, anonymous: true });
+
+// All subsequent operations reuse the cached seed
+await deposit(signer.address, USDC_MINT, 1_000_000n);
+```
+
+### Lazy mode
+
+With `deferMasterSeedSignature: true`, the client is constructed instantly with no wallet prompt. The seed is derived on demand - the first time any operation needs cryptographic key material. For most users, this happens during `register()`.
+
+```typescript
+// Instant - no wallet prompt
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  deferMasterSeedSignature: true,
+});
+
+// Wallet signs here for the first time
+await register({ confidential: true, anonymous: true });
+```
+
+After the first derivation, the seed is cached in memory for the lifetime of the client object. The user is not prompted again unless the client is recreated.
+
+## Example: Full Client Setup
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl: "https://rpc.helius.xyz/?api-key=YOUR_KEY",
+  rpcSubscriptionsUrl: "wss://rpc.helius.xyz/?api-key=YOUR_KEY",
+  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+  commitment: "confirmed",
+});
+```
+
+## Example: Testing with Mocks
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner(
+  {
+    signer: mockSigner,
+    network: "localnet",
+    rpcUrl: "http://127.0.0.1:8899",
+    rpcSubscriptionsUrl: "ws://127.0.0.1:8900",
+  },
+  {
+    accountInfoProvider: mockAccountInfoProvider,
+    transactionForwarder: mockTransactionForwarder,
+    masterSeedStorage: {
+      generate: async () => fixedTestSeed, // deterministic seed for tests
+    },
+  }
+);
+```

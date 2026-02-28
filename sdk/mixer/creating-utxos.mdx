@@ -1,0 +1,227 @@
+---
+title: "Creating UTXOs"
+description: "Lock tokens in the Umbra mixer pool by inserting a commitment into the Merkle tree."
+---
+
+## Overview
+
+Creating a UTXO inserts a cryptographic commitment into the on-chain Indexed Merkle Tree and locks the corresponding tokens in the shielded pool. The SDK also publishes an encrypted ciphertext on-chain so the recipient can discover the UTXO using their X25519 key.
+
+Choose the factory function that matches your source (encrypted balance or public ATA) and recipient (yourself or a third party).
+
+## Factory Functions
+
+### Self-Claimable from Encrypted Balance
+
+Fund the UTXO from your existing encrypted balance. You will claim it yourself.
+
+```typescript
+import { getCreateSelfClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getSelfClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getSelfClaimableUtxoProver();
+
+const createUtxo = getCreateSelfClaimableUtxoFromEncryptedBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const signatures = await createUtxo({
+  destinationAddress: client.signer.address, // recipient (yourself)
+  mint,
+  amount,
+});
+```
+
+### Self-Claimable from Public Balance
+
+Fund the UTXO directly from your public ATA. You will claim it yourself.
+
+```typescript
+import { getCreateSelfClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
+import { getSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getSelfClaimableUtxoFromPublicBalanceProver();
+
+const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const signatures = await createUtxo({
+  destinationAddress: client.signer.address,
+  mint,
+  amount,
+});
+```
+
+### Receiver-Claimable from Public Balance
+
+Fund the UTXO from your public ATA. A specified recipient will claim it (anonymous payment).
+
+```typescript
+import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
+import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+
+const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const RECIPIENT = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";
+
+const signatures = await createUtxo({
+  destinationAddress: RECIPIENT, // recipient's wallet address
+  mint,
+  amount,
+});
+```
+
+### Receiver-Claimable from Encrypted Balance
+
+Fund the UTXO from your encrypted balance. A specified recipient will claim it.
+
+```typescript
+import { getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getReceiverClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getReceiverClaimableUtxoProver();
+
+const createUtxo = getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const signatures = await createUtxo({
+  destinationAddress: RECIPIENT,
+  mint,
+  amount,
+});
+```
+
+## Parameters
+
+All create UTXO functions accept a `CreateUtxoArgs` object:
+
+<ParamField path="args.destinationAddress" type="Address" required>
+  The wallet address that will claim this UTXO. For self-claimable UTXOs, use `client.signer.address`. For receiver-claimable, use the recipient's address. The recipient must be registered (X25519 key on-chain) so their key can be used to encrypt the ciphertext.
+</ParamField>
+
+<ParamField path="args.mint" type="Address" required>
+  SPL or Token-2022 mint address.
+</ParamField>
+
+<ParamField path="args.amount" type="bigint" required>
+  Amount in native token units. Protocol fees and Token-2022 transfer fees are subtracted from this amount.
+</ParamField>
+
+<ParamField path="options.priorityFees" type="bigint" default="0n">
+  Additional compute unit price in microlamports.
+</ParamField>
+
+<ParamField path="deps.zkProver" type="ZkProver" required>
+  A ZK proof generation function. Required for all UTXO creation operations. This is the circuit-specific prover that generates the Groth16 proof for the commitment. Use `@umbra-privacy/web-zk-prover` for the recommended browser-based prover — see [ZK Provers](/sdk/advanced/zk-provers) for details.
+</ParamField>
+
+## Return Value
+
+Returns `Promise<TransactionSignature[]>` - an array containing a single transaction signature for the confirmed UTXO creation transaction.
+
+## The ZK Prover Dependency
+
+UTXO creation requires a ZK prover function (`zkProver` in `deps`). This function generates a Groth16 proof that the commitment was constructed correctly.
+
+The prover is a CPU-intensive operation - generating a proof can take 1–5 seconds on a modern device. For browser applications, consider running the prover in a Web Worker to avoid blocking the main thread.
+
+<Warning>
+The `zkProver` dependency is **required** and cannot be omitted. Attempting to create a UTXO without it will throw at factory construction time.
+</Warning>
+
+## Example: Anonymous Payment
+
+Send 50 USDC to a recipient without revealing you as the sender:
+
+```typescript
+import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
+import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+
+const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const RECIPIENT = "RecipientWalletAddressHere...";
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+const signatures = await createUtxo({
+  destinationAddress: RECIPIENT,
+  mint: USDC,
+  amount: 50_000_000n,
+});
+console.log("UTXO created:", signatures[0]);
+
+// The recipient can now fetch and claim this UTXO using getFetchClaimableUtxosFunction
+// and getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction
+```
+
+## Error Handling
+
+UTXO creation has two failure modes that are specific to this operation: ZK proof generation and stale on-chain state. Use `isCreateUtxoError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each one.
+
+```typescript
+import { isCreateUtxoError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const signatures = await createUtxo({ destinationAddress: recipient, mint, amount });
+} catch (err) {
+  if (isCreateUtxoError(err)) {
+    switch (err.stage) {
+      case "zk-proof-generation":
+        // ZK proof generation failed - the most common failure mode for UTXO creation.
+        // This may indicate an out-of-memory condition in the browser,
+        // or a mismatch between the prover and the circuit parameters.
+        console.error("Proof generation failed:", err.message);
+        showNotification("Failed to generate proof. Please try again.");
+        break;
+
+      case "transaction-sign":
+        // User rejected the transaction in their wallet.
+        showNotification("UTXO creation cancelled.");
+        break;
+
+      case "account-fetch":
+        // Could not fetch the recipient's on-chain account to look up their X25519 key.
+        console.error("RPC error:", err.message);
+        break;
+
+      case "transaction-send":
+        // Transaction submitted but confirmation failed - may still have landed.
+        // Check whether the commitment was inserted before retrying.
+        console.warn("Confirmation timeout. Check on-chain before retrying.");
+        break;
+
+      default:
+        // Other stages: initialization, validation, mint-fetch, fee-calculation,
+        // key-derivation, pda-derivation, instruction-build, transaction-build,
+        // transaction-compile, transaction-validate.
+        console.error("UTXO creation failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+<Warning>
+If `err.stage === "transaction-send"`, do not immediately retry - the transaction may have landed. Fetch the recipient's UTXO list with `getFetchClaimableUtxosFunction` first to confirm whether the commitment was inserted into the tree.
+</Warning>
+
+See [Error Handling](/reference/errors) for a full reference of all error types.
+
+## Protocol Fees
+
+Fees are deducted from `amount` before the commitment is created. The net amount committed is `amount - fees`. This is the amount the recipient will receive when they claim.

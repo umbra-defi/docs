@@ -1,0 +1,9 @@
+---
+title: "Stats"
+openapi: "GET /v1/stats"
+description: "Aggregate statistics for the entire UTXO index across all Merkle trees."
+---
+
+Use this endpoint to get a quick snapshot before deciding which tree and index range to scan.
+
+Response encoding is always `application/x-protobuf` -- content negotiation is not supported for this endpoint.

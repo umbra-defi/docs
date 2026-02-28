@@ -1,0 +1,37 @@
+---
+title: "Transfers"
+description: "An overview of the two transfer types in Umbra - unlinkable transfers via the mixer and confidential-only transfers via encrypted balances."
+---
+
+## Overview
+
+Umbra supports two distinct models for transferring tokens privately. They differ in what they hide, what infrastructure they require, and how strong their privacy guarantees are.
+
+## Unlinkable Transfers (via the Mixer)
+
+The strongest privacy model. The on-chain link between the sender's deposit and the recipient's withdrawal is broken entirely - an observer cannot connect the two events by examining the chain.
+
+Tokens enter the shielded pool as a UTXO commitment inserted into an on-chain Indexed Merkle Tree. The claim is later submitted with a Groth16 ZK proof that proves ownership of the UTXO without revealing which commitment is being spent. The deposit and the withdrawal are indistinguishable from every other deposit and withdrawal in the same tree.
+
+Both entry and exit can be from any account type:
+
+- **From an Encrypted Token Account (ETA)** - tokens are drawn from an encrypted balance before entering the shielded pool
+- **From an Associated Token Account (ATA)** - tokens enter the shielded pool directly from a public wallet
+
+On exit, the recipient can claim tokens into either an ATA or an ETA.
+
+This gives four source configurations in total, each available in both self-claimable and receiver-claimable variants. See the [Mixer](/sdk/mixer/overview) section for the full API.
+
+<Note>
+Unlinkable transfers require full registration with `anonymous: true`. The indexer must also be configured on the client for UTXO discovery.
+</Note>
+
+## Confidential-Only Transfers (via Encrypted Balances)
+
+A lighter-weight privacy model that hides token amounts and balances on-chain, but does not break the link between sender and recipient. The transfer is confidential - amounts are hidden under MPC encryption - but the participating addresses remain observable.
+
+This covers scenarios where amount privacy is the goal and linkability is an acceptable trade-off: for example, moving tokens between accounts you control without exposing the amounts, or settling a payment where both parties know each other but want the value hidden.
+
+<Note>
+SDK support for confidential-only transfers is a work in progress and will be available shortly. The on-chain program already supports confidential transfers - the SDK factory functions are being finalised.
+</Note>

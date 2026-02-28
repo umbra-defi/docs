@@ -1,0 +1,30 @@
+---
+title: "Tree UTXOs"
+openapi: "GET /v1/trees/{tree_index}/utxos"
+description: "Returns a paginated list of UTXO records for a specific Merkle tree, ordered by insertion index ascending."
+---
+
+Use this endpoint when you know which tree you want to scan. For global scans across all trees, use [Global UTXOs](/indexer/api-reference/utxos).
+
+## Response Layouts
+
+The `X-Response-Layout` header controls how records are packed in the protobuf response:
+
+- **Row-oriented** (default, omit header): Each UTXO is a self-contained `UtxoDataItem`. Easy to iterate record by record.
+- **Columnar** (set header to `"columnar"`): All fields across UTXOs are packed into parallel arrays. Significantly smaller on the wire -- preferred for data pipelines and bulk processing.
+
+<Note>
+The Umbra SDK uses row-oriented layout internally. Use columnar layout only if you are building a custom bulk processing pipeline.
+</Note>
+
+## Pagination
+
+Initialize with `cursor = tree_index x 1,048,576`. Each response includes a `next_cursor` field. Repeat requests using `cursor = next_cursor` until the response contains fewer records than `limit`.
+
+```bash
+# First page of tree 0
+curl "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com/v1/trees/0/utxos?cursor=0&limit=1000"
+
+# Next page (using next_cursor from previous response)
+curl "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com/v1/trees/0/utxos?cursor=1000&limit=1000"
+```

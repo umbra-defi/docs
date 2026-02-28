@@ -1,0 +1,37 @@
+---
+title: "Rescue Cipher"
+description: "Algebraic cipher over p = 2^255 − 19 for balance encryption, ETA ciphertexts, and compliance re-encryption."
+---
+
+[Rescue](https://eprint.iacr.org/2019/426.pdf) is an algebraic cipher designed to be efficient inside zero-knowledge proof circuits over prime fields. Unlike AES or ChaCha20, Rescue is defined natively in terms of field arithmetic - making ciphertexts it produces directly composable with ZK proofs and MPC computations without format conversion.
+
+Umbra's Rescue cipher operates over the prime field defined by **p = 2^255 − 19** - the same prime underlying Curve25519 and X25519 - which gives it natural alignment with the user's encryption keys. See the [Rescue Cipher](https://docs.umbraprivacy.com/docs/security-cryptography/rescue-cipher) and [Polynomial Commitment Protocol](https://docs.umbraprivacy.com/docs/security-cryptography/polynomial-commitment-protocol) pages for the full cryptographic treatment.
+
+## Uses in Umbra
+
+**Balance encryption**: Rescue is the cipher used to encrypt confidential token balances in ETAs. When a deposit is made into Shared mode, the balance is encrypted under Rescue keyed with the user's X25519-derived secret, making it decryptable locally without Arcium involvement.
+
+**ETA ciphertext**: The on-chain ETA stores a Rescue-encrypted representation of the user's balance. Arcium MPC operates directly over this ciphertext in BN254 arithmetic circuits, performing additions and subtractions on encrypted values without ever decrypting them.
+
+**Compliance re-encryption**: Because Rescue operates over p = 2^255 − 19 and its outputs are native field elements, they can be consumed by MPC computations and ZK circuits with no format conversion. This is what makes compliance grants possible - Arcium can re-encrypt a Rescue ciphertext for a different X25519 key inside a secure MPC computation, without the plaintext being exposed at any point. See [Compliance - X25519 Grants](/sdk/compliance-x25519-grants).
+
+## Field Interoperability
+
+Rescue (p = 2^255 − 19) and Poseidon (BN254, p ≈ 2^254) operate over different prime fields. The SDK handles all field translation and protocol bridging internally. Callers never need to reason about field boundaries, encoding, or representation - the SDK manages this transparently across all operations.
+
+## Implementation
+
+Umbra ships an **in-house implementation of the Rescue cipher** that is:
+
+- **Fully constant-time** - every field operation executes in time independent of secret values, with no data-dependent branches or memory access patterns
+- **Independently optimised** - written from the ground up for performance, not adapted from a reference implementation
+- **The only non-delegated primitive** - all other SDK cryptography is built on `@noble/curves` and `@noble/hashes`; Rescue is owned entirely in-house, reflecting the central role it plays across the protocol
+
+For performance-critical environments - particularly React Native - a highly optimised open source C++ implementation is available as a [Nitro Module](https://nitro.margelo.com). It achieves up to **13× the throughput of the JS implementation** by offloading field arithmetic to native code and exploiting parallel cores, making real-time decryption of large ETA histories and UTXO sets practical on mobile without blocking the JS thread.
+
+## References
+
+- [RESCUE-PRIME: A Standard Specification](https://eprint.iacr.org/2020/1143.pdf) - Aly et al., 2020
+- [Rescue: A Sound and Efficient Symmetric Permutation](https://eprint.iacr.org/2019/426.pdf) - Albrecht et al., 2019
+- [Rescue Cipher - Umbra Architecture](https://docs.umbraprivacy.com/docs/security-cryptography/rescue-cipher)
+- [Polynomial Commitment Protocol](https://docs.umbraprivacy.com/docs/security-cryptography/polynomial-commitment-protocol)

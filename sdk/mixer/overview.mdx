@@ -1,0 +1,102 @@
+---
+title: "Mixer Overview"
+description: "Break the on-chain link between token deposits and withdrawals using Umbra's anonymous transfer pool."
+---
+
+## The Most Powerful Shielded Pool on Solana
+
+Umbra's mixer is the most powerful shielded pool on Solana today - and it is built to fit into any flow.
+
+Tokens can enter from a public wallet or an encrypted balance, exit to a fresh address or stay private inside another encrypted balance, and be sent to yourself or to any registered recipient. Every combination is a first-class path, not an afterthought.
+
+<Note>
+The mixer requires full [registration](/sdk/registration) with `anonymous: true`. Both your X25519 key and user commitment must be registered before creating UTXOs.
+</Note>
+
+## UTXO Structure
+
+The mixer operates on UTXOs - commitments inserted into an on-chain Indexed Merkle Tree that represent locked tokens in the shielded pool. Every UTXO encodes three distinct roles:
+
+- **Sender** - the address that funded the UTXO, locked the tokens into the shielded pool, and fixed the recipient at creation time
+- **Unlocker** - the address authorized to burn the UTXO's nullifier on-chain and release the tokens, choosing whether they exit to a public ATA or into an encrypted balance
+- **Recipient** - the final destination address, set by the sender and not modifiable by the unlocker
+
+The sender controls who receives. The unlocker controls when and how the tokens exit. Separating these two roles is what makes deep mixing possible - the sender's involvement ends at creation time.
+
+## UTXO Variants
+
+<CardGroup cols={2}>
+  <Card title="Self-claimable" icon="user">
+    You are both the sender and the unlocker. Burn the UTXO on your own schedule and choose whether tokens exit to your public ATA or stay in an encrypted balance.
+  </Card>
+  <Card title="Receiver-claimable" icon="users">
+    The recipient is the unlocker. They burn the UTXO themselves and decide the exit - public or shielded. The exit happens entirely on their timeline, with no further action from the sender.
+  </Card>
+</CardGroup>
+
+Receiver-claimable UTXOs produce stronger anonymity sets. Because the sender's actions and the exit are fully decoupled, timing correlation between deposit and withdrawal becomes significantly harder.
+
+## Source Options
+
+Each variant can be funded from two sources:
+
+- **From encrypted balance** - tokens are drawn from your existing ETA before entering the shielded pool
+- **From public balance** - tokens are transferred directly from your public ATA
+
+This gives four factory functions in total:
+
+- `getCreateSelfClaimableUtxoFromEncryptedBalanceFunction` - source: ETA, unlocker: you
+- `getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction` - source: ETA, unlocker: recipient
+- `getCreateSelfClaimableUtxoFromPublicBalanceFunction` - source: ATA, unlocker: you
+- `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` - source: ATA, unlocker: recipient
+
+See [Creating UTXOs](/sdk/mixer/creating-utxos) for full API details.
+
+## The Mixer Flow
+
+<Steps>
+  <Step title="Create a UTXO">
+    Choose a factory function, specify the source, recipient, and amount, and submit. The SDK locks tokens in the shielded pool, inserts a commitment into the Merkle tree, and publishes an encrypted ciphertext on-chain so the recipient can discover it.
+
+    See [Creating UTXOs](/sdk/mixer/creating-utxos).
+  </Step>
+  <Step title="Wait for the anonymity set to grow">
+    The more other users deposit into the same tree, the stronger your privacy guarantee. There is no enforced waiting period - this is a trade-off you manage in your application.
+  </Step>
+  <Step title="Fetch claimable UTXOs">
+    The SDK queries the indexer for all ciphertexts addressed to the caller's X25519 key, decrypts them locally, and fetches the current Merkle inclusion proofs.
+
+    See [Fetching UTXOs](/sdk/mixer/fetching-utxos).
+  </Step>
+  <Step title="Claim the UTXO">
+    Submit a Groth16 ZK proof on-chain proving knowledge of the secret inputs. The nullifier is burned on-chain to prevent double-spending, and the tokens are released to the chosen destination - a public ATA or an encrypted balance.
+
+    See [Claiming UTXOs](/sdk/mixer/claiming-utxos).
+  </Step>
+</Steps>
+
+## Indexer Requirement
+
+UTXO discovery requires the Umbra indexer. Pass `indexerApiEndpoint` when constructing the client:
+
+```typescript
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl: "...",
+  rpcSubscriptionsUrl: "...",
+  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+});
+```
+
+Without it, `getFetchClaimableUtxosFunction` will fail. The indexer is not required for creating UTXOs - only for discovering and claiming them.
+
+## Privacy Considerations
+
+**Claim into an encrypted balance by default.** When a UTXO is burned into an ETA, the claimed amount is hidden, the destination is not revealed, and no observable exit event is produced on-chain. At burn time, the sender is completely unlinkable - there is no visible amount, no destination address, and no signal that can tie the burn back to any specific deposit. Public ATA claims should be the opt-out, not the default.
+
+**Use round, pool-common amounts when claiming publicly.** If a claim must exit to a public ATA, the amount becomes visible on-chain. Unusual or fragmented amounts let an observer eliminate most of the tree and narrow in on the matching commitment. Standardise on amounts that are common in the pool (e.g. exactly 100 USDC) to stay indistinguishable within the largest possible set.
+
+**Claim to a fresh address when going public.** Claiming into an address with existing on-chain history re-establishes a link. Use an address that has never appeared on-chain before.
+
+For a complete breakdown of all eight source and destination combinations - including what is visible, what is hidden, timing risk, and recommended use cases - see [Privacy Analysis](/sdk/mixer/privacy-analysis).

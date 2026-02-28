@@ -1,0 +1,190 @@
+---
+title: "ZK Prover Interfaces"
+description: "The six injectable ZK prover interfaces - one per circuit. Every Groth16 proof in the SDK flows through one of these."
+---
+
+## Overview
+
+Every operation that generates a [Groth16](/sdk/advanced/cryptography/groth16) ZK proof requires a prover passed through `deps`. There is no hard-coded default - you must always supply one. All provers follow the same `prove(inputs) → { proofA, proofB, proofC }` contract.
+
+For instantiation, Web Worker setup, and remote proving backends, see [ZK Provers](/sdk/advanced/zk-provers).
+
+---
+
+## `IZkProverForUserRegistration`
+
+```typescript
+interface IZkProverForUserRegistration {
+  prove(inputs: UserRegistrationCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getUserRegistrationFunction` deps (`zkProver`).
+
+---
+
+## `IZkProverForSelfClaimableUtxo`
+
+```typescript
+interface IZkProverForSelfClaimableUtxo {
+  prove(inputs: SelfClaimableUtxoCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getCreateSelfClaimableUtxoFromEncryptedBalanceFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForSelfClaimableUtxoFromPublicBalance` below.
+
+---
+
+## `IZkProverForReceiverClaimableUtxo`
+
+```typescript
+interface IZkProverForReceiverClaimableUtxo {
+  prove(inputs: ReceiverClaimableUtxoCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForReceiverClaimableUtxoFromPublicBalance` below.
+
+---
+
+## `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`
+
+```typescript
+interface IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance {
+  readonly maxUtxoCapacity: 1;
+  prove(inputs: ClaimSelfClaimableUtxoIntoEncryptedBalanceCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction` deps (`zkProver`).
+
+---
+
+## `IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`
+
+```typescript
+interface IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance {
+  prove(
+    inputs: ClaimReceiverClaimableUtxoIntoEncryptedBalanceCircuitInputs,
+    nLeaves: ClaimBatchSize,
+  ): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction` deps (`zkProver`). This prover accepts a batch size `nLeaves` (1–16) because there are 16 distinct circuits, one per batch size.
+
+---
+
+## `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`
+
+```typescript
+interface IZkProverForClaimSelfClaimableUtxoIntoPublicBalance {
+  readonly maxUtxoCapacity: 1;
+  prove(inputs: ClaimSelfClaimableUtxoIntoPublicBalanceCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getClaimSelfClaimableUtxoIntoPublicBalanceFunction` deps (`zkProver`).
+
+---
+
+## `ZkProverForSelfClaimableUtxoFromPublicBalance`
+
+```typescript
+interface ZkProverForSelfClaimableUtxoFromPublicBalance {
+  prove(inputs: SelfClaimableUtxoFromPublicBalanceCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getCreateSelfClaimableUtxoFromPublicBalanceFunction` deps (`zkProver`).
+
+---
+
+## `ZkProverForReceiverClaimableUtxoFromPublicBalance`
+
+```typescript
+interface ZkProverForReceiverClaimableUtxoFromPublicBalance {
+  prove(inputs: ReceiverClaimableUtxoFromPublicBalanceCircuitInputs): Promise<{
+    proofA: Groth16ProofA;
+    proofB: Groth16ProofB;
+    proofC: Groth16ProofC;
+  }>;
+}
+```
+
+Required by: `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` deps (`zkProver`).
+
+---
+
+## Unified Prover Suite
+
+All six provers can be combined into a single object and passed wherever individual provers are expected:
+
+```typescript
+interface IZkProverSuite {
+  readonly registration: IZkProverForUserRegistration;
+  readonly utxoEphemeral: IZkProverForSelfClaimableUtxo;
+  readonly utxoReceiver: IZkProverForReceiverClaimableUtxo;
+  readonly claimEphemeralIntoEta: IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance;
+  readonly claimReceiverIntoEta: IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance;
+  readonly claimEphemeralIntoAta: IZkProverForClaimSelfClaimableUtxoIntoPublicBalance;
+}
+```
+
+## Quick Setup with `@umbra-privacy/web-zk-prover`
+
+The `@umbra-privacy/web-zk-prover` package provides ready-made factory functions for each prover interface. It uses [snarkjs](https://github.com/iden3/snarkjs) Groth16 under the hood and fetches proving keys from a CDN.
+
+```typescript
+import {
+  getRegistrationProver,
+  getSelfClaimableUtxoProver,
+  getReceiverClaimableUtxoProver,
+  getSelfClaimableUtxoFromPublicBalanceProver,
+  getReceiverClaimableUtxoFromPublicBalanceProver,
+  getClaimEphemeralIntoEtaProver,
+  getClaimReceiverIntoEtaProver,
+  getClaimEphemeralIntoAtaProver,
+} from "@umbra-privacy/web-zk-prover";
+
+const registrationProver = getRegistrationProver();
+const utxoEphemeralProver = getSelfClaimableUtxoProver();
+const utxoReceiverProver = getReceiverClaimableUtxoProver();
+const utxoEphemeralFromPublicProver = getSelfClaimableUtxoFromPublicBalanceProver();
+const utxoReceiverFromPublicProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+const claimEphemeralEtaProver = getClaimEphemeralIntoEtaProver();
+const claimReceiverEtaProver = getClaimReceiverIntoEtaProver();
+const claimEphemeralAtaProver = getClaimEphemeralIntoAtaProver();
+```
+
+Each factory accepts an optional `IZkAssetProvider` parameter - a simple interface with one method: `getAssetUrls(type, variant?)`. When no provider is passed, the factories default to the CDN provider (equivalent to calling `getCdnZkAssetProvider()` from `@umbra-privacy/web-zk-prover/cdn`), which fetches proving keys from Umbra's CDN. You can supply your own provider to customise asset resolution.
+
+See [ZK Provers](/sdk/advanced/zk-provers) for Web Worker setup, custom asset providers, and remote proving backends.

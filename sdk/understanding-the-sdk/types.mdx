@@ -1,0 +1,42 @@
+---
+title: "Types & Interfaces"
+description: "How @solana/kit types flow through the SDK and how to use the named function types from the interfaces subpath."
+---
+
+## Anza Solana Kit Types
+
+The SDK is built on top of `@solana/kit` and shares its core types directly. You do not need to import `@solana/kit` yourself - these types flow through the SDK's own types naturally - but it helps to know where they come from:
+
+- [`Address`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/addresses/src/address.ts) - a base58-encoded public key string. Every `mint`, `destinationAddress`, and `userAddress` parameter in the SDK is an `Address`.
+- [`TransactionSignature`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/transaction-messages/src/transaction-message.ts) - a base58-encoded signature string. Returned by every operation that submits a transaction.
+- `SignableTransaction` / `SignedTransaction` - the versioned transaction types passed to `IUmbraSigner.signTransaction`.
+- `GetLatestBlockhash`, `GetEpochInfo` - RPC function types used in the `deps` of most factory functions.
+
+If you are writing unit tests or building a custom RPC layer, the [`@solana/kit` documentation](https://github.com/anza-xyz/solana-web3.js) is the primary reference for these types.
+
+## Function Types
+
+Every returned function has a named type exported from `@umbra-privacy/sdk/interfaces`. Store functions in state, type React context values, or annotate variables without re-running the factory:
+
+```typescript
+import type {
+  DepositIntoEncryptedBalanceFunction,
+  UserRegistrationFunction,
+  FetchClaimableUtxosFunction,
+  ClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+} from "@umbra-privacy/sdk/interfaces";
+```
+
+This is useful when you build a factory function once and store it in React state or a context:
+
+```typescript
+const [deposit, setDeposit] = useState<DepositIntoEncryptedBalanceFunction | null>(null);
+
+useEffect(() => {
+  if (client) {
+    setDeposit(() => getDirectDepositIntoEncryptedBalanceFunction({ client }));
+  }
+}, [client]);
+```
+
+The full list of exported function types mirrors the factory functions - one type per returned function. See the [Reference](/reference/overview) for the complete inventory.

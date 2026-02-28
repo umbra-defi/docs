@@ -1,0 +1,114 @@
+---
+title: "Transaction Callbacks"
+description: "Pre and post hooks that fire around every on-chain transaction - useful for progress indicators, analytics, and logging."
+---
+
+## Overview
+
+Every function that submits a transaction accepts an optional `callbacks` object on its options or options-like argument. Callbacks give you visibility into each transaction as it moves through the sign → send → confirm lifecycle.
+
+```typescript
+import type {
+  TransactionCallbacks,
+  PreTransactionCallback,
+  PostTransactionCallback,
+} from "@umbra-privacy/sdk/interfaces";
+```
+
+---
+
+## Callback Types
+
+```typescript
+// Called with the signed transaction immediately before it is sent
+type PreTransactionCallback = (transaction: SignedTransaction) => Promise<void>;
+
+// Called with the transaction and its confirmed signature after it lands
+type PostTransactionCallback = (
+  transaction: SignedTransaction,
+  signature: TransactionSignature,
+) => Promise<void>;
+
+interface TransactionCallbacks {
+  readonly pre?: PreTransactionCallback;
+  readonly post?: PostTransactionCallback;
+}
+```
+
+**Skipped steps do not invoke callbacks.** If a registration step is already complete on-chain, neither `pre` nor `post` fires for it.
+
+---
+
+## Usage - Registration
+
+Each of the three registration steps has its own `TransactionCallbacks` slot:
+
+```typescript
+const register = getUserRegistrationFunction({ client });
+
+await register({
+  confidential: true,
+  anonymous: true,
+  callbacks: {
+    userAccountInitialisation: {
+      pre: async (tx) => setStatus("Creating account..."),
+      post: async (tx, sig) => setProgress(33),
+    },
+    registerX25519PublicKey: {
+      pre: async (tx) => setStatus("Registering encryption key..."),
+      post: async (tx, sig) => setProgress(66),
+    },
+    registerUserForAnonymousUsage: {
+      pre: async (tx) => setStatus("Enabling anonymous mode..."),
+      post: async (tx, sig) => { setProgress(100); setStatus("Done!"); },
+    },
+  },
+});
+```
+
+---
+
+## Usage - UTXO Creation
+
+UTXO creation involves up to three transactions. Each has its own callbacks slot inside the `options` argument:
+
+```typescript
+// See /sdk/advanced/zk-provers for zkProver setup
+const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver }, // e.g. getSelfClaimableUtxoFromPublicBalanceProver(assetProvider)
+);
+
+await createUtxo(recipient, mint, amount, {
+  createUtxo: {
+    pre: async (tx) => console.log("Submitting UTXO creation..."),
+    post: async (tx, sig) => console.log("UTXO created:", sig),
+  },
+  createProofAccount: {
+    pre: async (tx) => console.log("Creating proof account..."),
+    post: async (tx, sig) => console.log("Proof account:", sig),
+  },
+  closeProofAccount: {
+    // Only fires if a stale proof account was found and closed
+    pre: async (tx) => console.log("Closing stale proof account..."),
+    post: async (tx, sig) => console.log("Closed:", sig),
+  },
+});
+```
+
+---
+
+## Usage - Single-Transaction Operations
+
+Deposits, withdrawals, compliance operations, and most other functions take a single top-level `callbacks` argument:
+
+```typescript
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+await deposit(destinationAddress, mint, amount, {
+  callbacks: {
+    pre: async (tx) => console.log("Sending deposit..."),
+    post: async (tx, sig) => console.log("Deposited:", sig),
+  },
+});
+```

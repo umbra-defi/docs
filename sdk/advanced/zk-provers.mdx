@@ -1,0 +1,229 @@
+---
+title: "ZK Provers"
+description: "Integrating a Groth16 prover for UTXO creation and claiming operations."
+---
+
+## Overview
+
+UTXO creation and claiming operations require client-side generation of [Groth16](https://eprint.iacr.org/2016/260.pdf) zero-knowledge proofs. The SDK does not bundle a prover - you provide one as a dependency injection.
+
+The recommended way to get started is with `@umbra-privacy/web-zk-prover`, which wraps [snarkjs](https://github.com/iden3/snarkjs) and handles proving key loading for you. For custom environments, you can implement the prover interfaces directly.
+
+## Recommended: `@umbra-privacy/web-zk-prover`
+
+<CodeGroup>
+```bash pnpm
+pnpm add @umbra-privacy/web-zk-prover
+```
+
+```bash npm
+npm install @umbra-privacy/web-zk-prover
+```
+
+```bash yarn
+yarn add @umbra-privacy/web-zk-prover
+```
+</CodeGroup>
+
+### Basic Usage
+
+```typescript
+import {
+  getReceiverClaimableUtxoProver,
+  getClaimReceiverIntoEtaProver,
+} from "@umbra-privacy/web-zk-prover";
+import {
+  getCreateReceiverClaimableUtxoFromPublicBalanceFunction,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+} from "@umbra-privacy/sdk";
+
+// 1. Create the provers you need (uses CDN asset provider by default)
+const utxoProver = getReceiverClaimableUtxoProver();
+const claimProver = getClaimReceiverIntoEtaProver();
+
+// 2. Pass them to SDK functions
+const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver: utxoProver },
+);
+
+const claimUtxo = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+  { client },
+  { zkProver: claimProver },
+);
+```
+
+### Available Factory Functions
+
+All factory functions accept an optional `provider` parameter of type `IZkAssetProvider`. When omitted, the default CDN provider is used automatically.
+
+- `getRegistrationProver(provider?)` → `IZkProverForUserRegistration`
+- `getSelfClaimableUtxoProver(provider?)` → `IZkProverForSelfClaimableUtxo`
+- `getReceiverClaimableUtxoProver(provider?)` → `IZkProverForReceiverClaimableUtxo`
+- `getSelfClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForSelfClaimableUtxoFromPublicBalance`
+- `getReceiverClaimableUtxoFromPublicBalanceProver(provider?)` → `ZkProverForReceiverClaimableUtxoFromPublicBalance`
+- `getClaimEphemeralIntoEtaProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`
+- `getClaimReceiverIntoEtaProver(provider?)` → `IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`
+- `getClaimEphemeralIntoAtaProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`
+
+### Custom Asset Provider
+
+By default, all prover factory functions use `getCdnZkAssetProvider()` to fetch proving keys from Umbra's CDN - no configuration required. For advanced use cases, you can customize or replace the asset provider.
+
+#### Custom CDN URL
+
+To load assets from a different CDN or self-hosted location, use `getCdnZkAssetProvider` with a custom `baseUrl`:
+
+```typescript
+import { getCdnZkAssetProvider } from "@umbra-privacy/web-zk-prover/cdn";
+import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+
+const myProvider = getCdnZkAssetProvider({
+  baseUrl: "https://my-cdn.example.com/zk-assets",
+});
+
+const prover = getRegistrationProver(myProvider);
+```
+
+#### Fully Custom Provider
+
+To load assets from a non-CDN source, implement the `IZkAssetProvider` interface:
+
+```typescript
+import type { IZkAssetProvider, ZkAssetUrls, ZKeyType, ClaimVariant } from "@umbra-privacy/web-zk-prover";
+import { getRegistrationProver } from "@umbra-privacy/web-zk-prover";
+
+function createMyAssetProvider(storageBaseUrl: string): IZkAssetProvider {
+  return {
+    async getAssetUrls(type: ZKeyType, variant?: ClaimVariant): Promise<ZkAssetUrls> {
+      const name = variant ? `${type}-${variant}` : type;
+      return {
+        zkeyUrl: `${storageBaseUrl}/${name}.zkey`,
+        wasmUrl: `${storageBaseUrl}/${name}.wasm`,
+      };
+    },
+  };
+}
+
+const myProvider = createMyAssetProvider("https://my-storage.example.com/zk-assets");
+const prover = getRegistrationProver(myProvider);
+```
+
+## The ZK Prover Interface
+
+The SDK defines prover interfaces in `@umbra-privacy/sdk/interfaces`. See [ZK Prover Interfaces](/sdk/understanding-the-sdk/zk-provers) for the full list. All provers return the same proof shape:
+
+```typescript
+interface Groth16Proof {
+  a: Groth16ProofA; // G1 point - 64 bytes (x, y uncompressed)
+  b: Groth16ProofB; // G2 point - 128 bytes
+  c: Groth16ProofC; // G1 point - 64 bytes
+}
+```
+
+## Using the Prover
+
+Pass the prover as the second argument (`deps`) to the relevant factory function:
+
+```typescript
+import { getSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import {
+  getCreateSelfClaimableUtxoFromPublicBalanceFunction,
+  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+} from "@umbra-privacy/sdk";
+
+const zkProver = getSelfClaimableUtxoFromPublicBalanceProver();
+
+const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+```
+
+## Web Worker Pattern
+
+Proof generation is CPU-intensive - generating a Groth16 proof can take 1-5 seconds on a modern device. In browser applications, run the prover in a Web Worker to avoid blocking the main thread:
+
+```typescript
+// prover-worker.ts
+import { expose } from "comlink";
+import { getReceiverClaimableUtxoProver } from "@umbra-privacy/web-zk-prover";
+
+const prover = getReceiverClaimableUtxoProver();
+
+expose(prover);
+```
+
+```typescript
+// main.ts
+import { wrap } from "comlink";
+import type { IZkProverForReceiverClaimableUtxo } from "@umbra-privacy/sdk/interfaces";
+
+const worker = new Worker(new URL("./prover-worker.ts", import.meta.url));
+const zkProver = wrap<IZkProverForReceiverClaimableUtxo>(worker);
+
+const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+```
+
+<Note>
+[comlink](https://github.com/GoogleChromeLabs/comlink) is a convenient library for wrapping Web Workers with a promise-based RPC interface. Any similar mechanism works.
+</Note>
+
+## Custom Prover Implementation
+
+If `@umbra-privacy/web-zk-prover` does not fit your environment, you can implement the prover interface directly:
+
+```typescript
+import type { IZkProverForSelfClaimableUtxo, SelfClaimableUtxoCircuitInputs } from "@umbra-privacy/sdk/interfaces";
+import type { Groth16ProofA, Groth16ProofB, Groth16ProofC } from "@umbra-privacy/sdk/types";
+
+function createRemoteZkProver(endpoint: string): IZkProverForSelfClaimableUtxo {
+  return {
+    prove: async (inputs: SelfClaimableUtxoCircuitInputs): Promise<{
+      a: Groth16ProofA;
+      b: Groth16ProofB;
+      c: Groth16ProofC;
+    }> => {
+      const response = await fetch(`${endpoint}/prove`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(inputs),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Proving server returned ${response.status}`);
+      }
+
+      return response.json();
+    },
+  };
+}
+```
+
+<Warning>
+A remote prover receives the circuit inputs, which include private data such as the UTXO amount and recipient. Only use a remote prover if you trust the operator of the proving service.
+</Warning>
+
+## Proof Generation Timing
+
+Proof generation time varies by device and prover implementation:
+
+- WebAssembly in browser: 2-8 seconds
+- Native binary (Node.js): 1-3 seconds
+- Remote proving service: depends on network latency and server capacity
+
+Consider showing a loading indicator while proof generation is in progress.
+
+## Circuit Details
+
+The Umbra circuits are written in [Circom](https://docs.circom.io/). The self-claimable UTXO circuit proves:
+
+- Knowledge of the secret inputs `(amount, recipient, nonce, blinding_factor)` whose Poseidon hash equals a commitment in the Merkle tree
+- A valid Merkle inclusion proof from that commitment to the current tree root
+- The nullifier is correctly computed as `Poseidon(poseidon_private_key, commitment)`
+- The recipient address matches the one embedded in the commitment
+
+All three facts are proven simultaneously in a single Groth16 proof, which is then verified on-chain in a single transaction.

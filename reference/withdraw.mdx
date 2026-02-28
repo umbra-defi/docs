@@ -1,0 +1,90 @@
+---
+title: "Withdrawal"
+description: "Direct withdrawal from an encrypted balance back to a public associated token account."
+---
+
+## getDirectWithdrawIntoPublicBalanceV3Function
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getDirectWithdrawIntoPublicBalanceV3Function(
+  args: GetWithdrawIntoPublicBalanceV3FunctionArgs,
+  deps?: GetWithdrawIntoPublicBalanceV3FunctionDeps,
+): WithdrawIntoPublicBalanceV3Function
+```
+
+Withdraws tokens from the caller's encrypted token account (ETA) to a public associated token account (ATA). This is the primary withdrawal path - no ZK proof required. The withdrawal queues an Arcium MPC computation; the Arcium network processes it and calls back on-chain to execute the transfer.
+
+---
+
+### GetWithdrawIntoPublicBalanceV3FunctionArgs
+
+- `client: IUmbraClient`
+
+---
+
+### GetWithdrawIntoPublicBalanceV3FunctionDeps
+
+All fields are optional.
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+---
+
+### Returns
+
+`WithdrawIntoPublicBalanceV3Function`
+
+```typescript
+type WithdrawIntoPublicBalanceV3Function = (
+  destinationAddress: Address,
+  mint: Address,
+  withdrawalAmount: U64,
+  options?: WithdrawIntoPublicBalanceV3Options,
+) => Promise<TransactionSignature>
+```
+
+- `destinationAddress: Address` - The public ATA recipient. Must be an initialised token account for `mint`.
+- `mint: Address` - Token mint address.
+- `withdrawalAmount: U64` - Amount in base token units to withdraw from the encrypted balance.
+
+### WithdrawIntoPublicBalanceV3Options
+
+- `priorityFees?: U64` - Compute unit price in micro-lamports. Default: `0n`.
+- `purpose?: number` - Caller-defined purpose tag stored on-chain. Default: `0`.
+- `optionalData?: OptionalData32` - 32-byte caller metadata. Default: 32 zero bytes.
+
+---
+
+### Errors
+
+Throws `EncryptedWithdrawalError`. See [Errors](./errors#encryptedwithdrawalerror).
+
+---
+
+### Example
+
+```typescript
+import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+
+const signature = await withdraw(
+  destinationAta,  // public ATA to receive tokens
+  mintAddress,
+  500_000n,        // amount in base units
+);
+```
+
+---
+
+## EncryptedWithdrawalError
+
+Thrown by `getDirectWithdrawIntoPublicBalanceV3Function`.
+
+Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-send"`
+
+See [Errors](./errors#encryptedwithdrawalerror) for full documentation.

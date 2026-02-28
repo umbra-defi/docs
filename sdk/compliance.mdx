@@ -1,0 +1,78 @@
+---
+title: "Compliance"
+description: "Two independent mechanisms for granting authorized auditors access to your encrypted data."
+---
+
+## Overview
+
+Umbra's compliance system is entirely voluntary and user-initiated. Two independent mechanisms cover different parts of the protocol:
+
+<CardGroup cols={2}>
+  <Card title="Mixer Pool Viewing Keys" icon="key" href="/sdk/compliance-viewing-keys">
+    Derive scoped cryptographic keys from your master viewing key and share them with auditors. Viewing keys give read access to mixer pool (UTXO) activity within a specific time window or token scope - without exposing anything outside that scope.
+  </Card>
+  <Card title="X25519 Compliance Grants" icon="lock-open" href="/sdk/compliance-x25519-grants">
+    Create on-chain grants that authorize Arcium MPC to re-encrypt your encrypted token account balances under a grantee's X25519 key. The grantee can then decrypt and read the re-encrypted ciphertexts using their own private key.
+  </Card>
+</CardGroup>
+
+<Note>
+No party can access your data without your explicit action. Neither mechanism is reversible for data the grantee has already received - revoking a grant prevents future access but does not invalidate ciphertexts already re-encrypted.
+</Note>
+
+---
+
+## Mixer Pool Viewing Keys
+
+The **master viewing key** (MVK) is a BN254 field element derived from your master seed. It is the root of a key hierarchy you can share selectively:
+
+```
+Master Viewing Key
+├── Mint Viewing Key  { mint }
+│   ├── Yearly Viewing Key  { year }
+│   │   ├── Monthly Viewing Key  { year, month }
+│   │   │   └── Daily Viewing Key  { year, month, day }
+```
+
+Each level of the hierarchy is derived from the level above using the Poseidon hash function. Sharing a key at any level grants read access to all UTXO activity within that scope - and nothing outside it.
+
+```typescript
+// Derive and share a monthly viewing key for February 2025
+const monthlyVk = await client.monthlyViewingKey.generate(2025, 2);
+
+// Export as hex for out-of-band sharing
+const hex = Buffer.from(monthlyVk).toString("hex");
+```
+
+See [Mixer Pool Viewing Keys](/sdk/compliance-viewing-keys) for full derivation details, export formats, and how auditors use these keys.
+
+---
+
+## X25519 Based Compliance Grants
+
+X25519 compliance grants use on-chain PDAs to authorize Arcium MPC to re-encrypt your encrypted token account ciphertexts under a grantee's X25519 key. You create the grant voluntarily, choose the receiver and a unique nonce, and can revoke it at any time by deleting the PDA.
+
+```typescript
+import { getCreateUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+
+// Create a grant allowing `receiver` to re-encrypt your shared ciphertexts
+const signature = await createGrant(
+  receiver,       // receiver's wallet address (Address)
+  granterX25519,  // your MVK X25519 public key (X25519PublicKey)
+  receiverX25519, // receiver's X25519 public key (X25519PublicKey)
+  nonce,          // u128 nonce (RcEncryptionNonce)
+);
+```
+
+See [X25519 Compliance Grants](/sdk/compliance-x25519-grants) for the complete workflow including how to derive the required keys, generate nonces, re-encrypt ciphertexts, and query grant status.
+
+---
+
+## Privacy and Trust Model
+
+- Compliance grants are stored on-chain as marker PDAs - their existence is transparent and auditable
+- A viewing key at scope X gives access only to data within scope X - no access to anything outside that scope
+- Revoking a compliance grant (deleting the PDA) prevents future re-encryption requests, but does not invalidate ciphertexts the grantee has already obtained
+- The master viewing key and master seed are never shared directly through either mechanism

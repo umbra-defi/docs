@@ -1,0 +1,118 @@
+---
+title: "Encrypted Balances"
+description: "Understand the difference between public token accounts, encrypted token accounts, and the two encryption modes."
+---
+
+## Public vs. Encrypted Token Accounts
+
+Solana uses **Associated Token Accounts (ATAs)** to hold SPL and Token-2022 tokens. These are fully public - anyone can query your balance.
+
+Umbra introduces **Encrypted Token Accounts (ETAs)** - on-chain accounts that hold your token balance in encrypted form.
+
+**ATA (standard public account)**
+- Balance visible on-chain
+- Supports standard SPL transfers
+- No registration required
+- Works with any SPL token
+
+**ETA (Umbra encrypted account)**
+- Balance hidden on-chain
+- Use Umbra deposit/withdraw instead of standard transfers
+- One-time registration required
+- Works with any SPL token
+
+## Depositing: ATA → ETA
+
+When you call `deposit`, your tokens move from your ATA into the shielded pool. The program records an encrypted version of your balance in an ETA tied to your `(wallet address, mint)` pair.
+
+```
+Your ATA  ──deposit──►  Shielded Pool (on-chain SPL)
+                              │
+                              ▼
+                         Your ETA  (encrypted balance stored here)
+```
+
+The shielded pool holds the real tokens. The ETA holds the cryptographic proof of how much of those tokens belong to you.
+
+## Withdrawing: ETA → ATA
+
+When you withdraw, the process reverses. Arcium MPC verifies that your encrypted balance is sufficient and authorizes the transfer from the shielded pool back to your ATA.
+
+## The Two Encryption Modes
+
+### MXE-Only
+
+In MXE-only mode, your balance is encrypted under the **Arcium MXE (Multi-party Exchange) public key**. Only the Arcium network can decrypt it.
+
+- Withdrawals require Arcium to perform the decryption computation
+- You cannot query your own balance client-side without Arcium
+- This is the default mode for users who have not registered an [X25519](https://www.rfc-editor.org/rfc/rfc7748) key
+
+### Shared Mode
+
+In Shared mode, your balance is encrypted under **two keys simultaneously**: the Arcium MXE key and your personal **X25519 public key**.
+
+- You can decrypt and read your own balance locally, without a network call
+- Withdrawals still use Arcium's MPC for the on-chain operation
+- Available after completing X25519 key registration (part of the standard registration flow)
+
+<Note>
+If you register with `confidential: true` (the default), your deposits will automatically use Shared mode. This is strongly recommended - it lets you call `queryEncryptedBalance` to read your balance without waiting for Arcium.
+</Note>
+
+## Account Lifecycle
+
+An ETA is created on first deposit and exists for the lifetime of the wallet/mint pair. Subsequent deposits update the encrypted balance in place.
+
+```typescript
+// First deposit for a given mint → creates the ETA
+await deposit(signer.address, USDC_MINT, 1_000_000n);
+
+// Second deposit → adds to the existing ETA balance
+await deposit(signer.address, USDC_MINT, 500_000n);
+```
+
+## Nonces and Replay Protection
+
+Each encrypted token account has a **nonce** - a monotonically increasing counter used to prevent replay attacks. The nonce is derived from the account's `generationIndex` field combined with entropy stored on-chain. You don't manage nonces directly; the SDK handles them.
+
+## Viewing Your Balance
+
+If you are registered in Shared mode, you can query your current encrypted balance:
+
+```typescript
+import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const query = getQueryEncryptedBalanceFunction({ client });
+
+const balances = await query([USDC_MINT]);
+const result = balances.get(USDC_MINT);
+
+switch (result?.state) {
+  case "shared":
+    console.log("Balance:", result.balance); // decrypted MathU64
+    break;
+  case "mxe":
+    console.log("Account is in MXE mode, cannot decrypt balance client-side");
+    break;
+  case "uninitialized":
+    console.log("Account exists but balance not initialized");
+    break;
+  case "non_existent":
+    console.log("No encrypted token account for this mint");
+    break;
+}
+```
+
+<Warning>
+Only Shared-mode accounts can be decrypted client-side. MXE-mode accounts return `{ state: "mxe" }` without a balance. Convert to Shared mode to enable local balance queries.
+</Warning>
+
+## Protocol Fees
+
+Deposits subtract a small protocol fee from your balance. The fee has two components:
+
+- **Base fee** - a fixed amount in the token's native units
+- **Commission** - a percentage of the deposit amount
+
+Fees are deducted automatically. The amount credited to your ETA is the deposit amount minus fees. For Token-2022 mints with a transfer fee extension, the transfer fee is also subtracted before protocol fees are applied - see [Token-2022 Support](/advanced/token-2022).

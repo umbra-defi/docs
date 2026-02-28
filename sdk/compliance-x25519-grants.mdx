@@ -1,0 +1,307 @@
+---
+title: "X25519 Compliance Grants"
+description: "Authorize Arcium MPC to re-encrypt your encrypted token account ciphertexts under a grantee's X25519 key."
+---
+
+## How X25519 Compliance Grants Work
+
+Encrypted token account balances in Umbra are stored as ciphertexts on-chain. By default, only you can read your own balance - Arcium MPC will not re-encrypt your ciphertexts for a third party without explicit authorization.
+
+An **X25519 compliance grant** is an on-chain PDA that grants that authorization. Once the PDA exists, Arcium MPC is permitted to re-encrypt your ciphertexts under the grantee's X25519 key. The grantee can then decrypt the output locally using their own private key - without you needing to be online.
+
+```
+Without grant:
+  Ciphertext (on-chain) ──► [grantee has no access - MPC will not re-encrypt]
+
+With X25519 compliance grant:
+  Ciphertext (on-chain) ──► Arcium MPC re-encrypts ──► Re-encrypted under grantee's key
+                                                          └─► Grantee decrypts locally
+```
+
+The grant PDA is a **marker account** - its presence on-chain is the authorization. No data is stored in it beyond the discriminator.
+
+<Warning>
+Once a re-encryption instruction is executed, the grantee receives a ciphertext encrypted under their own X25519 key. **They hold this permanently.** More critically: because Rescue is a stream cipher, possessing a re-encrypted ciphertext for a given nonce allows the grantee to derive the full keystream for that nonce. This means **all past and future encryptions produced under the same nonce are also permanently readable by the grantee** - not just the single ciphertext that was re-encrypted. Revoking the grant stops future re-encryption requests but cannot undo this. Treat each nonce as a scope of permanent disclosure once any re-encryption instruction for it has been executed.
+</Warning>
+
+---
+
+## Prerequisites
+
+### 1. Your X25519 Public Key (Granter Key)
+
+For user-granted compliance grants, the `granterX25519` parameter is **your MVK (master viewing key) X25519 public key** - the Curve25519 key derived from your master seed's MVK X25519 keypair. This is distinct from the user account X25519 key used for encrypting token balances.
+
+The MVK X25519 key is used to prove ownership of the master viewing key during grant creation. The SDK derives it internally via the `masterViewingKeyX25519KeypairGenerator` dependency.
+
+You can derive and read your MVK X25519 public key from the client:
+
+```typescript
+import { getMasterViewingKeyX25519KeypairGenerator } from "@umbra-privacy/sdk";
+
+// The SDK derives this internally during grant creation.
+// You can also derive it explicitly if you need to share it with a grantee
+// so they can look up the grant PDA.
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client });
+const mvkKeypairResult = await generateMvkKeypair();
+const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
+```
+
+### 2. Receiver's X25519 Public Key
+
+The `receiverX25519` is the grantee's X25519 public key. This is the key that Arcium MPC will re-encrypt the ciphertext under. The receiver derives it from their own master seed.
+
+The receiver can share their X25519 public key with you out-of-band, or you can look it up from their registered user account:
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+const queryAccount = getQueryUserAccountFunction({ client });
+
+const receiverAccount = await queryAccount(receiverAddress);
+
+if (receiverAccount.state !== "exists" || !receiverAccount.data.isUserAccountX25519KeyRegistered) {
+  throw new Error("Receiver has not registered an X25519 key");
+}
+
+// receiverX25519 is a Uint8Array (32 bytes)
+const receiverX25519 = receiverAccount.data.x25519PublicKey;
+```
+
+### 3. Nonce
+
+A compliance grant authorizes re-encryption of any Rescue cipher encryption scoped to a specific **X25519 public key + nonce** combination. Only ciphertexts encrypted under that exact pubkey and nonce are covered - anything encrypted under a different nonce is outside the scope of the grant.
+
+The nonce is also part of the on-chain PDA seed, so multiple independent grants (e.g. to different parties or different nonces) can coexist simultaneously.
+
+Generate a random nonce using the SDK's utility:
+
+```typescript
+import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+
+const nonce = generateRandomNonce(); // Random u128 bigint
+```
+
+Store the nonce - you will need it to delete the grant later, to look up the PDA, and to pass as the `inputEncryptionNonce` when triggering re-encryption.
+
+<Note>
+Because Rescue is a stream cipher, a grantee who obtains a re-encrypted ciphertext for a given nonce can derive the keystream for that nonce and read all encryptions produced under it - not just the one that was re-encrypted. Use a fresh nonce for each grant and each disclosure scope. Never reuse a nonce across grants you intend to keep independent.
+</Note>
+
+---
+
+## Creating a User-Granted Compliance Grant
+
+```typescript
+import {
+  getCreateUserGrantedComplianceGrantFunction,
+  getMasterViewingKeyX25519KeypairGenerator,
+} from "@umbra-privacy/sdk";
+import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+
+const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+
+// Gather required keys
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client });
+const mvkKeypairResult = await generateMvkKeypair();
+const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
+const nonce = generateRandomNonce();
+
+// Create the on-chain grant PDA
+const signature = await createGrant(
+  receiver,       // Address - receiver's wallet address
+  granterX25519,  // X25519PublicKey - your MVK X25519 public key
+  receiverX25519, // X25519PublicKey - receiver's X25519 public key
+  nonce,          // RcEncryptionNonce - 16-byte u128
+);
+
+console.log("Grant created:", signature);
+console.log("Save this nonce for later revocation:", nonce.toString());
+```
+
+The transaction includes an Ed25519 signature over the grant parameters, produced using your MVK X25519 keypair's Ed25519 component. This proves to the on-chain program that the granter controls the master viewing key - without revealing the key itself.
+
+---
+
+## Querying a Grant
+
+Check whether a grant is active before attempting re-encryption:
+
+```typescript
+import { getQueryUserComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+const queryGrant = getQueryUserComplianceGrantFunction({ client });
+
+const result = await queryGrant(
+  granterX25519,  // X25519PublicKey - granter's MVK X25519 key
+  nonce,          // RcEncryptionNonce - the same nonce used at creation
+  receiverX25519, // X25519PublicKey - receiver's X25519 key
+);
+
+if (result.state === "exists") {
+  console.log("Grant is active - re-encryption is authorized");
+} else {
+  console.log("Grant not found - either never created or already revoked");
+}
+```
+
+The grant PDA is derived deterministically from these three values, so the query is a pure account existence check with no network round-trip beyond the RPC call.
+
+---
+
+## Re-Encrypting Ciphertexts (Grantee Workflow)
+
+Once the grant is active, the **grantee** calls the re-encryption function. This triggers an Arcium MPC computation that decrypts the granter's Shared-mode ciphertexts and re-encrypts them under the receiver's X25519 key.
+
+```typescript
+import { getReencryptSharedCiphertextsUserGrantFunction } from "@umbra-privacy/sdk";
+
+// The grantee calls this (using their own client, not the granter's)
+const reencrypt = getReencryptSharedCiphertextsUserGrantFunction({ client: granteeClient });
+
+const signature = await reencrypt(
+  granterX25519Key,     // X25519PublicKey - granter's MVK X25519 key
+  receiverX25519Key,    // X25519PublicKey - receiver's (grantee's own) X25519 key
+  nonce,                // RcEncryptionNonce - the nonce used when creating the grant
+  inputEncryptionNonce, // RcEncryptionNonce - the nonce of the ciphertext to re-encrypt
+  ciphertexts,          // readonly Uint8Array[] - 1 to 6 ciphertexts (32 bytes each)
+);
+
+console.log("Re-encryption triggered:", signature);
+```
+
+### Parameters
+
+<ParamField path="granterX25519Key" type="X25519PublicKey" required>
+  The granter's MVK X25519 public key. Must match the key used when the grant was created.
+</ParamField>
+
+<ParamField path="receiverX25519Key" type="X25519PublicKey" required>
+  The receiver's (grantee's) X25519 public key. Arcium MPC will re-encrypt the output under this key.
+</ParamField>
+
+<ParamField path="nonce" type="RcEncryptionNonce" required>
+  The 128-bit nonce from the grant creation. Used to locate the grant PDA on-chain.
+</ParamField>
+
+<ParamField path="inputEncryptionNonce" type="RcEncryptionNonce" required>
+  The nonce of the specific ciphertext you want re-encrypted. This is the nonce associated with the encrypted token account state at a specific point in time.
+</ParamField>
+
+<ParamField path="ciphertexts" type="readonly Uint8Array[]" required>
+  An array of 1 to 6 ciphertext values (32 bytes each). Unused slots are padded with zero bytes. These are the raw encrypted balance ciphertexts fetched from the on-chain encrypted token account.
+</ParamField>
+
+<Warning>
+Re-encryption follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern). The SDK submits the handler, waits for Arcium MPC to produce the re-encrypted output, then waits for the callback to confirm. The re-encrypted ciphertext is written on-chain in an MPC callback data PDA.
+</Warning>
+
+---
+
+## Revoking a Grant
+
+Delete the grant PDA to prevent future re-encryption requests. The grant parameters must exactly match the original creation.
+
+```typescript
+import { getDeleteUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+const deleteGrant = getDeleteUserGrantedComplianceGrantFunction({ client });
+
+const signature = await deleteGrant(
+  receiver,       // Address - receiver's wallet address
+  granterX25519,  // X25519PublicKey - your MVK X25519 key
+  receiverX25519, // X25519PublicKey - receiver's X25519 key
+  nonce,          // RcEncryptionNonce - must be the original nonce
+);
+
+console.log("Grant revoked:", signature);
+```
+
+Deleting the grant closes the PDA and returns the rent lamports to the fee payer.
+
+<Warning>
+Revoking a grant stops future re-encryption requests but does not affect anything the grantee has already received. Any ciphertext they obtained before revocation remains permanently accessible to them - there is no mechanism to claw it back. Revocation is a forward-only control.
+</Warning>
+
+---
+
+## Full End-to-End Workflow Example
+
+```typescript
+import {
+  getCreateUserGrantedComplianceGrantFunction,
+  getDeleteUserGrantedComplianceGrantFunction,
+  getQueryUserComplianceGrantFunction,
+  getQueryUserAccountFunction,
+  getMasterViewingKeyX25519KeypairGenerator,
+} from "@umbra-privacy/sdk";
+import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+
+// === GRANTER SIDE ===
+
+// 1. Derive your MVK X25519 public key
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client: granterClient });
+const mvkKeypairResult = await generateMvkKeypair();
+const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
+
+// 2. Look up the receiver's X25519 key
+const RECEIVER_ADDRESS = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";
+const queryAccount = getQueryUserAccountFunction({ client: granterClient });
+const receiverAccount = await queryAccount(RECEIVER_ADDRESS);
+if (receiverAccount.state !== "exists") {
+  throw new Error("Receiver is not registered");
+}
+const receiverX25519 = receiverAccount.data.x25519PublicKey;
+
+// 3. Generate a nonce and save it
+const nonce = generateRandomNonce();
+console.log("Nonce (save this):", nonce.toString());
+
+// 4. Create the on-chain grant
+const createGrant = getCreateUserGrantedComplianceGrantFunction({ client: granterClient });
+const grantSig = await createGrant(
+  RECEIVER_ADDRESS,
+  granterX25519,
+  receiverX25519,
+  nonce,
+);
+console.log("Grant created:", grantSig);
+
+// === GRANTEE SIDE ===
+// (The grantee now calls re-encryption using their own client)
+
+// 5. (Optional) Grantee verifies the grant is active
+const queryGrant = getQueryUserComplianceGrantFunction({ client: granteeClient });
+const grantStatus = await queryGrant(granterX25519, nonce, receiverX25519);
+console.log("Grant active:", grantStatus.state === "exists");
+
+// 6. Grantee triggers re-encryption of the granter's ciphertexts
+// (They provide: the ciphertexts from the on-chain ETA, the input nonce, etc.)
+// const reencrypt = getReencryptSharedCiphertextsUserGrantFunction({ client: granteeClient });
+// const reencryptSig = await reencrypt(granterX25519, receiverX25519, nonce, inputNonce, ciphertexts);
+
+// === GRANTER SIDE - Revoking ===
+
+// 7. Later: revoke the grant
+const deleteGrant = getDeleteUserGrantedComplianceGrantFunction({ client: granterClient });
+const deleteSig = await deleteGrant(RECEIVER_ADDRESS, granterX25519, receiverX25519, nonce);
+console.log("Grant revoked:", deleteSig);
+```
+
+---
+
+## PDA Structure
+
+For reference, the grant PDA is derived from these seeds (using Arcium-encoded byte representations):
+
+```
+seeds = [
+  SHA256("ArciumComplianceGrant"),
+  SHA256("UserGrant"),
+  granterX25519  (Arcium-encoded, 32 bytes),
+  nonce          (Arcium-encoded u128, 16 bytes),
+  receiverX25519 (Arcium-encoded, 32 bytes),
+]
+```
+
+The PDA's existence is the authorization - it contains no data beyond the account discriminator.

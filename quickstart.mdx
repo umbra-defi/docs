@@ -1,80 +1,294 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Install the Umbra SDK and shield your first token balance in under 5 minutes."
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+- Node.js 18+ or a modern browser environment
+- A Solana wallet (or a generated keypair for testing)
+- An RPC endpoint - any standard Solana JSON-RPC URL works
 
-### Step 1: Set up your local environment
+## 1. Install
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<CodeGroup>
+```bash pnpm
+pnpm add @umbra-privacy/sdk
+```
 
-### Step 2: Deploy your changes
+```bash npm
+npm install @umbra-privacy/sdk
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```bash yarn
+yarn add @umbra-privacy/sdk
+```
+</CodeGroup>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## 2. Create a Signer
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+For quick testing, generate an in-memory keypair. For production, see [Wallet Adapters](/sdk/wallet-adapters).
 
-### Step 3: Go live
+```typescript
+import { createInMemorySigner } from "@umbra-privacy/sdk";
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+// Generate a random keypair (for testing only)
+const signer = await createInMemorySigner();
+console.log("Wallet address:", signer.address);
+```
 
-## Next steps
+<Warning>
+An in-memory keypair is ephemeral - it disappears when your process exits. Use a browser wallet or a persistent keypair for anything beyond local testing.
+</Warning>
 
-Now that you have your docs running, explore these key features:
+## 3. Create the Umbra Client
 
-<CardGroup cols={2}>
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl: "https://api.mainnet-beta.solana.com",
+  rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
+  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+});
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The Umbra program address is different on devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
 </Note>
+
+<Note>
+Client construction is **synchronous and instant**. The wallet signing prompt does not appear until an operation requires the master seed - typically at your first `register()` or `deposit()` call.
+</Note>
+
+## 4. Register Your Account
+
+Registration sets up your on-chain Umbra identity. This function can be called regardless of whether the user is already registered - it handles the full setup, including key rotation when keys have changed. That said, each call submits on-chain transactions with SOL costs, so in practice you should check whether the account is already registered before calling it.
+
+```typescript
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+
+const register = getUserRegistrationFunction({ client });
+
+// This is where the wallet signing prompt appears for the first time.
+// The user signs once to derive the master seed; subsequent operations
+// reuse the cached seed without prompting again.
+const signatures = await register({
+  confidential: true, // enable encrypted balances
+  anonymous: true,    // enable mixer / anonymous transfers
+});
+
+console.log(`Registered in ${signatures.length} transaction(s)`);
+```
+
+## 5. Deposit Tokens
+
+Shield an SPL or Token-2022 token balance by moving it from your public wallet into an encrypted account.
+
+```typescript
+import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
+const amount = 1_000_000n; // 1 token (6 decimals)
+
+const signature = await deposit(
+  client.signer.address, // deposit into your own encrypted account
+  MINT,
+  amount,
+);
+
+console.log("Deposit confirmed:", signature);
+```
+
+## 6. Withdraw Tokens
+
+Move tokens back from your encrypted account to your public wallet.
+
+```typescript
+import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+
+const signature = await withdraw(
+  client.signer.address, // destination address
+  MINT,
+  amount,
+);
+
+console.log("Withdrawal confirmed:", signature);
+```
+
+## 7. Create a Receiver-Claimable UTXO
+
+Send tokens privately to a recipient by depositing them into the [mixer](/sdk/mixer/overview). The recipient can later claim them with no on-chain link back to you as the sender.
+
+<Note>
+UTXO creation requires a `zkProver` dependency for Groth16 proof generation. Install `@umbra-privacy/web-zk-prover` for the recommended browser-based prover - see [ZK Provers](/sdk/advanced/zk-provers) for details.
+</Note>
+
+```typescript
+import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
+import { getReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+
+const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  { client },
+  { zkProver },
+);
+
+const RECIPIENT = "RecipientWalletAddressHere";
+
+const signatures = await createUtxo({
+  destinationAddress: RECIPIENT,
+  mint: MINT,
+  amount,
+});
+console.log("UTXO created:", signatures[0]);
+```
+
+## 8. Fetch Claimable UTXOs
+
+As the recipient, scan the Merkle tree for UTXOs addressed to your X25519 key. The SDK attempts to decrypt each ciphertext and returns only those belonging to you.
+
+```typescript
+import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+
+const fetchUtxos = getFetchClaimableUtxosFunction({ client });
+
+// Scan tree 0 from the start - pass your last seen index to resume
+const { receiver } = await fetchUtxos(0, 0);
+
+console.log("Received UTXOs:", receiver.length);
+```
+
+## 9. Claim the UTXO
+
+Present a ZK proof on-chain to burn the UTXO and receive the tokens. Claiming into an encrypted balance keeps the received amount private - no on-chain trace of who received what.
+
+```typescript
+import {
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimReceiverIntoEtaProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getClaimReceiverIntoEtaProver();
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+});
+
+const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result = await claim([receiver[0]]);
+
+console.log("Claimed into encrypted balance:", result.signatures);
+```
+
+## Full Example
+
+```typescript
+import {
+  createInMemorySigner,
+  getUmbraClientFromSigner,
+  getUserRegistrationFunction,
+  getDirectDepositIntoEncryptedBalanceFunction,
+  getDirectWithdrawIntoPublicBalanceV3Function,
+  getCreateReceiverClaimableUtxoFromPublicBalanceFunction,
+  getFetchClaimableUtxosFunction,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import {
+  getReceiverClaimableUtxoFromPublicBalanceProver,
+  getClaimReceiverIntoEtaProver,
+} from "@umbra-privacy/web-zk-prover";
+
+async function main() {
+  // 1. Signer (use your wallet adapter in production)
+  const signer = await createInMemorySigner();
+
+  // 2. Client
+  const client = await getUmbraClientFromSigner({
+    signer,
+    network: "mainnet",
+    rpcUrl: "https://api.mainnet-beta.solana.com",
+    rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
+    indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+  });
+
+  // 3. Register (safe to call regardless of prior registration state)
+  const register = getUserRegistrationFunction({ client });
+  await register({ confidential: true, anonymous: true });
+
+  const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
+
+  // 4. Deposit into encrypted balance
+  const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+  await deposit(signer.address, MINT, 1_000_000n);
+
+  // 5. Withdraw back to public wallet
+  const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+  await withdraw(signer.address, MINT, 1_000_000n);
+
+  // 6. Set up ZK provers
+  const utxoProver = getReceiverClaimableUtxoFromPublicBalanceProver();
+  const claimProver = getClaimReceiverIntoEtaProver();
+
+  // 7. Create a receiver-claimable UTXO
+  const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+    { client },
+    { zkProver: utxoProver },
+  );
+  const RECIPIENT = "RecipientWalletAddressHere";
+  await createUtxo({
+    destinationAddress: RECIPIENT,
+    mint: MINT,
+    amount: 500_000n,
+  });
+
+  // 8. Fetch UTXOs addressed to this wallet (as the recipient)
+  const fetchUtxos = getFetchClaimableUtxosFunction({ client });
+  const { receiver } = await fetchUtxos(0, 0);
+
+  // 9. Claim the first received UTXO into an encrypted balance
+  const relayer = getUmbraRelayer({
+    apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  });
+
+  if (receiver.length > 0) {
+    const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+      { client },
+      { zkProver: claimProver, relayer },
+    );
+    const result = await claim([receiver[0]]);
+    console.log("Claimed:", result.signatures);
+  }
+}
+
+main().catch(console.error);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Wallet Adapters" icon="wallet" href="/sdk/wallet-adapters">
+    Connect Phantom, Solflare, or any Solana wallet.
+  </Card>
+  <Card title="Mixer / UTXOs" icon="shuffle" href="/sdk/mixer/overview">
+    Make transfers fully anonymous using the mixer.
+  </Card>
+  <Card title="Query State" icon="magnifying-glass" href="/sdk/query">
+    Read encrypted balances and account state on-chain.
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/reference/errors">
+    Handle deposit and withdrawal failures gracefully.
+  </Card>
+</CardGroup>

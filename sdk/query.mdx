@@ -1,0 +1,277 @@
+---
+title: "Query State"
+description: "Read a user's on-chain Umbra account state and encrypted balance metadata."
+---
+
+## Overview
+
+Two query functions let you inspect on-chain state without modifying it:
+
+- **`getQueryUserAccountFunction`** - reads registration status and account metadata for any address
+- **`getQueryEncryptedBalanceFunction`** - reads encrypted balance metadata for the calling user across multiple mints
+
+Both are read-only and do not require a wallet signing prompt.
+
+## Query User Account
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+const query = getQueryUserAccountFunction({ client });
+
+const result = await query(userAddress);
+```
+
+### Return Value
+
+The result is a discriminated union:
+
+```typescript
+type QueryUserAccountResult =
+  | { state: "non_existent" }
+  | { state: "exists"; data: EncryptedUserAccount };
+```
+
+When `state === "exists"`, `data` contains:
+
+<ResponseField name="isInitialised" type="boolean">
+  Whether the base account has been created on-chain. This is `true` after the first registration step.
+</ResponseField>
+
+<ResponseField name="isUserAccountX25519KeyRegistered" type="boolean">
+  Whether the X25519 public key has been registered. Required for Shared-mode encrypted balances and for receiving mixer UTXOs.
+</ResponseField>
+
+<ResponseField name="isUserCommitmentRegistered" type="boolean">
+  Whether the user commitment (Poseidon hash) has been registered. Required for mixer / anonymous transfers.
+</ResponseField>
+
+<ResponseField name="isActiveForAnonymousUsage" type="boolean">
+  Whether both X25519 and commitment registration are complete and the account is ready for all features.
+</ResponseField>
+
+<ResponseField name="x25519PublicKey" type="Uint8Array">
+  The user's registered X25519 public key (32 bytes). Used by other users to encrypt UTXOs addressed to this account.
+</ResponseField>
+
+<ResponseField name="generationIndex" type="bigint">
+  Monotonic counter incremented on each deposit/withdrawal. Used internally for nonce derivation.
+</ResponseField>
+
+### Example: Check Registration Status
+
+```typescript
+const result = await query(client.signer.address);
+
+if (result.state === "non_existent") {
+  // User is not registered - prompt them to register
+  console.log("Not registered");
+  return;
+}
+
+const { data } = result;
+
+if (!data.isUserAccountX25519KeyRegistered) {
+  console.log("X25519 key not registered - re-run registration");
+}
+
+if (!data.isUserCommitmentRegistered) {
+  console.log("Commitment not registered - re-run registration with anonymous: true");
+}
+
+if (data.isActiveForAnonymousUsage) {
+  console.log("Fully registered - all features available");
+}
+```
+
+---
+
+## Query Encrypted Balance
+
+```typescript
+import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const query = getQueryEncryptedBalanceFunction({ client });
+
+// Query your encrypted balances for one or more mints
+const balances = await query([USDC_MINT, USDT_MINT]);
+// Returns Map<Address, QueryEncryptedBalanceResult>
+```
+
+The function queries the calling user's own encrypted balances. Pass an array of mint addresses to check multiple mints in a single call.
+
+### Parameters
+
+<ParamField path="mints" type="Address[]" required>
+  An array of SPL or Token-2022 mint addresses to query. The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
+</ParamField>
+
+### Return Value
+
+```typescript
+type QueryEncryptedBalanceResult =
+  | { readonly state: "non_existent" }
+  | { readonly state: "uninitialized" }
+  | { readonly state: "mxe" }
+  | { readonly state: "shared"; readonly balance: MathU64 };
+```
+
+The four states represent:
+
+- `"non_existent"` - No encrypted token account exists for this mint. The user needs to deposit first.
+- `"uninitialized"` - The account PDA exists on-chain but the Arcium balance has not been initialized yet.
+- `"mxe"` - The account is in MXE-only mode. The balance is encrypted under the network key and cannot be decrypted client-side.
+- `"shared"` - The account is in Shared mode. The SDK automatically decrypts the balance using the user's X25519 private key and returns the plaintext `balance` as a `MathU64`.
+
+### Example
+
+```typescript
+import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+const query = getQueryEncryptedBalanceFunction({ client });
+const balances = await query([USDC, USDT]);
+
+for (const [mint, result] of balances) {
+  switch (result.state) {
+    case "shared":
+      console.log(`Mint ${mint}: balance=${result.balance}`);
+      break;
+    case "mxe":
+      console.log(`Mint ${mint}: MXE mode (cannot decrypt client-side)`);
+      break;
+    case "uninitialized":
+      console.log(`Mint ${mint}: account exists but balance not initialized`);
+      break;
+    case "non_existent":
+      console.log(`No encrypted balance for mint ${mint} - deposit first`);
+      break;
+  }
+}
+```
+
+<Note>
+Shared-mode accounts return the decrypted balance automatically. MXE-mode accounts cannot be decrypted client-side - convert to Shared mode first using [Conversion](/sdk/conversion).
+</Note>
+
+---
+
+## Common Patterns
+
+### Check Before Depositing
+
+Before depositing to an external address, verify the recipient is registered:
+
+```typescript
+const recipientQuery = getQueryUserAccountFunction({ client });
+const recipientResult = await recipientQuery(recipientAddress);
+
+if (
+  recipientResult.state === "non_existent" ||
+  !recipientResult.data.isUserAccountX25519KeyRegistered
+) {
+  throw new Error("Recipient is not registered for encrypted deposits");
+}
+
+// Safe to deposit
+await deposit(recipientAddress, mint, amount);
+```
+
+### Poll Until Registered
+
+For UI flows where you start registration and want to confirm it landed:
+
+```typescript
+async function waitForRegistration(address: Address, maxAttempts = 10) {
+  const query = getQueryUserAccountFunction({ client });
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await query(address);
+    if (result.state === "exists" && result.data.isActiveForAnonymousUsage) {
+      return result.data;
+    }
+    await new Promise((r) => setTimeout(r, 2000)); // wait 2s between polls
+  }
+
+  throw new Error("Registration not confirmed after polling");
+}
+```
+
+### Query Multiple Balances at Once
+
+Use the array-based query to check several token balances in a single round-trip:
+
+```typescript
+const MINTS = [
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  // USDT
+  "So11111111111111111111111111111111111111112",     // wSOL
+];
+
+const query = getQueryEncryptedBalanceFunction({ client });
+const results = await query(MINTS);
+
+const activeBalances = [...results.entries()]
+  .filter(([, result]) => result.state === "shared" || result.state === "mxe")
+  .map(([mint]) => mint);
+
+console.log("Mints with active encrypted balances:", activeBalances);
+```
+
+## Error Handling
+
+Both query functions are read-only - they never submit transactions. Use `isQueryError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each failure point.
+
+```typescript
+import { isQueryError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const result = await query(userAddress);
+  // or: const balances = await queryBalance([USDC, USDT]);
+} catch (err) {
+  if (isQueryError(err)) {
+    switch (err.stage) {
+      case "pda-derivation":
+        // Could not derive the account's program address - unexpected on-chain state.
+        console.error("PDA derivation failed:", err.message);
+        break;
+
+      case "account-fetch":
+        // RPC node unreachable, returned an HTTP error, or returned a JSON-RPC error.
+        console.error("RPC error fetching account:", err.message);
+        showNotification("Could not reach the network. Please check your connection.");
+        break;
+
+      case "account-decode":
+        // Account data exists on-chain but could not be decoded.
+        // This indicates unexpected on-chain state - not a transient error.
+        console.error("Account data could not be decoded:", err.message);
+        break;
+
+      case "key-derivation":
+        // X25519 key derivation failed (encrypted balance query only).
+        console.error("Key derivation failed:", err.message);
+        break;
+
+      case "decryption":
+        // Rescue cipher decryption failed (encrypted balance query only).
+        console.error("Balance decryption failed:", err.message);
+        break;
+
+      default:
+        // Other stages: initialization.
+        console.error("Query failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+<Note>
+Query functions do not throw when an account does not exist - they return `{ state: "non_existent" }` instead. Errors are reserved for infrastructure failures (RPC unreachable, malformed data).
+</Note>
+
+See [Error Handling](/reference/errors) for a full reference of all error types.

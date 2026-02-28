@@ -1,0 +1,139 @@
+---
+title: "Compliance API Reference"
+description: "Complete reference for compliance grant factory functions."
+---
+
+## Overview
+
+Compliance functions allow users to voluntarily grant selective viewing access to specific parties. All grants are stored on-chain as PDAs - transparent and auditable - but only accessible to the explicitly authorized grantee.
+
+---
+
+## `getCreateUserGrantedComplianceGrantFunction`
+
+```typescript
+import { getCreateUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+function getCreateUserGrantedComplianceGrantFunction(
+  args: { client: IUmbraClient },
+): CreateUserGrantedComplianceGrantFunction
+```
+
+Factory function that returns a callable function to create a compliance grant on-chain.
+
+### Returned Function
+
+Creates a scoped viewing key grant, allowing the grantee to re-encrypt and view specific encrypted balances.
+
+```typescript
+const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+const signature = await createGrant({ granteeAddress, viewingKeyScope });
+```
+
+Returns `Promise<TransactionSignature>`.
+
+---
+
+## `getDeleteUserGrantedComplianceGrantFunction`
+
+```typescript
+import { getDeleteUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+function getDeleteUserGrantedComplianceGrantFunction(
+  args: { client: IUmbraClient },
+): DeleteUserGrantedComplianceGrantFunction
+```
+
+Factory function that returns a callable function to revoke a compliance grant.
+
+```typescript
+const deleteGrant = getDeleteUserGrantedComplianceGrantFunction({ client });
+const signature = await deleteGrant({ granteeAddress, viewingKeyScope });
+```
+
+Returns `Promise<TransactionSignature>`.
+
+<Warning>
+Revoking a grant prevents future re-encryption requests but does not invalidate previously issued re-encrypted ciphertexts that the grantee has already obtained.
+</Warning>
+
+---
+
+## `getQueryUserComplianceGrantFunction`
+
+```typescript
+import { getQueryUserComplianceGrantFunction } from "@umbra-privacy/sdk";
+
+function getQueryUserComplianceGrantFunction(args: {
+  accountInfoProvider: AccountInfoProviderFunction;
+}): QueryUserComplianceGrantFunction
+```
+
+Factory function returning a read-only query for whether a compliance grant exists.
+
+### Returned Function
+
+```typescript
+async function queryGrant(
+  userAddress: Address,
+  granteeAddress: Address,
+  viewingKeyScope: ViewingKeyScope,
+): Promise<ComplianceGrantQueryResult>
+```
+
+### `ComplianceGrantQueryResult`
+
+```typescript
+type ComplianceGrantQueryResult =
+  | { state: "non_existent" }
+  | { state: "exists"; data: ComplianceGrantData };
+```
+
+---
+
+## `getReencryptSharedCiphertextsUserGrantFunction`
+
+```typescript
+import { getReencryptSharedCiphertextsUserGrantFunction } from "@umbra-privacy/sdk";
+
+function getReencryptSharedCiphertextsUserGrantFunction(
+  args: { client: IUmbraClient },
+): ReencryptSharedCiphertextsUserGrantFunction
+```
+
+Factory function that returns a callable function for a grantee to trigger re-encryption of the granter's ciphertexts under their own key.
+
+Requires an active compliance grant (created by the granter). Uses Arcium MPC for re-encryption.
+
+```typescript
+const reencrypt = getReencryptSharedCiphertextsUserGrantFunction({ client });
+const signature = await reencrypt({ userAddress, granteeAddress, mint });
+```
+
+Returns `Promise<TransactionSignature>`.
+
+---
+
+## Viewing Key Hierarchy
+
+Compliance grants operate over a time-scoped and mint-scoped key hierarchy derived from the user's master viewing key:
+
+```
+Master Viewing Key
+├── Mint Viewing Key { mint }
+│   ├── Yearly Viewing Key { year }
+│   │   ├── Monthly Viewing Key { year, month }
+│   │   │   └── Daily Viewing Key { year, month, day }
+```
+
+Granting a monthly viewing key allows the grantee to see all transactions within that month only. No other time period is accessible.
+
+---
+
+## Privacy and Trust Model
+
+- Grants are stored on-chain as PDAs - transparent and auditable to anyone
+- Only the explicitly authorized grantee can use the grant to request re-encryption
+- Granting a scoped sub-key does not expose the master viewing key or any keys outside the scope
+- The user's master viewing key is never shared directly
+- Revoking (deleting) a grant prevents future re-encryption requests but does not reach back in time

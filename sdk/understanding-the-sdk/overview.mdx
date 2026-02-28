@@ -1,0 +1,78 @@
+---
+title: "The SDK Pattern"
+description: "The factory function pattern every SDK operation follows, naming conventions, and how args and deps work."
+---
+
+## Design Philosophy
+
+The Umbra SDK is written in the same **functional, dependency-injected style** as [Anza's `@solana/kit`](https://github.com/anza-xyz/solana-web3.js). Every capability is either a pure function or a factory that returns one. There are no classes with internal state, no singletons, and no implicit globals. Dependencies are explicit, injectable, and testable.
+
+This mirrors the architecture of `@solana/kit` itself - functions like `getTransferSolInstruction` and `createSolanaRpc` follow the same closure-based factory pattern you will find throughout the Umbra SDK.
+
+## The Factory Pattern
+
+Every SDK operation follows the same two-step pattern:
+
+```typescript
+// Step 1 - build the function once, at setup time
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+// Step 2 - call it at runtime, as many times as needed
+const signature = await deposit(destinationAddress, mint, amount);
+```
+
+The factory call (`get*Function`) is cheap. It binds configuration and resolves defaults. The returned function is what does the actual async work - sending transactions, generating proofs, querying the indexer.
+
+This is the same pattern `@solana/kit` uses for its instruction builders:
+
+```typescript
+// @solana/kit instruction builder
+const ix = getTransferSolInstruction({ source, destination, amount });
+
+// Umbra SDK factory function - same pattern
+const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+```
+
+## Naming Conventions
+
+All factory functions use a consistent `get[Verb][Subject]Function` scheme. The verb tells you what the returned function does:
+
+- `getDirectDeposit...` - credits tokens to an encrypted account
+- `getDirectWithdraw...` - debits tokens from an encrypted account to a public account
+- `getCreate...` - creates a new on-chain entity (UTXO, grant)
+- `getClaim...` - redeems an on-chain entity (UTXO, staged funds)
+- `getFetch...` - queries off-chain data (indexer)
+- `getQuery...` - queries on-chain state (RPC)
+- `getRotate...` - replaces a registered key
+- `getConvert...` - migrates an account between protocol modes
+- `getReencrypt...` - re-encrypts ciphertexts under a new key
+- `getUpdate...` - mutates account metadata
+- `getUserRegistration...` - the full registration flow
+
+## args and deps
+
+Every factory accepts two arguments:
+
+```typescript
+const fn = getOperationFunction(args, deps?);
+```
+
+- `args` - required. Always contains `client: IUmbraClient` and any fixed configuration for this operation (e.g. a specific mint).
+- `deps` - optional. Contains every infrastructure provider, key generator, and ZK prover used internally. All `deps` fields have sensible defaults derived from the `client`. The only exceptions are ZK provers, which have no default and must always be supplied explicitly.
+
+```typescript
+// Using all defaults
+const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+
+// Overriding the transaction forwarder (e.g. Jito bundles)
+const deposit = getDirectDepositIntoEncryptedBalanceFunction(
+  { client },
+  { transactionForwarder: jitoForwarder },
+);
+```
+
+Function-level `deps` override client-level `deps`. Client-level `deps` override built-in defaults.
+
+<Note>
+The **Advanced** section covers dependency injection internals, key generators, ZK provers, transaction callbacks, and key rotation in depth. Most applications do not need those details to get started.
+</Note>

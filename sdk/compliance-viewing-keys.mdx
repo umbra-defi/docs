@@ -1,0 +1,233 @@
+---
+title: "Mixer Pool Viewing Keys"
+description: "Derive scoped viewing keys from your master viewing key and share them with auditors for read access to mixer pool activity."
+---
+
+## What Are Viewing Keys?
+
+The **master viewing key** (MVK) is a 252-bit BN254 field element derived deterministically from your master seed. It sits at the root of a hierarchical key system that lets you grant scoped read access to your mixer pool activity without ever exposing the root key or any data outside the defined scope.
+
+Viewing keys are designed for compliance and audit use cases:
+- Provide an auditor or regulator access to transactions within a specific time window
+- Grant a compliance officer access to all activity for a specific token
+- Share full visibility at the master level with a tax advisor or legal counterparty
+- Prove to an exchange that specific UTXOs originated from you
+
+<Note>
+Viewing keys are read-only credentials. Possessing a viewing key does not allow spending UTXOs or withdrawing balances. They can only be used to decrypt ciphertext data that was encrypted under the associated key.
+</Note>
+
+## The Viewing Key Hierarchy
+
+All keys in the hierarchy are BN254 field elements. Each level is derived from its parent using the Poseidon hash function. A key at any level grants access to all data within its scope - and nothing above or adjacent to it in the tree.
+
+```
+Master Viewing Key
+└── Mint Viewing Key  { e.g. USDC · USDT · wSOL · ... }
+    └── Yearly Viewing Key  { e.g. 2024 · 2025 · ... }
+        ├── Monthly Viewing Key  { Jan }
+        │   ├── Daily Viewing Key  { Jan 01 }
+        │   │   ├── Hourly Viewing Key  { 00h }
+        │   │   │   ├── Minute Viewing Key  { 00m }
+        │   │   │   │   └── Second Viewing Key  { 00s }
+        │   │   │   └── ...
+        │   │   └── ...
+        │   └── ...
+        ├── Monthly Viewing Key  { Feb }
+        ├── Monthly Viewing Key  { Mar }
+        └── ...  { Apr – Dec }
+```
+
+**Example scopes:**
+- Monthly key for `2025-02`: sees all USDC mixer activity in February 2025
+- Yearly key for `2025`: sees all USDC mixer activity across all of 2025
+- Mint key for USDC: sees all USDC mixer activity, all time
+- Master viewing key: sees everything across all tokens and all time
+
+## Deriving Viewing Keys
+
+Each level of the hierarchy has a corresponding generator factory function. Pass `{ client }` to get a generator, then call it with the appropriate parameters.
+
+### Master Viewing Key
+
+```typescript
+import { getMasterViewingKeyGenerator } from "@umbra-privacy/sdk";
+
+// Derives the root of the hierarchy
+const generateMvk = getMasterViewingKeyGenerator({ client });
+const mvk = await generateMvk();
+
+// mvk is a bigint (BN254 field element)
+console.log("Master Viewing Key:", mvk.toString());
+```
+
+<Warning>
+The master viewing key gives unrestricted read access to all your mixer activity - past and future. Share it only with fully trusted parties. For audits with a limited scope, always use a scoped sub-key.
+</Warning>
+
+### Mint Viewing Key
+
+```typescript
+import { getMintViewingKeyGenerator } from "@umbra-privacy/sdk";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// Derives the mint-specific viewing key
+const generateMintVk = getMintViewingKeyGenerator({ client });
+const mintVk = await generateMintVk(USDC);
+
+// Scope: all time, but only USDC activity
+console.log("USDC Viewing Key:", mintVk.toString());
+```
+
+### Yearly Viewing Key
+
+```typescript
+import { getYearlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import type { Year } from "@umbra-privacy/sdk/types";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// Derives the yearly viewing key for 2025 under the USDC mint key
+const generateYearlyVk = getYearlyViewingKeyGenerator({ client });
+const yearlyVk = await generateYearlyVk(USDC, 2025n as Year);
+
+// Scope: all USDC activity in 2025 only
+console.log("2025 USDC Viewing Key:", yearlyVk.toString());
+```
+
+### Monthly Viewing Key
+
+```typescript
+import { getMonthlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import type { Year, Month } from "@umbra-privacy/sdk/types";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// Derives the monthly viewing key for February 2025
+const generateMonthlyVk = getMonthlyViewingKeyGenerator({ client });
+const monthlyVk = await generateMonthlyVk(USDC, 2025n as Year, 2n as Month);
+
+// Scope: USDC activity in February 2025 only
+console.log("Feb 2025 USDC Viewing Key:", monthlyVk.toString());
+```
+
+### Daily Viewing Key
+
+```typescript
+import { getDailyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import type { Year, Month, Day } from "@umbra-privacy/sdk/types";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// Derives the daily viewing key for February 14, 2025
+const generateDailyVk = getDailyViewingKeyGenerator({ client });
+const dailyVk = await generateDailyVk(USDC, 2025n as Year, 2n as Month, 14n as Day);
+
+// Scope: USDC activity on Feb 14, 2025 only
+console.log("Feb 14 2025 USDC Viewing Key:", dailyVk.toString());
+```
+
+## Exporting and Sharing a Viewing Key
+
+Viewing keys are `bigint` values (BN254 field elements). Export them as decimal or hex strings for out-of-band sharing with an auditor:
+
+```typescript
+// Export as decimal string (lossless, unambiguous)
+function exportViewingKey(key: bigint): string {
+  return key.toString();
+}
+
+// Export as hex string (compact)
+function exportViewingKeyHex(key: bigint): string {
+  return "0x" + key.toString(16).padStart(64, "0");
+}
+
+// Import back from decimal string
+function importViewingKey(decimal: string): bigint {
+  return BigInt(decimal);
+}
+
+// Import back from hex string
+function importViewingKeyHex(hex: string): bigint {
+  return BigInt(hex);
+}
+```
+
+### Sharing Example
+
+```typescript
+import { getMonthlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import type { Year, Month } from "@umbra-privacy/sdk/types";
+
+// 1. Choose a scope - e.g., monthly key for an audit of Q1 2025
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const generateMonthlyVk = getMonthlyViewingKeyGenerator({ client });
+
+const q1Keys = await Promise.all([
+  generateMonthlyVk(USDC, 2025n as Year, 1n as Month), // January
+  generateMonthlyVk(USDC, 2025n as Year, 2n as Month), // February
+  generateMonthlyVk(USDC, 2025n as Year, 3n as Month), // March
+]);
+
+// 2. Export as strings
+const q1Strings = q1Keys.map((key) => key.toString());
+
+// 3. Share with auditor out-of-band (email, secure document, etc.)
+const auditPackage = {
+  granterAddress: client.signer.address,
+  token: USDC,
+  period: "Q1 2025",
+  viewingKeys: {
+    "2025-01": q1Strings[0],
+    "2025-02": q1Strings[1],
+    "2025-03": q1Strings[2],
+  },
+};
+
+console.log(JSON.stringify(auditPackage, null, 2));
+```
+
+## How Key Derivation Works
+
+Viewing keys are derived using the Poseidon hash function over BN254. Starting from the master viewing key:
+
+```
+MintViewingKey(mint) = Poseidon(MVK, mint_low_u128, mint_high_u128)
+
+YearlyViewingKey(mint, year) = Poseidon(MintViewingKey(mint), year)
+
+MonthlyViewingKey(mint, year, month) = Poseidon(YearlyViewingKey(mint, year), month)
+
+DailyViewingKey(mint, year, month, day) = Poseidon(MonthlyViewingKey(mint, year, month), day)
+```
+
+The mint address is split into two 128-bit halves before being passed to Poseidon, as BN254 field elements are 252-bit values and a 256-bit pubkey would exceed the field size.
+
+This structure means:
+- You cannot derive a parent key from a child key - the tree is one-directional
+- Child keys can always be re-derived from the parent at any time
+- Two separate mint keys cannot be linked without the master viewing key
+
+## Security Properties
+
+- **One-directional** - a grantee who holds a monthly key cannot derive the yearly key, the master viewing key, or any key for another mint or time period
+- **Unlinkable** - viewing keys for different months or mints are computationally unrelated without the master key
+- **Deterministic** - the same wallet on the same network always produces the same viewing key hierarchy; keys can be re-derived at any time
+- **Non-transactional** - sharing a viewing key does not create any on-chain state; it is a purely off-chain credential
+
+## What Auditors Can Do With a Viewing Key
+
+An auditor who holds a viewing key can:
+- Scan the mixer pool (Indexed Merkle Tree) for UTXOs that were encrypted under the corresponding key
+- Decrypt the UTXO payloads to learn the amount and recipient
+- Verify that specific transactions occurred within the defined scope
+
+An auditor cannot:
+- Access any data outside the scope of the key they hold
+- Claim UTXOs (viewing keys are read-only, not spending keys)
+- Link the activity to any adjacent scope without the parent key
+
+<Note>
+SDK utilities for auditors to scan the mixer pool and decrypt UTXO ciphertexts using viewing keys are on the roadmap. The key generation and export functionality described on this page is available today.
+</Note>

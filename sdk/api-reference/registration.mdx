@@ -1,0 +1,140 @@
+---
+title: "Registration API Reference"
+description: "Complete reference for user registration factory functions."
+---
+
+## `getUserRegistrationFunction`
+
+```typescript
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+
+function getUserRegistrationFunction(args: GetUserRegistrationFunctionArgs): UserRegistrationFunction
+```
+
+Factory function that returns a callable registration function.
+
+### `GetUserRegistrationFunctionArgs`
+
+<ParamField path="client" type="IUmbraClient" required>
+  The Umbra client instance.
+</ParamField>
+
+### Returned Function
+
+```typescript
+async function register(options?: UserRegistrationOptions): Promise<TransactionSignature[]>
+```
+
+Performs up to three on-chain registration steps. Checks current state before each step and skips any already completed. Idempotent and safe to call on every app startup.
+
+Returns an array of transaction signatures - one per step that was executed. An empty array means all steps were already complete.
+
+### `UserRegistrationOptions`
+
+<ParamField path="confidential" type="boolean" default="true">
+  Register the X25519 public key for Shared encryption mode. Required to receive deposits where the balance is also encrypted under your key (enabling local balance queries in the future).
+</ParamField>
+
+<ParamField path="anonymous" type="boolean" default="true">
+  Register the Poseidon user commitment and master viewing key for mixer / anonymous transfer support. Requires `confidential: true`.
+</ParamField>
+
+<ParamField path="callbacks.onBeforeAccountInit" type="() => Promise<void>">
+  Called before the base account initialization transaction is sent.
+</ParamField>
+
+<ParamField path="callbacks.onAfterAccountInit" type="(sig: TransactionSignature) => Promise<void>">
+  Called after the base account initialization confirms.
+</ParamField>
+
+<ParamField path="callbacks.onBeforeX25519Registration" type="() => Promise<void>">
+  Called before the X25519 key registration transaction is sent.
+</ParamField>
+
+<ParamField path="callbacks.onAfterX25519Registration" type="(sig: TransactionSignature) => Promise<void>">
+  Called after the X25519 key registration confirms.
+</ParamField>
+
+<ParamField path="callbacks.onBeforeCommitmentRegistration" type="() => Promise<void>">
+  Called before the user commitment registration transaction is sent.
+</ParamField>
+
+<ParamField path="callbacks.onAfterCommitmentRegistration" type="(sig: TransactionSignature) => Promise<void>">
+  Called after the user commitment registration confirms.
+</ParamField>
+
+---
+
+## `getQueryUserAccountFunction`
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+function getQueryUserAccountFunction(args: {
+  accountInfoProvider: AccountInfoProviderFunction;
+}): QueryUserAccountFunction
+```
+
+Factory function that returns a read-only account state query.
+
+### Returned Function
+
+```typescript
+async function queryUserAccount(userAddress: Address): Promise<QueryUserAccountResult>
+```
+
+### `QueryUserAccountResult`
+
+```typescript
+type QueryUserAccountResult =
+  | { state: "non_existent" }
+  | { state: "exists"; data: EncryptedUserAccount };
+```
+
+**`EncryptedUserAccount` fields:**
+
+<ResponseField name="isInitialised" type="boolean">
+  Base account exists on-chain.
+</ResponseField>
+
+<ResponseField name="isUserAccountX25519KeyRegistered" type="boolean">
+  X25519 key has been registered (Shared mode enabled).
+</ResponseField>
+
+<ResponseField name="isUserCommitmentRegistered" type="boolean">
+  Poseidon commitment has been registered (anonymous transfers enabled).
+</ResponseField>
+
+<ResponseField name="isActiveForAnonymousUsage" type="boolean">
+  Both X25519 and commitment are registered - account is fully ready.
+</ResponseField>
+
+<ResponseField name="x25519PublicKey" type="Uint8Array">
+  The user's registered X25519 public key (32 bytes).
+</ResponseField>
+
+<ResponseField name="generationIndex" type="bigint">
+  Monotonic counter used for nonce derivation. Incremented on each deposit/withdrawal.
+</ResponseField>
+
+---
+
+## Registration Flow
+
+```
+Step 1: initializeAccount
+  └─ Creates EncryptedUserAccount PDA
+  └─ Always required
+
+Step 2: registerX25519Key  [if confidential: true]
+  └─ Derives X25519 public key from master seed
+  └─ Stores on-chain in EncryptedUserAccount
+
+Step 3: registerUserCommitment  [if anonymous: true]
+  └─ Derives Poseidon commitment from master seed
+  └─ Encrypts master viewing key
+  └─ Submits Groth16 ZK proof on-chain
+  └─ Requires step 2 to be complete
+```
+
+All three steps require the master seed. The wallet signing prompt fires on step 1 if the seed has not been derived yet.

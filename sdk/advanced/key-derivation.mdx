@@ -1,0 +1,129 @@
+---
+title: "Key Derivation"
+description: "How Umbra derives all cryptographic keys from a single wallet signature using KMAC256."
+---
+
+## The Master Seed
+
+All cryptographic keys in Umbra flow from a single 64-byte **master seed**. The seed is derived from a deterministic wallet signature (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)):
+
+```
+message = UTF8("Umbra Privacy - Master Seed Generation - {wallet_address}")
+signature = Ed25519.sign(message, wallet_private_key)
+
+master_seed = KMAC256(
+  key   = UTF8("Umbra Privacy - MasterSeedGeneration"),
+  msg   = signature,           // 64-byte Ed25519 signature
+  dkLen = 64,
+  S     = "umbra/1.0.0|kmac256/1.0.0|kdf/1.0.0|seed"
+)
+```
+
+The KMAC256 step ensures the seed is uniformly distributed regardless of the signature's internal structure, and adds domain separation to prevent the raw signature from being used as a key elsewhere.
+
+The master seed is derived once per session. It is cached in memory (or in custom storage if configured) and reused for all subsequent key derivations without further wallet prompts.
+
+## Derivation Function
+
+Every derived key is produced by the same primitive:
+
+```typescript
+derivedKey = KMAC256(
+  key   = UTF8("Umbra Privacy - {domain_separator}"),
+  msg   = master_seed,
+  dkLen = 64,
+  S     = buildPersonalizationString(client),
+)
+```
+
+The personalization string encodes the protocol version, algorithm, scheme, and network:
+
+```
+umbra/1.0.0|kmac256/1.0.0|kdf/1.0.0|mainnet
+```
+
+This means keys derived on mainnet are completely different from keys derived on devnet, even from the same master seed.
+
+## Key Hierarchy
+
+```
+Master Seed  (64 bytes)
+├── Master Viewing Key  · BN254 252-bit · compliance viewing
+│   ├── Mint Viewing Key  { mint }  ← Poseidon
+│   │   └── Yearly Viewing Key  { year }
+│   │       ├── Monthly Viewing Key  { Jan }
+│   │       │   └── Daily Viewing Key  { Jan 01 }
+│   │       │       └── Hourly · Minute · Second · ...
+│   │       ├── Monthly Viewing Key  { Feb }
+│   │       ├── Monthly Viewing Key  { Mar }
+│   │       └── ...  { Apr – Dec }
+│   ├── MVK Encrypting X25519 Keypair  · Curve25519 · compliance grant auth
+│   ├── Mint X25519 Keypair  · Curve25519 · UTXO ciphertext (per mint)
+│   └── Rescue Blinding Factor  · BN254 · commitment blinding in ZK
+├── Poseidon Private Key  · BN254 · UTXO nullifiers · user commitment
+├── User Account X25519 Keypair  · Curve25519 · token account decryption
+└── Random Commitment Factor  · Curve25519 scalar · polynomial commitment
+```
+
+## Key Rotation via Offsets
+
+Every key that accepts an offset is parameterized by a `U512` value that defaults to `0n`. Incrementing the offset rotates the key deterministically without changing the wallet or the master seed.
+
+This is useful when:
+- A key may have been exposed and needs to be cycled
+- You want to isolate keys used in different applications
+- Testing requires isolated key spaces
+
+Configure offsets at client construction time:
+
+```typescript
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  offsets: {
+    x25519UserAccountPrivateKey: 1n,  // rotate the encryption key
+    poseidonPrivateKey: 0n,            // keep the nullifier key unchanged
+  },
+});
+```
+
+<Warning>
+Rotating an offset produces a different public key or nullifier. If you have already registered an X25519 key on-chain or created UTXOs, rotating the relevant offset will mean your existing on-chain state uses the old key and the new client uses the new key. Always rotate carefully and re-register if needed.
+</Warning>
+
+## BN254 Field Element Sampling
+
+Some keys must be BN254 field elements (values less than the BN254 curve order `p`). After KMAC256 produces 64 random bytes, the SDK interprets them as a big-endian 512-bit integer and reduces it modulo `p` using constant-time modular reduction.
+
+Because the input is 512 bits and the field order is ~254 bits, the statistical bias from modular reduction is negligible (less than 2^{-254}), guaranteeing a practically uniform distribution over the field.
+
+For the Master Viewing Key specifically, the output is additionally masked to 252 bits to ensure compatibility with certain circuit constraints.
+
+## Ephemeral Seeds
+
+UTXO creation operations use **ephemeral master seeds** - one-time seeds derived from the persistent master seed combined with a monotonic counter:
+
+```
+domain = "Ephemeral Seed - {offset}"   // offset as decimal string
+
+ephemeral_seed = KMAC256(
+  key   = UTF8("Umbra Privacy - {domain}"),
+  msg   = master_seed,
+  dkLen = 64,
+  S     = personalization_string,
+)
+```
+
+The ephemeral seed is used to generate the per-UTXO X25519 keypair and blinding factor, ensuring each UTXO is cryptographically independent. The offset comes from the user's generation index, which is incremented on-chain with each operation.
+
+## Security Properties
+
+**Determinism**: All keys are deterministic given the wallet signature and network parameters. Re-creating the client from the same wallet on the same network always yields the same keys.
+
+**Domain separation**: Different key types use different KMAC256 domain separators, preventing cross-key attacks.
+
+**Forward secrecy**: Ephemeral seeds for UTXOs are keyed on the generation index. Compromising the master seed does not allow deriving future ephemeral seeds without also knowing future generation index values.
+
+**Key isolation**: The personalization string encodes the full version context. Upgrading any version component produces a completely different key space.
