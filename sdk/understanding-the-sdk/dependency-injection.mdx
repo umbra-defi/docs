@@ -1,0 +1,153 @@
+---
+title: "Dependency Injection"
+description: "Set infrastructure defaults at the client level and override any provider per-function - RPC, blockhash, transaction forwarding, and master seed storage."
+---
+
+## Client-Level Defaults
+
+`getUmbraClientFromSigner` accepts its own `deps` object that sets the **default** for every downstream function. Any function-level `deps` override takes precedence.
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner(
+  {
+    signer,
+    network: "mainnet",
+    rpcUrl,
+    rpcSubscriptionsUrl,
+  },
+  {
+    accountInfoProvider,    // override RPC account fetching
+    blockhashProvider,      // override blockhash source
+    transactionForwarder,   // override broadcast + confirmation
+    epochInfoProvider,      // override epoch info
+    masterSeedStorage: {    // control seed persistence
+      load,
+      store,
+      generate,
+    },
+  },
+);
+```
+
+```typescript
+interface GetUmbraClientFromSignerDeps {
+  readonly accountInfoProvider?: AccountInfoProviderFunction;
+  readonly blockhashProvider?: GetLatestBlockhash;
+  readonly transactionForwarder?: TransactionForwarder;
+  readonly epochInfoProvider?: GetEpochInfo;
+  readonly masterSeedStorage?: {
+    readonly load?: MasterSeedLoaderFunction;
+    readonly store?: MasterSeedStorerFunction;
+    readonly generate?: MasterSeedGeneratorFunction;
+  };
+}
+```
+
+---
+
+## Infrastructure Providers
+
+These appear as optional overrides across virtually every function's `deps` type.
+
+### `accountInfoProvider`
+
+Fetches raw on-chain account data. Used by every function that reads on-chain state.
+
+```typescript
+type AccountInfoProviderFunction = (
+  addresses: readonly Address[],
+) => Promise<Map<Address, MaybeEncodedAccount>>;
+```
+
+Default: RPC batch fetch via `rpcUrl`.
+
+Override for: unit tests (no live node), custom RPC middleware, account caching, or simulated state.
+
+### `blockhashProvider` / `getLatestBlockhash`
+
+Returns the latest confirmed [blockhash](https://solana.com/docs/terminology#blockhash) and last valid block height for transaction construction.
+
+```typescript
+type GetLatestBlockhash = () => Promise<{
+  blockhash: string;
+  lastValidBlockHeight: number;
+}>;
+```
+
+Default: RPC call via `rpcUrl`.
+
+Override for: deterministic transaction snapshots in tests, or to fetch from an alternative source.
+
+### `transactionForwarder`
+
+Handles transaction broadcast and confirmation. Used by every function that submits on-chain transactions.
+
+```typescript
+interface TransactionForwarder {
+  forwardSequentially(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
+  forwardInParallel(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
+}
+```
+
+Default: [WebSocket](https://solana.com/docs/rpc/websocket/signaturesubscribe)-based forwarder using `signatureSubscribe` for confirmation.
+
+Override for [Jito](https://www.jito.network/) bundle submission, priority fee management, dry-run recording in tests, or custom retry logic:
+
+```typescript
+const jitoForwarder: TransactionForwarder = {
+  forwardSequentially: async (txs) => submitToJitoBundleEndpoint(txs),
+  forwardInParallel: async (txs) => submitToJitoBundleEndpoint(txs),
+};
+```
+
+### `epochInfoProvider`
+
+Returns current Solana epoch information. Used for [Token-2022 transfer fee](/advanced/token-2022) schedule selection.
+
+```typescript
+type GetEpochInfo = () => Promise<EpochInfoResult>;
+```
+
+Default: RPC call via `rpcUrl`.
+
+---
+
+## Master Seed Storage
+
+Controls how the master seed is persisted and derived between sessions. Provided at the client level only.
+
+```typescript
+interface MasterSeedStorage {
+  load: () => Promise<{ exists: true; seed: MasterSeed } | { exists: false }>;
+  store: (seed: MasterSeed) => Promise<void>;
+  generate: () => Promise<MasterSeed>; // called when load returns exists: false
+}
+```
+
+Default: in-memory (no persistence across page loads).
+
+```typescript
+// CI - fixed deterministic seed, no wallet prompt
+const client = await getUmbraClientFromSigner(args, {
+  masterSeedStorage: {
+    generate: async () => FIXED_TEST_SEED,
+  },
+});
+
+// Production - persist across refreshes in encrypted sessionStorage
+const client = await getUmbraClientFromSigner(args, {
+  masterSeedStorage: {
+    load: async () => {
+      const raw = sessionStorage.getItem("umbra_seed");
+      return raw ? { exists: true, seed: hexToBytes(raw) } : { exists: false };
+    },
+    store: async (seed) => {
+      sessionStorage.setItem("umbra_seed", bytesToHex(seed));
+    },
+  },
+});
+```
+
+See [Key Derivation](/sdk/advanced/key-derivation) for how the master seed is structured and derived from the wallet signature.

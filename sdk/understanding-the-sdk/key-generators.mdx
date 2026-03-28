@@ -1,0 +1,220 @@
+---
+title: "Key Generators & Crypto Operations"
+description: "Injectable key derivation generators and low-level cryptographic operations - every step from master seed to on-chain commitment is overridable."
+---
+
+## Key Derivation Generator Overrides
+
+All cryptographic keys are derived from the master seed via [KMAC256](/sdk/advanced/cryptography/kmac256) or [Poseidon](/sdk/advanced/cryptography/poseidon). Every derivation step is injectable. The following generator types appear as optional `deps` across the functions that use them.
+
+### Master Viewing Key Generators
+
+```typescript
+type MasterViewingKeyGeneratorFunction = () => Promise<MasterViewingKey>;
+type MasterViewingKeyBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+```
+
+Used by: registration, UTXO creation (self-claimable and receiver-claimable), UTXO claiming.
+
+### Poseidon Private Key Generators
+
+```typescript
+type PoseidonPrivateKeyGeneratorFunction = () => Promise<Bn254FieldElement>;
+type PoseidonBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+```
+
+Used by: registration, UTXO creation, UTXO claiming.
+
+### X25519 / Curve25519 Keypair Generators
+
+```typescript
+// User account X25519 key - used for token account encryption
+type Curve25519KeypairGeneratorFunction = () => Promise<Curve25519KeypairResult>;
+
+// Per-mint X25519 key - used for UTXO ciphertext addressing
+type MintX25519KeypairGeneratorFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
+```
+
+Used by: registration, UTXO creation. Also exposed via `getRotateMintX25519EncryptionKeyFunction` deps.
+
+### Viewing Key Generators (Poseidon sub-hierarchy)
+
+```typescript
+type MintViewingKeyGeneratorFunction = (
+  mint: Address,
+  options?: ViewingKeyGeneratorOptions,
+) => Promise<MintViewingKey>;
+
+type YearlyViewingKeyGeneratorFunction = (
+  mint: Address,
+  year: Year,
+  options?: ViewingKeyGeneratorOptions,
+) => Promise<YearlyViewingKey>;
+
+type MonthlyViewingKeyGeneratorFunction = (
+  mint: Address,
+  year: Year,
+  month: Month,
+  options?: ViewingKeyGeneratorOptions,
+) => Promise<MonthlyViewingKey>;
+
+type DailyViewingKeyGeneratorFunction = (
+  mint: Address,
+  year: Year,
+  month: Month,
+  day: Day,
+  options?: ViewingKeyGeneratorOptions,
+) => Promise<DailyViewingKey>;
+
+type SecondViewingKeyGeneratorFunction = (
+  mint: Address,
+  year: Year,
+  month: Month,
+  day: Day,
+  hour: Hour,
+  minute: Minute,
+  second: Second,
+  options?: ViewingKeyGeneratorOptions,
+) => Promise<SecondViewingKey>;
+```
+
+Used by: UTXO creation (the second viewing key scopes the UTXO ciphertext).
+
+### Commitment Factor Generators
+
+```typescript
+type RescueEncryptionCommitmentBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+type RandomFactorForPolynomialCommitmentGeneratorFunction = () => Promise<Curve25519FieldElement>;
+type PoseidonKeystreamBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+```
+
+### Ephemeral UTXO Key Generators
+
+Each UTXO operation uses per-UTXO ephemeral keys parameterized by the on-chain generation index. All are injectable:
+
+```typescript
+type EphemeralUtxoMasterViewingKeyGeneratorFunction = (offset: U256) => Promise<MasterViewingKey>;
+type EphemeralUtxoMasterViewingKeyBlindingFactorGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoPoseidonPrivateKeyGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoPoseidonPrivateKeyBlindingFactorGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoNullifierGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoH2RandomSecretGeneratorFunction = (offset: U256) => Promise<Curve25519FieldElement>;
+```
+
+Used by: all UTXO creation and UTXO claiming functions.
+
+---
+
+## Cryptographic Operation Overrides
+
+Beyond key generation, the low-level cryptographic operations themselves are injectable.
+
+### Rescue Cipher (RC) - Encryption and Decryption
+
+The [Rescue cipher](/sdk/advanced/cryptography/rescue-cipher) is used to encrypt UTXO payloads and encrypted token account balances.
+
+```typescript
+type RcEncryptorFunction = (
+  plaintext: readonly RcPlaintext[],
+) => Promise<{ ciphertexts: RcCiphertext[]; nonce: RcEncryptionNonce }>;
+
+type RcEncryptorWithNonceFunction = (
+  plaintext: readonly RcPlaintext[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcCiphertext[]>;
+
+type RcDecryptorFunction = (
+  ciphertext: readonly RcCiphertext[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcPlaintext[]>;
+
+type RcKeyGeneratorFunction = (
+  counters: readonly RcCounter[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcKey[]>;
+```
+
+- `getRcEncryptor` and `getRcKeyGenerator` appear in: registration, UTXO creation deps
+- `rcDecryptor` appears in: `getQueryEncryptedBalanceFunction` deps - override to provide a custom decryption backend
+
+### AES Encryption
+
+[AES-GCM](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) is used for symmetric encryption of UTXO commitment payloads within the mixer.
+
+```typescript
+type AesEncryptorFunction = (
+  key: AesKey,
+  plaintext: AesPlaintext,
+) => Promise<AesCiphertextWithMetadata>;
+
+type AesDecryptorFunction = (
+  key: AesKey,
+  ciphertext: AesCiphertextWithMetadata,
+) => Promise<AesPlaintext>;
+```
+
+Used by: UTXO creation functions.
+
+### Poseidon Hash, Encryption, and Keystream
+
+See [Poseidon](/sdk/advanced/cryptography/poseidon) for the hash construction and security properties.
+
+```typescript
+type PoseidonHashFunction = (
+  dataPoints: readonly Bn254FieldElement[],
+) => Promise<Bn254FieldElement>;
+
+type PoseidonAggregatorHashFunction = (
+  dataPoints: readonly Bn254FieldElement[],
+) => Promise<PoseidonHash>;
+
+type PoseidonEncryptorFunction = (
+  plaintext: readonly PoseidonPlaintext[],
+  key: PoseidonKey,
+) => Promise<PoseidonCiphertext[]>;
+
+type PoseidonKeystreamGeneratorFunction = (
+  counters: readonly PoseidonCounter[],
+  key: PoseidonKey,
+) => Promise<Map<PoseidonCounter, PoseidonKeystream>>;
+
+type KeystreamCommitmentFunction = (
+  keystream: Bn254FieldElement,
+  blindingFactor: Bn254FieldElement,
+) => Promise<Bn254FieldElement>;
+```
+
+Used by: registration, UTXO creation, UTXO claiming.
+
+### Fiat-Shamir Challenge and Polynomial Evaluation
+
+```typescript
+type FiatShamirChallengeGeneratorFunction = (
+  input: Uint8Array,
+) => Curve25519FieldElement;
+
+type ChallengePowersFunction = (
+  challenge: Curve25519FieldElement,
+  maxPower: number,
+) => Curve25519FieldElement[];
+
+type PolynomialEvaluatorFunction = (
+  coefficients: Curve25519FieldElement[],
+  point: Curve25519FieldElement,
+) => Curve25519FieldElement;
+```
+
+Used by: registration, UTXO creation. Override to run evaluation in a [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) or swap in a WASM implementation.
+
+### User Commitment Generator
+
+```typescript
+type UserCommitmentGeneratorFunction = (
+  masterViewingKey: Bn254FieldElement,
+  masterViewingKeyBlindingFactor: Bn254FieldElement,
+  poseidonPrivateKey: Bn254FieldElement,
+  poseidonBlindingFactor: Bn254FieldElement,
+) => Promise<Bn254FieldElement>;
+```
+
+Used by: registration, UTXO creation.

@@ -1,0 +1,151 @@
+---
+title: "Registration"
+description: "Register a user's on-chain Umbra identity - required before depositing or using the mixer."
+---
+
+## Overview
+
+Before a user can deposit tokens or interact with the mixer, they need an on-chain **Umbra user account**. Registration creates this account and optionally registers the cryptographic keys needed for encrypted balances and anonymous transfers.
+
+Registration is idempotent - it checks on-chain state before each step and skips any steps already completed, including handling key rotation when keys have changed. That said, each call may submit on-chain transactions with SOL costs, so in practice you should [check whether the account is already registered](./account-state) before calling it.
+
+## Usage
+
+```typescript
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+
+const register = getUserRegistrationFunction({ client });
+
+const signatures = await register({
+  confidential: true, // enable encrypted balances (Shared mode)
+  anonymous: true,    // enable mixer / anonymous transfers
+});
+
+console.log(`Completed ${signatures.length} registration transaction(s)`);
+// 0 if already fully registered
+// 1–3 depending on which steps were needed
+```
+
+## Options
+
+<ParamField path="confidential" type="boolean" default="true">
+  Register the X25519 key for Shared encryption mode. Without this, deposits use MXE-only mode and you cannot query your balance locally.
+</ParamField>
+
+<ParamField path="anonymous" type="boolean" default="true">
+  Register the user commitment for mixer / anonymous transfer support. Can be used independently of `confidential`.
+</ParamField>
+
+<ParamField path="callbacks" type="object">
+  Optional lifecycle hooks called before and after each step. `pre` receives the signed transaction before it is sent; `post` receives the transaction and its confirmed signature. Skipped steps do not invoke callbacks.
+
+  ```typescript
+  await register({
+    confidential: true,
+    anonymous: true,
+    callbacks: {
+      userAccountInitialisation: {
+        pre: async (tx) => { console.log("Creating account..."); },
+        post: async (tx, sig) => { console.log("Account created:", sig); },
+      },
+      registerX25519PublicKey: {
+        pre: async (tx) => { console.log("Registering encryption key..."); },
+        post: async (tx, sig) => { console.log("Key registered:", sig); },
+      },
+      registerUserForAnonymousUsage: {
+        pre: async (tx) => { console.log("Registering commitment..."); },
+        post: async (tx, sig) => { console.log("Commitment registered:", sig); },
+      },
+    },
+  });
+  ```
+</ParamField>
+
+## The Three Registration Steps
+
+Registration performs up to three on-chain transactions, in order:
+
+<Steps>
+  <Step title="Account Initialization">
+    Creates the `EncryptedUserAccount` PDA - a [program-derived address](https://solana.com/docs/core/pda) that serves as the root of your Umbra identity. This is always the first step.
+  </Step>
+  <Step title="X25519 Key Registration">
+    Derives your [X25519](https://www.rfc-editor.org/rfc/rfc7748) public key from your master seed and stores it on-chain. This key enables **Shared encryption mode** - deposits will be encrypted under both the Arcium MPC key and your key, allowing you to decrypt your own balance locally.
+
+    Required if `confidential: true`.
+  </Step>
+  <Step title="User Commitment Registration">
+    Registers your [Poseidon](https://eprint.iacr.org/2019/458.pdf) user commitment and encrypts your master viewing key on-chain via a [Groth16](https://eprint.iacr.org/2016/260.pdf) ZK proof. This is the step that enables the **mixer / anonymous transfer** flow.
+
+    Required if `anonymous: true`.
+  </Step>
+</Steps>
+
+<Note>
+All three steps require the master seed to be derived (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). The wallet signing prompt will appear on step 1 if the seed has not been derived yet in this session.
+</Note>
+
+## On-Chain Account
+
+After registration, the user's `EncryptedUserAccount` PDA stores:
+
+- X25519 public key (for Shared mode deposits addressed to this user)
+- Poseidon user commitment (for ZK proof generation)
+- Generation index (monotonic counter used for nonce derivation)
+- Random generation seed (entropy mixed into nonces)
+- Status flags for each registration step
+
+This account is the persistent on-chain identity for the wallet address. It does not hold any tokens.
+
+## Error Handling
+
+Registration can fail at several distinct points. Use `isRegistrationError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each one.
+
+```typescript
+import { isRegistrationError } from "@umbra-privacy/sdk/errors";
+
+try {
+  await register({ confidential: true, anonymous: true });
+} catch (err) {
+  if (isRegistrationError(err)) {
+    switch (err.stage) {
+      case "master-seed-derivation":
+        // User declined to sign the master seed derivation message.
+        // Without the seed, no keys can be derived and registration cannot proceed.
+        showNotification("Please sign the master seed message to set up your account.");
+        break;
+
+      case "transaction-sign":
+        // User rejected one of the registration transactions in their wallet.
+        showNotification("Registration cancelled.");
+        break;
+
+      case "zk-proof-generation":
+        // ZK proof generation failed. Only applies to the commitment step (anonymous: true).
+        console.error("Proof generation failed:", err.message);
+        showNotification("Failed to generate proof. Please try again.");
+        break;
+
+      case "account-fetch":
+        // RPC connectivity issue while fetching on-chain account state.
+        console.error("RPC error during registration:", err.message);
+        break;
+
+      case "transaction-send":
+        // Transaction submitted but confirmation timed out.
+        // The transaction may have landed - check on-chain before retrying.
+        console.warn("Confirmation timeout. Check on-chain before retrying.");
+        break;
+
+      default:
+        console.error("Registration failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+**Partial completion**: Registration submits up to three separate transactions. If the second or third transaction fails or is cancelled, the first is already confirmed on-chain. Call `register()` again - it checks on-chain state and skips the steps that already completed.
+
+See [Error Handling](/reference/errors) for a full reference of all error types.

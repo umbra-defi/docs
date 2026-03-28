@@ -1,0 +1,168 @@
+---
+title: "Conversion"
+description: "Upgrade an existing MXE-only encrypted balance to Shared encryption mode."
+---
+
+## Overview
+
+When a user registers their X25519 key after already having encrypted token accounts in MXE-only mode, those existing balances remain in MXE-only mode. `getConvertToSharedEncryptionFunction` upgrades them to **Shared mode** - re-encrypting the balance under both the Arcium MPC key and the user's X25519 key, enabling local balance queries in the future.
+
+<Note>
+This step is only necessary if you deposited tokens before registering your X25519 key (i.e., before calling `register({ confidential: true })`). Deposits made after X25519 registration automatically use Shared mode.
+</Note>
+
+## Usage
+
+```typescript
+import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+
+const convert = getConvertToSharedEncryptionFunction({ client });
+
+const result = await convert(mints, optionalData?, callbacks?);
+```
+
+### Parameters
+
+<ParamField path="mints" type="Address[]" required>
+  An array of SPL or Token-2022 mint addresses to convert. Only accounts in MXE-only mode with an initialized balance will be converted. Others are automatically skipped and reported in `result.skipped`.
+</ParamField>
+
+<ParamField path="optionalData" type="Uint8Array">
+  32 bytes of optional metadata stored with each conversion transaction. Defaults to all zeros.
+</ParamField>
+
+<ParamField path="callbacks" type="object">
+  Optional lifecycle hooks fired before and after each per-mint conversion transaction.
+</ParamField>
+
+### Return Value
+
+```typescript
+type ConvertToSharedEncryptionResult = {
+  converted: Map<Address, TransactionSignature>;
+  skipped: Map<Address, ConvertToSharedEncryptionSkipReason>;
+};
+```
+
+- `converted` - mints that were successfully upgraded, mapped to their transaction signature
+- `skipped` - mints that were not processed, mapped to the reason they were skipped
+
+Skip reasons:
+
+- `"non_existent"` - No encrypted token account exists for this mint
+- `"not_initialised"` - The token account exists but is not initialized
+- `"already_shared"` - The token account is already in Shared mode (no-op)
+- `"balance_not_initialised"` - The Arcium balance has not been initialized yet
+
+## Example
+
+```typescript
+import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+const convert = getConvertToSharedEncryptionFunction({ client });
+
+const result = await convert([USDC, USDT]);
+
+for (const [mint, signature] of result.converted) {
+  console.log(`Converted ${mint}: ${signature}`);
+}
+
+for (const [mint, reason] of result.skipped) {
+  console.log(`Skipped ${mint}: ${reason}`);
+}
+```
+
+## When to Call This
+
+A typical onboarding flow checks whether conversion is needed after completing registration:
+
+```typescript
+import {
+  getUserRegistrationFunction,
+  getConvertToSharedEncryptionFunction,
+  getQueryEncryptedBalanceFunction,
+} from "@umbra-privacy/sdk";
+
+// 1. Register (ensures X25519 key is on-chain)
+const register = getUserRegistrationFunction({ client });
+await register({ confidential: true, anonymous: true });
+
+// 2. Check which mints need conversion
+const queryBalance = getQueryEncryptedBalanceFunction({ client });
+const MINTS_TO_CHECK = [USDC, USDT];
+const balances = await queryBalance(MINTS_TO_CHECK);
+
+const mxeOnlyMints = [...balances.entries()]
+  .filter(([, result]) => result.state === "exists" && result.data.mode === "mxe")
+  .map(([mint]) => mint);
+
+if (mxeOnlyMints.length > 0) {
+  // 3. Upgrade MXE-only balances to Shared mode
+  const convert = getConvertToSharedEncryptionFunction({ client });
+  const conversionResult = await convert(mxeOnlyMints);
+  console.log(`Converted ${conversionResult.converted.size} balance(s) to Shared mode`);
+}
+```
+
+## Error Handling
+
+Conversion processes each mint sequentially. If a transaction fails or is cancelled mid-way, any mints already converted will have their signatures in `result.converted` - they are not rolled back.
+
+```typescript
+import { isConversionError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const result = await convert([USDC, USDT, WSOL]);
+
+  console.log(`Converted ${result.converted.size} balance(s)`);
+  console.log(`Skipped ${result.skipped.size} balance(s)`);
+} catch (err) {
+  if (isConversionError(err)) {
+    switch (err.stage) {
+      case "transaction-sign":
+        // User rejected a per-mint transaction in their wallet.
+        // Any mints converted before this point are already confirmed on-chain.
+        // Re-call convert() with the remaining mints to resume.
+        showNotification("Conversion cancelled. Progress has been saved.");
+        break;
+
+      case "account-fetch":
+        // RPC connectivity issue while fetching token account state.
+        console.error("RPC error during conversion:", err.message);
+        break;
+
+      case "transaction-send":
+        // Transaction submitted but confirmation timed out.
+        // Any mints already converted in this batch are confirmed on-chain.
+        console.warn("Confirmation timeout. Check on-chain before retrying.");
+        break;
+
+      default:
+        // Other stages: initialization, pda-derivation, instruction-build,
+        // transaction-build, transaction-compile, transaction-validate.
+        console.error("Conversion failed at stage:", err.stage, err);
+    }
+  } else {
+    throw err;
+  }
+}
+```
+
+<Note>
+Conversion is idempotent for mints that are already in Shared mode - they are returned in `result.skipped` with reason `"already_shared"`. It is safe to call `convert()` repeatedly with the same mint list.
+</Note>
+
+See [Error Handling](/reference/errors) for a full reference of all error types.
+
+## How It Works
+
+The conversion follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern). For each eligible token account:
+
+1. The handler instruction queues a re-encryption computation on Arcium
+2. Arcium MPC decrypts the MXE-only balance and re-encrypts it under both the MPC key and the user's X25519 key
+3. The callback instruction updates the on-chain account to Shared mode
+
+After conversion, future balance queries will be able to decrypt locally using the user's X25519 private key.

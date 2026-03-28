@@ -1,0 +1,24 @@
+---
+title: "Poseidon Hash"
+description: "ZK-friendly hash function over BN254 used for UTXO commitments, nullifiers, and user identity."
+---
+
+[Poseidon](https://eprint.iacr.org/2019/458.pdf) is a ZK-friendly hash function designed to be efficient inside R1CS and Plonk circuits. Unlike general-purpose hashes, Poseidon is defined natively over prime fields, making it orders of magnitude cheaper to evaluate inside a zero-knowledge proof circuit than SHA-256 or Keccak.
+
+Umbra uses the BN254 (alt-bn128) variant - the same curve as Ethereum's `ecPairing` precompile and the Groth16 verifier on Solana. Poseidon operates over the BN254 scalar field, whose prime order is approximately 2^254.
+
+See the [Poseidon Cipher](https://docs.umbraprivacy.com/docs/security-cryptography/poseidon-cipher) and [Poseidon as a PRF: Security Proofs](https://docs.umbraprivacy.com/docs/security-cryptography/poseidon-prf-security) pages for the full cryptographic treatment.
+
+## Uses in Umbra
+
+**UTXO commitments**: Each UTXO inserts a Poseidon commitment into the Indexed Merkle Tree. The commitment hides the UTXO inputs on-chain while binding the creator to them for the ZK proof.
+
+**Nullifiers**: Each UTXO has a corresponding Poseidon nullifier derived from the holder's private key. Burning the nullifier on-chain prevents double-spending, and only the key holder can produce the correct nullifier for a given commitment.
+
+**User commitment**: Each registered user has a Poseidon commitment stored on-chain that links their ZK identity to their encryption key without revealing either in plaintext.
+
+## References
+
+- [Poseidon: A New Hash Function for Zero-Knowledge Proof Systems](https://eprint.iacr.org/2019/458.pdf) - Grassi et al., 2019
+- [Poseidon Cipher - Umbra Architecture](https://docs.umbraprivacy.com/docs/security-cryptography/poseidon-cipher)
+- [Poseidon as a PRF: Security Proofs](https://docs.umbraprivacy.com/docs/security-cryptography/poseidon-prf-security)

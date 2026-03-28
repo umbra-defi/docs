@@ -1,0 +1,165 @@
+---
+title: "Query"
+description: "Query on-chain user account state and decrypt encrypted token balances."
+---
+
+## getQueryUserAccountFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getQueryUserAccountFunction(
+  args: GetQueryUserAccountFunctionArgs,
+  deps?: GetQueryUserAccountFunctionDeps,
+): QueryUserAccountFunction
+```
+
+Returns a function that fetches and decodes the on-chain user account for any Umbra address.
+
+---
+
+### GetQueryUserAccountFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetQueryUserAccountFunctionDeps
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+
+### Returns
+
+`QueryUserAccountFunction`
+
+```typescript
+type QueryUserAccountFunction = (
+  userAddress: Address,
+) => Promise<QueryUserAccountResult>
+```
+
+### QueryUserAccountResult
+
+A discriminated union:
+
+- `{ state: "exists"; data: EncryptedUserAccount }` - The user is registered and the account was decoded.
+- `{ state: "non_existent" }` - No user account exists at this address.
+
+### EncryptedUserAccount
+
+Fields of the decoded on-chain account:
+
+- `versionByte: U8` - Schema version.
+- `canonicalBump: U8` - PDA canonical bump.
+- `isInitialised: boolean` - Whether the account has been initialised.
+- `isActiveForAnonymousUsage: boolean` - Whether anonymous (mixer) usage is enabled.
+- `isUserCommitmentRegistered: boolean` - Whether the Poseidon commitment has been registered.
+- `isUserAccountX25519KeyRegistered: boolean` - Whether the X25519 public key has been registered.
+- `x25519PublicKey: X25519PublicKey` - The user's X25519 public key (used for UTXO encryption).
+- `userCommitment: PoseidonHash` - The user's on-chain Poseidon commitment.
+- `generationIndex: U128` - Current generation index used in key derivation.
+- `randomGenerationSeed: U256LeBytes` - Current random generation seed.
+
+---
+
+### Errors
+
+Throws `QueryError`. See [Errors](./errors#queryerror).
+
+### Example
+
+```typescript
+import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+
+const queryUserAccount = getQueryUserAccountFunction({ client });
+const result = await queryUserAccount(userAddress);
+
+if (result.state === "exists") {
+  console.log("X25519 key:", result.data.x25519PublicKey);
+  console.log("Registered for anonymous usage:", result.data.isActiveForAnonymousUsage);
+} else {
+  console.log("User not registered.");
+}
+```
+
+---
+
+## getQueryEncryptedBalanceFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getQueryEncryptedBalanceFunction(
+  args: GetQueryEncryptedBalanceFunctionArgs,
+  deps?: GetQueryEncryptedBalanceFunctionDeps,
+): QueryEncryptedBalanceFunction
+```
+
+Returns a function that fetches and decrypts encrypted token balances for a set of mints. For shared-mode accounts, the balance is decrypted locally using the caller's X25519 private key. For MXE-mode accounts, the ciphertext cannot be decrypted client-side.
+
+---
+
+### GetQueryEncryptedBalanceFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetQueryEncryptedBalanceFunctionDeps
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `rcDecryptor?: RcDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
+
+### Returns
+
+`QueryEncryptedBalanceFunction`
+
+```typescript
+type QueryEncryptedBalanceFunction = (
+  mints: readonly Address[],
+) => Promise<Map<Address, QueryEncryptedBalanceResult>>
+```
+
+Returns a `Map` keyed by mint address. Each entry is one of:
+
+### QueryEncryptedBalanceResult
+
+A discriminated union per mint:
+
+- `{ state: "shared"; balance: U64 }` - Shared-mode account. `balance` is the decrypted token amount in base units.
+- `{ state: "mxe" }` - MXE-mode account. Balance is encrypted for the Arcium network and cannot be read client-side.
+- `{ state: "uninitialized" }` - The encrypted token account exists but has not been initialised for this mint.
+- `{ state: "non_existent" }` - No encrypted token account exists for this mint.
+
+---
+
+### Errors
+
+Throws `QueryError`. See [Errors](./errors#queryerror).
+
+### Example
+
+```typescript
+import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+
+const queryBalances = getQueryEncryptedBalanceFunction({ client });
+const balances = await queryBalances([usdcMint, solMint]);
+
+for (const [mint, result] of balances) {
+  if (result.state === "shared") {
+    console.log(`${mint}: ${result.balance} base units`);
+  } else if (result.state === "mxe") {
+    console.log(`${mint}: MXE-encrypted, balance not readable client-side`);
+  } else {
+    console.log(`${mint}: ${result.state}`);
+  }
+}
+```
+
+---
+
+## QueryError
+
+Thrown by both query functions.
+
+Stage values: `"initialization"` | `"pda-derivation"` | `"account-fetch"` | `"account-decode"` | `"key-derivation"` | `"decryption"`
+
+- `"key-derivation"` and `"decryption"` are only reachable from `getQueryEncryptedBalanceFunction` (shared-mode decryption path).
+
+See [Errors](./errors#queryerror) for full documentation.

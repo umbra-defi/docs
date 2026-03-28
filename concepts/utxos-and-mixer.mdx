@@ -1,0 +1,91 @@
+---
+title: "UTXOs and the Mixer"
+description: "How the Umbra mixer breaks the on-chain link between deposits and withdrawals using Merkle trees and zero-knowledge proofs."
+---
+
+## What is a UTXO?
+
+A **[UTXO](https://bitcoin.org/bitcoin.pdf) (Unspent Transaction Output)** in Umbra is a cryptographic commitment to a token deposit. It represents the right to claim a specific amount of tokens - without publicly linking that right to who created it.
+
+A UTXO encodes:
+
+- **Amount** - how many tokens are locked
+- **Recipient address** - who is authorized to claim
+- **Secret randomness** - private entropy known only to the depositor
+
+Only the **[Poseidon](https://eprint.iacr.org/2019/458.pdf) hash** of these values (the *commitment*) is stored on-chain. The inputs remain private.
+
+## The Mixer: How It Works
+
+The mixer is a shared **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** stored on-chain. Each leaf in the tree is a UTXO commitment.
+
+<Steps>
+  <Step title="Create a UTXO (deposit)">
+    You call one of the `createUtxo` functions. The SDK computes a commitment from `(amount, recipient, randomness)` and inserts it as a new leaf into the tree. Your tokens are locked in the shielded pool.
+
+    At this point, anyone can see that *a deposit happened* and *the tree grew by one leaf* - but cannot see the amount, recipient, or any other detail.
+  </Step>
+  <Step title="Build the anonymity set">
+    As more users deposit into the same tree, your commitment becomes one of many. The larger the set, the harder it is to link your deposit to your eventual withdrawal. Trees hold up to **1,048,576 leaves** (depth-20 tree).
+  </Step>
+  <Step title="Fetch your UTXO">
+    The SDK queries the indexer to find UTXO ciphertexts addressed to your [X25519](https://www.rfc-editor.org/rfc/rfc7748) key, decrypts them locally, and fetches the Merkle inclusion proof for each one. See [Fetching UTXOs](/sdk/mixer/fetching-utxos).
+  </Step>
+  <Step title="Claim your UTXO">
+    You present a **[zero-knowledge proof](https://dl.acm.org/doi/10.1145/22145.22178)** that proves:
+    - You know the secret inputs behind a commitment that exists in the tree
+    - You haven't claimed it before (nullifier is unspent)
+
+    Without revealing *which* commitment it is. The on-chain program verifies the proof, burns the nullifier, and releases the tokens to your wallet.
+  </Step>
+</Steps>
+
+## UTXO Types
+
+Umbra supports four kinds of UTXOs depending on who can claim them and where the funds come from:
+
+- **Self-claimable (ephemeral)** - funded from your encrypted balance or public ATA. Claimable only by you (same wallet).
+- **Receiver-claimable** - funded from another user's ATA. Claimable by a specified recipient address.
+
+The "self-claimable" pattern is useful when you want to move funds through the mixer yourself. The "receiver-claimable" pattern lets you *send* tokens anonymously - you deposit for a recipient, and they claim without you having direct access.
+
+## Nullifiers: Preventing Double-Spends
+
+Each UTXO has a corresponding **[nullifier](https://eprint.iacr.org/2014/349.pdf)** - a deterministic hash derived from its private inputs. When a UTXO is claimed, its nullifier is stored in an on-chain **[treap](https://dl.acm.org/doi/10.1145/324133.324247)** (a self-balancing sorted tree).
+
+Before allowing a claim, the on-chain program checks that:
+- The nullifier has not been seen before
+- The ZK proof is valid for a commitment in the current Merkle tree
+
+This prevents any UTXO from being claimed twice, even if the claim transaction is replayed.
+
+## Ciphertext Discovery
+
+After you create a UTXO, the SDK publishes an **encrypted ciphertext** on-chain. This ciphertext is addressed to the recipient's X25519 public key - only the recipient can decrypt it to learn the commitment's secret inputs (amount, randomness, etc.).
+
+The ciphertext payload contains:
+- Amount (8 bytes)
+- Recipient address (32 bytes)
+- Generation index (16 bytes)
+- Domain separator identifying the UTXO type (12 bytes)
+
+The Umbra indexer stores all ciphertexts and serves them for efficient querying. Your X25519 private key is used locally to try decrypting each one - successful decryptions are your claimable UTXOs.
+
+<Note>
+Your private key never leaves your device. Decryption happens in the SDK using your locally derived X25519 key.
+</Note>
+
+## Anonymity Set Size
+
+The privacy guarantee of the mixer depends on how many other UTXOs exist in the same tree at the time you claim. A tree with only one leaf offers no privacy - it's obvious which commitment is being claimed.
+
+In practice:
+- Wait for more users to deposit before claiming
+- Claiming into a different address from your deposit address increases privacy
+- Combining mixer withdrawals with encrypted balances hides the final destination further
+
+## Trees Fill Up
+
+Each Merkle tree has a maximum of 1,048,576 leaves. When a tree is full, the write service starts a new tree at the next sequential index. UTXOs from different trees have separate anonymity sets.
+
+You specify the tree index when [fetching](/sdk/mixer/fetching-utxos) and [claiming](/sdk/mixer/claiming-utxos) UTXOs.

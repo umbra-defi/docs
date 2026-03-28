@@ -1,0 +1,1377 @@
+openapi: 3.0.3
+
+info:
+  title: Umbra Indexer Read Service
+  description: |
+    Read-only REST API for querying Umbra mixer tree state, UTXO records,
+    and Merkle inclusion proofs.
+
+    ## Response Encoding
+
+    **All endpoints** support `application/x-protobuf` encoding. The encoding
+    strategy differs by endpoint category:
+
+    - **Always Protobuf** (no content negotiation): stats, tree metadata, Merkle proofs,
+      and all UTXO data endpoints. These endpoints always respond with
+      `Content-Type: application/x-protobuf` regardless of the `Accept` header.
+    - **Content negotiation** (health endpoints only): respond with JSON by default,
+      or Protobuf when `Accept: application/x-protobuf` is set. Send
+      `Accept: application/x-protobuf` for consistent protobuf-only clients.
+
+    ## UTXO Response Layouts
+
+    The three UTXO data endpoints (`GET /v1/utxos`, `GET /v1/utxos/{absolute_index}`,
+    `GET /v1/trees/{tree_index}/utxos`) support two Protobuf response layouts
+    controlled by the `X-Response-Layout` request header:
+
+    - **Row-oriented** (default) -- `UtxoResponse` message: each UTXO is a
+      self-contained `UtxoDataItem` sub-message. Easier to iterate record-by-record.
+    - **Columnar** (`X-Response-Layout: columnar`) -- `UtxoColumnarResponse` message:
+      each field across all UTXOs is packed into a parallel array inside a single
+      `UtxoColumns` sub-message. Compresses significantly better over the wire and is
+      preferred by vectorized consumers (e.g. data pipelines, analytics).
+
+    ## Rate Limiting
+
+    All endpoints are subject to rate limiting. Exceeded limits return `429 Too Many Requests`.
+
+    ## Compression
+
+    All responses are compressed. Send `Accept-Encoding: gzip, br`.
+
+    ## Absolute Index
+
+    The **absolute index** is a globally monotonic cursor across all Merkle trees:
+    ```
+    absolute_index = tree_index * MAX_LEAVES_PER_TREE + insertion_index
+    ```
+    where `MAX_LEAVES_PER_TREE = 1,048,576` (2^20).
+
+  version: 0.1.0
+  contact:
+    name: Umbra Protocol
+
+servers:
+  - url: http://localhost:3001
+    description: Local development (default port)
+
+tags:
+  - name: health
+    description: |
+      Health and readiness probes for Kubernetes or load-balancer checks.
+      Support both JSON and Protobuf via `Accept` header negotiation.
+  - name: stats
+    description: Aggregate statistics for the UTXO index. Always Protobuf.
+  - name: trees
+    description: Per-tree Merkle metadata and Merkle inclusion proofs. Always Protobuf.
+  - name: utxos
+    description: |
+      UTXO data queries with absolute-index-based pagination. Always Protobuf.
+      Supports row-oriented and columnar response layouts via `X-Response-Layout`.
+
+components:
+  schemas:
+
+    # -------------------------------------------------------------------------------
+
+    BasicHealthResponse:
+      type: object
+      description: Minimal health indicator returned by `GET /health`.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          description: Always `"ok"` when the HTTP server is accepting connections.
+          example: ok
+
+    StorageHealth:
+      type: object
+      description: Storage backend connectivity sub-report embedded in `DetailedHealthResponse`.
+      required:
+        - status
+        - connected
+      properties:
+        status:
+          type: string
+          description: |
+            `"healthy"` when the backend passed a connectivity probe; `"unhealthy"`
+            when the probe failed; or an error message string describing the failure.
+          example: healthy
+        connected:
+          type: boolean
+          description: '`true` if the storage backend responded to a health probe.'
+          example: true
+
+    DetailedHealthResponse:
+      type: object
+      description: Comprehensive health report returned by `GET /health/detailed`.
+      required:
+        - status
+        - version
+        - timestamp
+        - uptime_seconds
+        - storage
+      properties:
+        status:
+          type: string
+          description: Overall service status (`"ok"` when all components are healthy).
+          example: ok
+        version:
+          type: string
+          description: Crate version string (from `CARGO_PKG_VERSION`).
+          example: 0.1.0
+        timestamp:
+          type: string
+          format: date-time
+          description: Current UTC timestamp in RFC 3339 / ISO 8601 format.
+          example: "2026-02-25T12:00:00Z"
+        uptime_seconds:
+          type: integer
+          format: int64
+          description: Elapsed seconds since the service process started.
+          example: 86400
+        storage:
+          $ref: '#/components/schemas/StorageHealth'
+
+    LivenessResponse:
+      type: object
+      description: Liveness probe response returned by `GET /health/liveness`.
+      required:
+        - alive
+      properties:
+        alive:
+          type: boolean
+          description: '`true` whenever the HTTP server is processing requests.'
+          example: true
+
+    ReadinessResponse:
+      type: object
+      description: |
+        Readiness probe response returned by `GET /health/readiness`.
+
+        Returns `200 OK` only when all downstream dependencies are reachable.
+        Returns `503 Service Unavailable` when any dependency is unhealthy -- the
+        response body still uses this schema, with `ready: false`.
+      required:
+        - ready
+        - storage
+      properties:
+        ready:
+          type: boolean
+          description: '`true` if all dependencies (storage backend) are reachable.'
+          example: true
+        storage:
+          type: boolean
+          description: '`true` if the storage backend passed its connectivity probe.'
+          example: true
+
+    # -------------------------------------------------------------------------------
+
+    StatsResponse:
+      type: object
+      description: |
+        Protobuf `StatsResponse` message returned by `GET /v1/stats`.
+
+        Aggregate statistics for the UTXO index. The `latest_absolute_index` field
+        is absent in the Protobuf encoding when the store is empty (optional field).
+      required:
+        - total_utxos
+      properties:
+        total_utxos:
+          type: integer
+          format: int64
+          description: Total number of UTXO records indexed across all Merkle trees.
+          example: 150000
+        latest_absolute_index:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            The highest absolute insertion index seen by the indexer, or absent when
+            the store is empty. Computed as
+            `tree_index * MAX_LEAVES_PER_TREE + insertion_index`
+            where `MAX_LEAVES_PER_TREE = 1,048,576`.
+          example: 149999
+
+    # -------------------------------------------------------------------------------
+
+    TreeInfoResponse:
+      type: object
+      description: |
+        Protobuf `TreeInfoResponse` message returned by `GET /v1/trees/{tree_index}`.
+
+        The `root` field is a `bytes` field in the Protobuf encoding containing the
+        raw 32-byte little-endian Poseidon root hash.
+
+        **Tree capacity**: Each tree holds at most `MAX_LEAVES_PER_TREE = 1,048,576`
+        leaves (depth-20 Indexed Merkle Tree).
+      required:
+        - tree_index
+        - num_leaves
+        - root
+        - utxo_count
+      properties:
+        tree_index:
+          type: integer
+          format: int64
+          description: Zero-based index identifying the Merkle tree.
+          example: 0
+        num_leaves:
+          type: integer
+          format: int64
+          description: Total number of leaf commitments currently inserted into the tree.
+          example: 1024
+        root:
+          type: string
+          format: byte
+          description: |
+            Raw 32-byte little-endian Poseidon root hash (Protobuf `bytes` field).
+            In a JSON representation this would be base64-encoded.
+          example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        utxo_count:
+          type: integer
+          format: int64
+          description: Number of UTXO records stored for this tree in the UTXO store.
+          example: 1024
+
+    ProofResponse:
+      type: object
+      description: |
+        Protobuf `ProofResponse` message returned by
+        `GET /v1/trees/{tree_index}/proof/{insertion_index}`.
+
+        All hash string fields are **little-endian hex** representations of 32-byte
+        Poseidon hashes (matching Solana's on-chain byte order and Circom ZK circuit
+        input conventions). Each hash is a 64-character hex string (32 bytes).
+
+        **Usage**: Together with `leaf`, `root`, and the 20-element `proof` array,
+        a caller can verify membership and construct a Groth16 zero-knowledge proof
+        verifiable against the on-chain Umbra Merkle root.
+
+        **Depth**: The Umbra mixer uses a depth-20 Indexed Merkle Tree, so `proof`
+        always contains exactly 20 sibling hashes.
+      required:
+        - root
+        - tree_index
+        - insertion_index
+        - proof
+        - leaf
+      properties:
+        root:
+          type: string
+          description: |
+            Little-endian hex-encoded Poseidon root hash at query time.
+            64 hex characters (32 bytes).
+          example: "1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890ab"
+        tree_index:
+          type: integer
+          format: int64
+          description: Echo of the requested `tree_index` path parameter.
+          example: 0
+        insertion_index:
+          type: integer
+          format: int64
+          description: Echo of the requested `insertion_index` path parameter.
+          example: 42
+        proof:
+          type: array
+          description: |
+            Ordered sibling hashes forming the authentication path from the leaf up
+            to the root. Always exactly **20 elements** (depth-20 tree), ordered from
+            leaf level (index 0) to root level (index 19). Each element is a
+            64-character little-endian hex-encoded Poseidon hash.
+          items:
+            type: string
+          minItems: 20
+          maxItems: 20
+          example:
+            - "0000000000000000000000000000000000000000000000000000000000000000"
+            - "2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864"
+        leaf:
+          type: string
+          description: |
+            Little-endian hex-encoded `final_commitment = Poseidon(h1_hash, h2_hash)`
+            at `insertion_index`. 64 hex characters (32 bytes).
+          example: "deadbeefcafebabe1234567890abcdef1234567890abcdef1234567890abcdef12"
+
+    # -------------------------------------------------------------------------------
+
+    EventType:
+      type: string
+      enum:
+        - deposit
+        - callback
+      description: |
+        Discriminates between the two on-chain event types that produce Merkle tree
+        leaf insertions.
+
+        - `deposit` -- Originated from `CreateDepositIntoMixerTreeFromPublicBalanceEvent`.
+          Direct deposit from a public (non-confidential) Solana token balance.
+        - `callback` -- Originated from `CreateUtxoFromConfidentialBalanceV3CallbackEvent`.
+          Arcium MPC computation completed and created a UTXO from a confidential
+          balance operation (e.g. transfer, withdrawal conversion).
+
+    UtxoDataItem:
+      type: object
+      description: |
+        Protobuf `UtxoDataItem` message -- a single UTXO record as it appears in
+        `UtxoResponse.items` and `SingleUtxoResponse.utxo`.
+
+        All binary fields (`final_commitment`, `h1_sender_address`, `h1_mint_address`,
+        `h1_circuit_provable_hash`, `h1_smart_program_provable_hash`, `h1_hash`,
+        `h2_hash`, `aes_encrypted_data`, `depositor_x25519_public_key`) are Protobuf
+        `bytes` fields carrying the raw little-endian bytes (no base64 or hex encoding
+        at the wire level).
+
+        The 128-bit integer fields `h1_version` and `h1_commitment_index` are encoded
+        as Protobuf `bytes` fields containing their **16-byte little-endian** binary
+        representation.
+      required:
+        - absolute_index
+        - tree_index
+        - insertion_index
+        - final_commitment
+        - h1_version
+        - h1_commitment_index
+        - h1_sender_address
+        - h1_mint_address
+        - h1_relayer_fixed_sol_fees
+        - h1_year
+        - h1_month
+        - h1_day
+        - h1_hour
+        - h1_minute
+        - h1_second
+        - h1_purpose
+        - h1_circuit_provable_hash
+        - h1_smart_program_provable_hash
+        - h1_hash
+        - h2_hash
+        - aes_encrypted_data
+        - depositor_x25519_public_key
+        - timestamp
+        - slot
+        - event_type
+      properties:
+        absolute_index:
+          type: integer
+          format: int64
+          description: |
+            `tree_index * MAX_LEAVES_PER_TREE + insertion_index`. Monotonically
+            increasing pagination cursor. `MAX_LEAVES_PER_TREE = 1,048,576`.
+          example: 1048620
+        tree_index:
+          type: integer
+          format: int64
+          description: Zero-based Merkle tree index this UTXO belongs to.
+          example: 1
+        insertion_index:
+          type: integer
+          format: int64
+          description: Zero-based leaf position within `tree_index` (0 to 1,048,575).
+          example: 44
+        final_commitment:
+          type: string
+          format: byte
+          description: |
+            Raw 32-byte `Poseidon(h1_hash, h2_hash)` -- the leaf value inserted into
+            the Merkle tree (little-endian byte order, Protobuf `bytes`).
+        h1_version:
+          type: string
+          format: byte
+          description: |
+            16-byte little-endian encoding of the `u128` protocol version used as a
+            domain separator in the H1 hash circuit (Protobuf `bytes`).
+        h1_commitment_index:
+          type: string
+          format: byte
+          description: |
+            16-byte little-endian encoding of the `u128` on-chain commitment counter
+            fed into the H1 circuit (Protobuf `bytes`).
+        h1_sender_address:
+          type: string
+          format: byte
+          description: Raw 32-byte sender public key, little-endian (Protobuf `bytes`).
+        h1_mint_address:
+          type: string
+          format: byte
+          description: Raw 32-byte SPL token mint public key, little-endian (Protobuf `bytes`).
+        h1_relayer_fixed_sol_fees:
+          type: integer
+          format: int64
+          description: Relayer fixed fee in lamports (1 SOL = 1,000,000,000 lamports).
+          example: 5000000
+        h1_year:
+          type: integer
+          description: UTC year of the insertion block timestamp.
+          example: 2026
+        h1_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: UTC month (1-12).
+          example: 2
+        h1_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: UTC day (1-31).
+          example: 25
+        h1_hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: UTC hour (0-23).
+          example: 12
+        h1_minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+          description: UTC minute (0-59).
+          example: 0
+        h1_second:
+          type: integer
+          minimum: 0
+          maximum: 59
+          description: UTC second (0-59).
+          example: 0
+        h1_purpose:
+          type: integer
+          description: Smart-program-provable domain tag (`u32`).
+          example: 1
+        h1_circuit_provable_hash:
+          type: string
+          format: byte
+          description: Raw 32-byte `Poseidon(circuit_provable_inputs)`, little-endian (Protobuf `bytes`).
+        h1_smart_program_provable_hash:
+          type: string
+          format: byte
+          description: Raw 32-byte `Poseidon([h1_purpose])`, little-endian (Protobuf `bytes`).
+        h1_hash:
+          type: string
+          format: byte
+          description: |
+            Raw 32-byte `Poseidon([h1_circuit_provable_hash, h1_smart_program_provable_hash])`,
+            little-endian (Protobuf `bytes`).
+        h2_hash:
+          type: string
+          format: byte
+          description: Raw 32-byte private commitment hash, little-endian (Protobuf `bytes`).
+        aes_encrypted_data:
+          type: string
+          format: byte
+          description: |
+            Raw 96-byte AES-256-GCM encrypted UTXO payload (Protobuf `bytes`):
+            - Bytes 0-11: 12-byte random nonce
+            - Bytes 12-79: 68-byte ciphertext
+            - Bytes 80-95: 16-byte authentication tag
+        depositor_x25519_public_key:
+          type: string
+          format: byte
+          description: |
+            Raw 32-byte ephemeral X25519 public key. Used to derive the shared
+            AES-256-GCM key for decrypting `aes_encrypted_data` via X25519 DH
+            with the network's static private key (Protobuf `bytes`).
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix block timestamp in seconds (`0` when unavailable).
+          example: 1735689600
+        slot:
+          type: integer
+          format: int64
+          description: Solana slot number of the confirming block.
+          example: 350000000
+        event_type:
+          type: string
+          description: '`"deposit"` or `"callback"` (see `EventType`).'
+          example: deposit
+
+    UtxoResponse:
+      type: object
+      description: |
+        Protobuf `UtxoResponse` message -- row-oriented paginated UTXO response.
+
+        Returned by `GET /v1/utxos` and `GET /v1/trees/{tree_index}/utxos` when
+        `X-Response-Layout` is absent or set to any value other than `"columnar"`.
+
+        Each UTXO is encoded as a self-contained `UtxoDataItem` sub-message.
+        Use `next_cursor` as the `start` (or `cursor`) parameter of the next
+        request to retrieve the following page.
+      required:
+        - items
+        - has_more
+        - total_count
+        - start_index
+      properties:
+        items:
+          type: array
+          description: Up to `limit` UTXO records in ascending `absolute_index` order.
+          items:
+            $ref: '#/components/schemas/UtxoDataItem'
+        has_more:
+          type: boolean
+          description: '`true` if additional records exist beyond this page.'
+          example: true
+        next_cursor:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Absolute index to pass as `start` (or `cursor`) for the next page.
+            Absent when `has_more` is `false`.
+          example: 1001
+        total_count:
+          type: integer
+          format: int64
+          description: Total number of matching records in the requested range across all pages.
+          example: 5000
+        start_index:
+          type: integer
+          format: int64
+          description: Inclusive lower bound of the absolute index range that was queried.
+          example: 0
+        end_index:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Inclusive upper bound of the absolute index range that was queried.
+            Absent when no explicit `end` (or tree boundary) was provided.
+          example: 4999
+
+    SingleUtxoResponse:
+      type: object
+      description: |
+        Protobuf `SingleUtxoResponse` message returned by
+        `GET /v1/utxos/{absolute_index}`.
+
+        Contains a single `UtxoDataItem` when the requested absolute index exists.
+        On `404 Not Found` the entire response is an `ErrorResponse` JSON body.
+      required:
+        - utxo
+      properties:
+        utxo:
+          $ref: '#/components/schemas/UtxoDataItem'
+
+    UtxoColumns:
+      type: object
+      description: |
+        Protobuf `UtxoColumns` sub-message used inside `UtxoColumnarResponse`.
+
+        Stores all UTXO fields as **parallel arrays** -- one repeated field per column.
+        The `i`-th element of every array corresponds to the `i`-th UTXO in the page.
+
+        Binary fields (`final_commitment`, hash fields, `aes_encrypted_data`,
+        `depositor_x25519_public_key`) are `repeated bytes` in the Protobuf encoding.
+        The `h1_version` and `h1_commitment_index` fields are `repeated bytes` where
+        each element is the **16-byte little-endian** encoding of the original `u128`.
+      properties:
+        absolute_index:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Absolute indices for all rows in this page.
+        tree_index:
+          type: array
+          items:
+            type: integer
+            format: int64
+        insertion_index:
+          type: array
+          items:
+            type: integer
+            format: int64
+        final_commitment:
+          type: array
+          items:
+            type: string
+            format: byte
+          description: 32-byte `Poseidon(h1, h2)` for each row.
+        h1_version:
+          type: array
+          items:
+            type: string
+            format: byte
+          description: 16-byte little-endian `u128` protocol version per row.
+        h1_commitment_index:
+          type: array
+          items:
+            type: string
+            format: byte
+          description: 16-byte little-endian `u128` commitment index per row.
+        h1_sender_address:
+          type: array
+          items:
+            type: string
+            format: byte
+        h1_mint_address:
+          type: array
+          items:
+            type: string
+            format: byte
+        h1_relayer_fixed_sol_fees:
+          type: array
+          items:
+            type: integer
+            format: int64
+        h1_year:
+          type: array
+          items:
+            type: integer
+        h1_month:
+          type: array
+          items:
+            type: integer
+        h1_day:
+          type: array
+          items:
+            type: integer
+        h1_hour:
+          type: array
+          items:
+            type: integer
+        h1_minute:
+          type: array
+          items:
+            type: integer
+        h1_second:
+          type: array
+          items:
+            type: integer
+        h1_purpose:
+          type: array
+          items:
+            type: integer
+        h1_circuit_provable_hash:
+          type: array
+          items:
+            type: string
+            format: byte
+        h1_smart_program_provable_hash:
+          type: array
+          items:
+            type: string
+            format: byte
+        h1_hash:
+          type: array
+          items:
+            type: string
+            format: byte
+        h2_hash:
+          type: array
+          items:
+            type: string
+            format: byte
+        aes_encrypted_data:
+          type: array
+          items:
+            type: string
+            format: byte
+          description: 96-byte AES-GCM payload per row.
+        depositor_x25519_public_key:
+          type: array
+          items:
+            type: string
+            format: byte
+        timestamp:
+          type: array
+          items:
+            type: integer
+            format: int64
+        slot:
+          type: array
+          items:
+            type: integer
+            format: int64
+        event_type:
+          type: array
+          items:
+            type: string
+          description: '`"deposit"` or `"callback"` per row.'
+
+    UtxoColumnarResponse:
+      type: object
+      description: |
+        Protobuf `UtxoColumnarResponse` message -- columnar paginated UTXO response.
+
+        Returned by `GET /v1/utxos` and `GET /v1/trees/{tree_index}/utxos` when
+        `X-Response-Layout: columnar` is set.
+
+        All UTXO fields are transposed into parallel arrays inside `columns`.
+        This layout eliminates per-field Protobuf metadata overhead on repeated
+        records and compresses significantly better than row-oriented encoding --
+        prefer this layout for bulk data transfers and data pipeline consumers.
+      required:
+        - count
+        - has_more
+        - total_count
+        - start_index
+        - columns
+      properties:
+        count:
+          type: integer
+          description: Number of rows (UTXOs) in this page. Length of every array in `columns`.
+          example: 1000
+        has_more:
+          type: boolean
+          description: '`true` if additional records exist beyond this page.'
+          example: true
+        next_cursor:
+          type: integer
+          format: int64
+          nullable: true
+          description: Absolute index to use as `start` (or `cursor`) for the next page.
+          example: 1001
+        total_count:
+          type: integer
+          format: int64
+          description: Total matching records across all pages.
+          example: 5000
+        start_index:
+          type: integer
+          format: int64
+          description: Inclusive lower bound of the absolute index range queried.
+          example: 0
+        end_index:
+          type: integer
+          format: int64
+          nullable: true
+          description: Inclusive upper bound queried (absent when unbounded).
+          example: 4999
+        columns:
+          $ref: '#/components/schemas/UtxoColumns'
+
+    # -------------------------------------------------------------------------------
+
+    ErrorResponse:
+      type: object
+      description: Standard JSON error body returned on 4xx and 5xx responses.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: |
+            Short error category, e.g. `"Bad Request"`, `"Not Found"`,
+            `"Too Many Requests"`, `"Internal Server Error"`.
+          example: Not Found
+        message:
+          type: string
+          description: Human-readable explanation of what went wrong.
+          example: "Tree 99 not found"
+
+paths:
+
+  # -------------------------------------------------------------------------------
+
+  /health:
+    get:
+      tags:
+        - health
+      summary: Basic health check
+      description: |
+        Returns `{"status":"ok"}` (or its Protobuf equivalent) whenever the HTTP
+        server is accepting connections. Performs no I/O and never queries downstream
+        dependencies.
+
+        **Content negotiation**: Send `Accept: application/x-protobuf` to receive a
+        Protobuf-encoded `BasicHealthResponse`; omit or send any other value for JSON.
+      operationId: basicHealth
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          description: |
+            Response format selector. Set to `application/x-protobuf` for Protobuf
+            encoding; any other value (or absent) returns JSON.
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/x-protobuf
+      responses:
+        '200':
+          description: Service is accepting connections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasicHealthResponse'
+              example:
+                status: ok
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/BasicHealthResponse'
+
+  /health/detailed:
+    get:
+      tags:
+        - health
+      summary: Detailed health report
+      description: |
+        Returns a comprehensive health report including service version, process
+        uptime, and storage backend connectivity status.
+
+        **Content negotiation**: `Accept: application/x-protobuf` returns a
+        Protobuf-encoded `DetailedHealthResponse`; otherwise JSON.
+
+        Note: A `200 OK` does **not** guarantee all dependencies are healthy.
+        Inspect `storage.connected` to confirm the backend is reachable.
+      operationId: detailedHealth
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/x-protobuf
+      responses:
+        '200':
+          description: Full health report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedHealthResponse'
+              example:
+                status: ok
+                version: 0.1.0
+                timestamp: "2026-02-25T12:00:00Z"
+                uptime_seconds: 86400
+                storage:
+                  status: healthy
+                  connected: true
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/DetailedHealthResponse'
+
+  /health/liveness:
+    get:
+      tags:
+        - health
+      summary: Kubernetes liveness probe
+      description: |
+        Returns `{"alive":true}` (or Protobuf equivalent) whenever the process is
+        running. Never returns an error while the HTTP event loop is responsive.
+
+        **Content negotiation**: `Accept: application/x-protobuf` -> Protobuf; else JSON.
+      operationId: liveness
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/x-protobuf
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+              example:
+                alive: true
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+
+  /health/readiness:
+    get:
+      tags:
+        - health
+      summary: Kubernetes readiness probe
+      description: |
+        Returns `200 OK` only when all downstream dependencies (storage backend)
+        are reachable. Returns `503 Service Unavailable` otherwise.
+
+        **Content negotiation**: `Accept: application/x-protobuf` -> Protobuf; else JSON.
+        The `503` response uses the same schema with `ready: false`.
+      operationId: readiness
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/x-protobuf
+      responses:
+        '200':
+          description: Service is ready to accept traffic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                ready: true
+                storage: true
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Service is not ready (storage backend unreachable or degraded).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                ready: false
+                storage: false
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  # -------------------------------------------------------------------------------
+
+  /v1/stats:
+    get:
+      tags:
+        - stats
+      summary: Global UTXO index statistics
+      description: |
+        Returns aggregate statistics for the entire UTXO index.
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+      operationId: getStats
+      responses:
+        '200':
+          description: Statistics retrieved successfully.
+          content:
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error (UTXO count or latest-index query failed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # -------------------------------------------------------------------------------
+
+  /v1/trees/{tree_index}:
+    get:
+      tags:
+        - trees
+      summary: Merkle tree metadata
+      description: |
+        Returns metadata for a specific Indexed Merkle Tree:
+        - `num_leaves` -- current leaf count.
+        - `root` -- current Poseidon root hash (raw bytes).
+        - `utxo_count` -- UTXO records stored for this tree.
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+
+        **Tree capacity**: `MAX_LEAVES_PER_TREE = 1,048,576` (depth-20 tree).
+        Once full, the write service starts a new tree at the next sequential index.
+      operationId: getTreeInfo
+      parameters:
+        - name: tree_index
+          in: path
+          required: true
+          description: Zero-based index of the Merkle tree to query.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 0
+      responses:
+        '200':
+          description: Tree metadata retrieved successfully.
+          content:
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/TreeInfoResponse'
+        '400':
+          description: Invalid `tree_index` parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No tree with the specified index exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/trees/{tree_index}/proof/{insertion_index}:
+    get:
+      tags:
+        - trees
+      summary: Merkle inclusion proof
+      description: |
+        Generates and returns a Merkle inclusion proof (authentication path) for the
+        leaf at `insertion_index` in the specified tree.
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+
+        ## Proof structure
+
+        The proof is an ordered list of 20 sibling hashes (one per level of the
+        depth-20 tree), ordered from leaf level (index 0) to root level (index 19).
+        Together with `leaf` and `root`, it can be used to verify membership and
+        construct a Groth16 zero-knowledge proof compatible with the on-chain
+        Umbra verifier.
+
+        ## Hash encoding
+
+        All hash values (`root`, `leaf`, each `proof` element) are **little-endian
+        64-character hex strings** (32 bytes), matching Solana on-chain byte order
+        and Circom ZK circuit input format.
+
+        ## Performance
+
+        Proof generation traverses 20 tree levels. Operations exceeding 500 ms emit
+        a slow-operation `WARN` log server-side.
+      operationId: getMerkleProof
+      parameters:
+        - name: tree_index
+          in: path
+          required: true
+          description: Zero-based index of the Merkle tree to query.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 0
+        - name: insertion_index
+          in: path
+          required: true
+          description: |
+            Zero-based leaf position for which to generate the proof. Must be
+            strictly less than the tree's current `num_leaves`.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 42
+      responses:
+        '200':
+          description: Merkle proof generated successfully.
+          content:
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/ProofResponse'
+        '400':
+          description: Invalid path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            `tree_index` does not exist, or `insertion_index >= num_leaves`
+            (leaf not yet inserted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/trees/{tree_index}/utxos:
+    get:
+      tags:
+        - trees
+        - utxos
+      summary: Paginated UTXO records for a specific tree
+      description: |
+        Returns a paginated page of UTXO records belonging to the specified Merkle
+        tree, ordered by `absolute_index` ascending (= insertion order).
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+
+        ## Response layout
+
+        Set the `X-Response-Layout` header to switch between encoding strategies:
+        - **Row-oriented** (default, `X-Response-Layout` absent or any other value):
+          `UtxoResponse` -- each UTXO is a self-contained `UtxoDataItem` message.
+        - **Columnar** (`X-Response-Layout: columnar`): `UtxoColumnarResponse` --
+          fields are transposed into parallel arrays. Smaller wire size and preferred
+          by data-pipeline consumers.
+
+        ## Pagination
+
+        The `cursor` parameter is an **absolute index** (not a tree-local insertion
+        index). Initialize it to `tree_index * MAX_LEAVES_PER_TREE` for the first
+        page, then use `next_cursor` from each response for subsequent pages.
+      operationId: getUtxosByTree
+      parameters:
+        - name: tree_index
+          in: path
+          required: true
+          description: Zero-based index of the Merkle tree whose UTXOs to fetch.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 0
+        - name: cursor
+          in: query
+          required: false
+          description: |
+            Absolute index at which to start the current page (inclusive).
+            Defaults to `tree_index * MAX_LEAVES_PER_TREE` (first slot of the tree).
+            Values below the tree's start boundary are clamped up.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 1048576
+        - name: limit
+          in: query
+          required: false
+          description: |
+            Maximum records per page. Default: `1000`. Maximum: `5000`.
+            Passing `0` uses the default.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            maximum: 5000
+            default: 1000
+          example: 1000
+        - name: X-Response-Layout
+          in: header
+          required: false
+          description: |
+            Set to `"columnar"` to receive a `UtxoColumnarResponse` (struct-of-arrays).
+            Omit or use any other value for the default row-oriented `UtxoResponse`.
+          schema:
+            type: string
+            enum:
+              - columnar
+      responses:
+        '200':
+          description: UTXO records for the specified tree.
+          content:
+            application/x-protobuf:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/UtxoResponse'
+                  - $ref: '#/components/schemas/UtxoColumnarResponse'
+                discriminator:
+                  propertyName: X-Response-Layout
+        '400':
+          description: Invalid `tree_index` or pagination parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # -------------------------------------------------------------------------------
+
+  /v1/utxos:
+    get:
+      tags:
+        - utxos
+      summary: Paginated global UTXO query
+      description: |
+        Returns a paginated list of UTXO records in ascending `absolute_index` order,
+        spanning all Merkle trees.
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+
+        ## Response layout
+
+        Set the `X-Response-Layout` header to switch between encoding strategies:
+        - **Row-oriented** (default): `UtxoResponse` -- self-contained `UtxoDataItem`
+          sub-messages.
+        - **Columnar** (`X-Response-Layout: columnar`): `UtxoColumnarResponse` --
+          parallel field arrays. Smaller wire size; preferred for bulk transfers.
+
+        ## Absolute Index
+
+        ```
+        absolute_index = tree_index * MAX_LEAVES_PER_TREE + insertion_index
+        ```
+        where `MAX_LEAVES_PER_TREE = 1,048,576`.
+
+        ## Pagination
+
+        Use `next_cursor` from each response as `start` for the next page.
+        Default page size: **1,000**. Maximum: **5,000** (`limit > 5000` -> `400`).
+      operationId: getUtxoData
+      parameters:
+        - name: start
+          in: query
+          required: false
+          description: |
+            Inclusive lower bound of the absolute index range to fetch.
+            Defaults to `0`.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+          example: 0
+        - name: end
+          in: query
+          required: false
+          description: |
+            Inclusive upper bound of the absolute index range.
+            When omitted, scans from `start` to end of dataset, bounded by `limit`.
+          schema:
+            type: integer
+            format: int64
+          example: 999
+        - name: limit
+          in: query
+          required: false
+          description: |
+            Maximum records per page. Default: `1000`. Maximum: `5000`.
+            Passing `0` uses the default.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            maximum: 5000
+            default: 1000
+          example: 1000
+        - name: X-Response-Layout
+          in: header
+          required: false
+          description: |
+            Set to `"columnar"` for `UtxoColumnarResponse` (parallel arrays).
+            Omit for the default row-oriented `UtxoResponse`.
+          schema:
+            type: string
+            enum:
+              - columnar
+      responses:
+        '200':
+          description: UTXO records for the requested absolute index range.
+          content:
+            application/x-protobuf:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/UtxoResponse'
+                  - $ref: '#/components/schemas/UtxoColumnarResponse'
+                discriminator:
+                  propertyName: X-Response-Layout
+        '400':
+          description: |
+            Invalid pagination parameters (e.g. `limit > 5000`, `start > end`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/utxos/{absolute_index}:
+    get:
+      tags:
+        - utxos
+      summary: Single UTXO by absolute index
+      description: |
+        Returns the UTXO record at the specified global absolute index.
+
+        **Always Protobuf** -- responds with `application/x-protobuf` regardless
+        of the `Accept` header.
+
+        The response is a `SingleUtxoResponse` wrapper containing one
+        `UtxoDataItem`. The `X-Response-Layout` header has no effect on this
+        endpoint (columnar layout is not applicable for single-record responses).
+      operationId: getUtxoSingle
+      parameters:
+        - name: absolute_index
+          in: path
+          required: true
+          description: |
+            Global absolute index of the UTXO to fetch.
+            `absolute_index = tree_index * MAX_LEAVES_PER_TREE + insertion_index`.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 1048620
+      responses:
+        '200':
+          description: UTXO record found.
+          content:
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/SingleUtxoResponse'
+        '404':
+          description: No UTXO record exists at the given absolute index.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage backend error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

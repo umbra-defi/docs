@@ -1,0 +1,11 @@
+---
+title: "Tree Metadata"
+openapi: "GET /v1/trees/{tree_index}"
+description: "Returns metadata for a specific Indexed Merkle Tree: leaf count, current root hash, and UTXO record count."
+---
+
+The root hash changes every time a new leaf is inserted. Use this endpoint to check the current state of a tree before fetching UTXOs or generating Merkle proofs.
+
+<Note>
+`utxo_count` may differ from `num_leaves` if some leaves were inserted without UTXO ciphertext data (e.g. padding leaves).
+</Note>

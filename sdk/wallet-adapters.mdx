@@ -1,0 +1,146 @@
+---
+title: "Wallet Adapters"
+description: "Connect an in-memory keypair, a Wallet Standard browser wallet, or a wallet-adapter-compatible wallet to the Umbra SDK."
+---
+
+## The IUmbraSigner Interface
+
+The Umbra SDK requires a signer that implements `IUmbraSigner`:
+
+```typescript
+interface IUmbraSigner {
+  readonly address: Address;
+  signTransaction(tx: SignableTransaction): Promise<SignedTransaction>;
+  signTransactions(txs: readonly SignableTransaction[]): Promise<SignedTransaction[]>;
+  signMessage(message: Uint8Array): Promise<SignedMessage>;
+}
+```
+
+`signMessage` is critical - it is used to derive the master seed from a wallet signature. The other methods sign the Solana transactions that interact with the Umbra program.
+
+The SDK exports ready-made helper functions for every common signer source. You do not need to implement `IUmbraSigner` yourself.
+
+## Option 1: In-Memory Keypair (Testing)
+
+Use the SDK's built-in helpers to generate or load an in-memory keypair. Best for scripts, CI, and local development.
+
+```typescript
+import {
+  createInMemorySigner,
+  createSignerFromPrivateKeyBytes,
+  createSignerFromKeyPair,
+} from "@umbra-privacy/sdk";
+
+// Generate a new random keypair
+const signer = await createInMemorySigner();
+console.log("Address:", signer.address);
+
+// Load from raw bytes (64-byte keypair or 32-byte seed - @solana/kit accepts both)
+import { readFileSync } from "fs";
+const keyFile = JSON.parse(readFileSync("/path/to/keypair.json", "utf8"));
+const signer = await createSignerFromPrivateKeyBytes(new Uint8Array(keyFile));
+
+// Adapt an existing @solana/kit KeyPairSigner you already hold
+import { generateKeyPairSigner } from "@solana/kit";
+const kps = await generateKeyPairSigner();
+const signer = createSignerFromKeyPair(kps);
+```
+
+<Warning>
+In-memory keypairs are ephemeral. If your process restarts, the keypair is gone. Only use this for testing or scripts where you control the key lifecycle.
+</Warning>
+
+## Option 2: Wallet Standard Browser Wallet (Production)
+
+Modern Solana wallets - Phantom, Backpack, Solflare, and others - implement the [Wallet Standard](https://github.com/wallet-standard/wallet-standard). Use `createSignerFromWalletAccount` to adapt them to `IUmbraSigner`.
+
+You obtain the `wallet` and `account` objects via `@wallet-standard/react`'s `useWallets()` hook or via `@solana/react`.
+
+```typescript
+import { useWallet } from "@solana/react"; // or @wallet-standard/react
+import {
+  createSignerFromWalletAccount,
+  getUmbraClientFromSigner,
+} from "@umbra-privacy/sdk";
+
+function useUmbraClient(rpcUrl: string, rpcSubscriptionsUrl: string) {
+  const { wallet, account } = useWallet();
+
+  if (!wallet || !account) return null;
+
+  // wallet - the Wallet Standard Wallet object (provides feature implementations)
+  // account - the WalletAccount to sign with
+  const signer = createSignerFromWalletAccount(wallet, account);
+
+  return getUmbraClientFromSigner({
+    signer,
+    network: "mainnet",
+    rpcUrl,
+    rpcSubscriptionsUrl,
+    indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+  });
+}
+```
+
+<Note>
+Re-create the client whenever the wallet connection changes. Since the client holds a reference to the signer, stale signers will cause transactions to fail.
+</Note>
+
+The wallet must support both `"solana:signTransaction"` and `"solana:signMessage"` features - an error is thrown immediately if either is missing.
+
+### How signing works
+
+1. The `@solana/kit` transaction is serialized to wire-format bytes via `getTransactionEncoder()`
+2. The bytes are passed directly to the wallet's `solana:signTransaction` feature
+3. The wallet returns signed wire bytes
+4. `getTransactionDecoder()` reconstructs the `@solana/kit` `Transaction`, and signatures are merged back in
+
+This path is compatible with all Wallet Standard wallets and does not require `@solana/web3.js`.
+
+## Master Seed Derivation
+
+The first time any cryptographic operation runs (typically during `register()`), the SDK calls `signer.signMessage` with a deterministic message to derive the **master seed** (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). This produces a one-time wallet signing prompt.
+
+The message that the user signs is:
+
+```
+Umbra Privacy - Master Seed Generation - {signerAddress}
+```
+
+where `{signerAddress}` is the user's Solana wallet address. The signature is then hashed with KMAC256 (dkLen=64) to produce the 512-bit master seed.
+
+<Warning>
+The master seed is derived deterministically from this signature. If the message changed, a completely different master seed would be produced - all previously registered keys would become inaccessible. Never modify the derivation message.
+</Warning>
+
+After derivation, the seed is cached in memory for the lifetime of the client object. The prompt does not appear again unless the client is recreated.
+
+To control exactly when the prompt fires, use the `deferMasterSeedSignature` option in `getUmbraClientFromSigner`. See [Creating a Client - Master Seed Derivation](/sdk/creating-a-client#master-seed-derivation).
+
+## Persisting the Master Seed
+
+By default, the master seed lives only in memory. If you want to avoid re-deriving it on every page load, you can persist it using the `masterSeedStorage` dependency override:
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner(
+  { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
+  {
+    masterSeedStorage: {
+      load: async () => {
+        const stored = sessionStorage.getItem("umbra:masterSeed");
+        if (!stored) return { exists: false };
+        return { exists: true, seed: new Uint8Array(JSON.parse(stored)) };
+      },
+      store: async (seed) => {
+        sessionStorage.setItem("umbra:masterSeed", JSON.stringify(Array.from(seed)));
+      },
+    },
+  }
+);
+```
+
+<Warning>
+The master seed is a 64-byte root secret equivalent in sensitivity to a private key. Only persist it in secure storage - never in `localStorage` in plaintext. `sessionStorage` is slightly better (cleared on tab close) but still not suitable for long-term storage. For production applications, consider deriving it on every session or using a secure enclave.
+</Warning>

@@ -1,0 +1,49 @@
+---
+title: "Arcium MPC"
+description: "Multi-party computation network for confidential on-chain operations - encrypting deposits, authorising withdrawals, and compliance re-encryption."
+---
+
+[Arcium](https://arcium.com) is the multi-party computation (MPC) network that Umbra integrates with for all operations that must remain confidential even from the on-chain program itself. See the [MPC Threat Model](https://docs.umbraprivacy.com/docs/security-cryptography/mpc-threat-model) for a full analysis of trust assumptions and attack surface.
+
+## What MPC Handles
+
+- **Encrypting deposits** - storing the token amount as a ciphertext on-chain rather than in plaintext
+- **Authorising withdrawals** - decrypting the balance, verifying sufficiency, subtracting the amount, and re-encrypting the remainder
+- **Converting MXE-only balances to Shared mode** - re-encrypting under both the network key and the user's X25519 key
+- **Compliance re-encryption** - re-encrypting a Rescue ciphertext for a grantee's X25519 key under a compliance grant, without the plaintext being exposed
+
+## Cerberus Protocol
+
+Arcium's primary MPC backend is **Cerberus** - a dishonest majority protocol with identifiable abort.
+
+Key properties:
+
+- **Dishonest majority** - computation remains correct and private as long as at least one node is honest. No majority assumption is required.
+- **MAC-authenticated shares** - each secret share is authenticated with a MAC. Honest nodes can detect malicious behaviour and abort the computation immediately.
+- **Identifiable abort** - when a malicious node is detected, Arcium generates a cryptographic proof of misbehaviour that is submitted on-chain. The offending node is slashed automatically.
+- **Offline/online phase split** - correlated randomness is generated in an offline preprocessing phase, making the online computation phase fast and communication-efficient.
+
+This combination - dishonest majority tolerance with cryptographically identifiable and economically punished misbehaviour - provides the strongest practical security guarantees available in deployed MPC networks.
+
+## Manticore Protocol
+
+For computationally intensive workloads, Arcium offers **Manticore** as a secondary backend. Manticore operates under the honest-but-curious model with a trusted dealer generating offline preprocessing material before going offline. It is faster than Cerberus but carries weaker security assumptions and is intended for trusted operator environments.
+
+Umbra's balance operations use Cerberus.
+
+## On-Chain Integration
+
+The Solana program interacts with Arcium via the **dual-instruction pattern**:
+
+1. The handler instruction validates inputs, stores callback data in a PDA, and registers the computation request with Arcium
+2. Arcium nodes independently compute the result and each submit a partial signature
+3. Once a threshold of signatures is collected, the callback instruction is triggered automatically and the on-chain state is updated
+
+From the SDK's perspective this is fully abstracted - every service function (deposit, withdraw, conversion, compliance) handles the two-instruction lifecycle internally.
+
+## References
+
+- [MPC Protocols - Arcium Docs](https://docs.arcium.com/multi-party-execution-environments-mxes/mpc-protocols)
+- [Cerberus vs Manticore - Arcium](https://www.arcium.com/articles/cerberus-vs-manticore)
+- [MPC Threat Model - Umbra Architecture](https://docs.umbraprivacy.com/docs/security-cryptography/mpc-threat-model)
+- [Secure Multi-Party Computation - Wikipedia](https://en.wikipedia.org/wiki/Secure_multi-party_computation)

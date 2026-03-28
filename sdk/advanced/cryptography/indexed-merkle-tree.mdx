@@ -1,0 +1,36 @@
+---
+title: "Indexed Merkle Tree"
+description: "The on-chain UTXO commitment store powering the mixer, with effectively infinite capacity."
+---
+
+The mixer uses an **Indexed Merkle Tree** (IMT) - a variant of the standard Merkle tree that supports efficient membership proofs and nullifier range checks. See the [Unified Mixer Pool](https://docs.umbraprivacy.com/docs/core-concepts/unified-mixer-pool) and [Unlocking Address Strategies](https://docs.umbraprivacy.com/docs/transaction-lifecycle/unlocking-address-strategies) pages for higher-level context.
+
+## Structure
+
+- Maximum depth: 20 (up to 2^20 ≈ 1,048,576 leaves per tree)
+- Up to 2^128 trees can exist per pool - new trees are created as existing ones fill up
+- Leaf insertions are append-only and monotonically indexed
+- Each leaf stores a UTXO commitment
+
+The total theoretical capacity across all trees is 2^20 × 2^128 = **2^148 deposits**. At a sustained rate of one billion deposits per second, it would take approximately 10^28 years to exhaust a single pool's capacity. In practice, the pool is effectively infinite.
+
+## Insertion
+
+When a UTXO is created, its Poseidon commitment is appended to the current active tree. The insertion index is embedded in the ZK proof input, binding the proof to that specific leaf position.
+
+## Claiming and Merkle Proofs
+
+When a UTXO is claimed, the SDK fetches a Merkle inclusion proof (20 sibling hashes + current root) from the indexer. The proof is embedded in the Groth16 circuit input and verified on-chain.
+
+The on-chain program stores a rolling buffer of the **100 most recent Merkle roots**. A ZK proof generated against any of these roots is valid on submission - you do not need to prove against the absolute latest root. This gives a practical window of time between proof generation and transaction submission, accommodating network latency, wallet confirmation delays, and slower clients without requiring proof regeneration.
+
+<Warning>
+Merkle proofs become stale once the root they were generated against is evicted from the 100-root buffer. In high-throughput conditions where many UTXOs are inserted rapidly, this window can shorten. Always fetch a fresh proof close to submission time. If a claim fails with a root validation error, fetch a new proof and retry.
+</Warning>
+
+## References
+
+- [Efficient Sparse Merkle Trees](https://eprint.iacr.org/2016/683.pdf) - Dahlberg et al.
+- [Indexed Merkle Tree - original construction](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)
+- [Unified Mixer Pool - Umbra Architecture](https://docs.umbraprivacy.com/docs/core-concepts/unified-mixer-pool)
+- [Unlocking Address Strategies](https://docs.umbraprivacy.com/docs/transaction-lifecycle/unlocking-address-strategies)

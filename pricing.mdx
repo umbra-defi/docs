@@ -1,0 +1,120 @@
+---
+title: "Pricing"
+description: "How Umbra fees work — protocol fees, relayer fees, and the mixer SOL fee."
+---
+
+## Overview
+
+Umbra charges three distinct fees depending on the operation:
+
+- **Protocol fee** — a percentage of the SPL token amount, collected by the protocol on most operations.
+- **Relayer fee** — a percentage of the SPL token amount, collected by the relayer on claim operations. Currently 0.
+- **Mixer SOL fee** — a fixed SOL amount paid at UTXO creation time to pre-fund the eventual claim.
+
+---
+
+## Protocol Fee
+
+The protocol fee is deducted from the SPL or Token-2022 token amount involved in each operation.
+
+**Current rates:**
+- Fixed base: 0 token micro-units
+- Proportional: 35 bps (0.35%) of the amount
+
+**Formula:**
+
+```
+protocol_fee = floor(amount × 35 / 10_000)
+```
+
+### Example — 1,000 USDC withdrawal
+
+```
+1,000 USDC = 1,000,000,000 µUSDC
+
+protocol_fee = floor(1,000,000,000 × 35 / 10,000) = 3,500,000 µUSDC = 3.50 USDC
+
+net received = 1,000,000,000 - 3,500,000 = 996,500,000 µUSDC = 996.50 USDC
+```
+
+### Estimating programmatically
+
+```typescript
+import { PROTOCOL_FEE, BPS_DIVISOR } from "@umbra-privacy/sdk";
+
+function estimateProtocolFee(amount: bigint): bigint {
+  return (amount * PROTOCOL_FEE.BPS) / BPS_DIVISOR;
+}
+
+const fee = estimateProtocolFee(1_000_000n); // 1 USDC
+// fee = 1_000_000n × 35n / 10_000n = 3_500n µUSDC (0.0035 USDC)
+```
+
+---
+
+## Relayer Fee
+
+The relayer submits claim transactions on your behalf so your wallet never appears on-chain as the fee payer. In exchange, relayers can charge a base SPL fee plus a BPS rate on the claimed amount.
+
+**Current rates:** both are set to 0. Claiming a UTXO incurs no SPL relayer fee today.
+
+When relayer fees are non-zero, they are applied on top of the protocol fee and deducted from the same token amount:
+
+```
+relayer_fee = RELAYER_BASE_FEE + floor(amount × RELAYER_BPS / 10_000)
+net = amount - protocol_fee - relayer_fee
+```
+
+---
+
+## Mixer SOL Fee
+
+When you create a UTXO and insert it into the mixer, you pay a one-time SOL fee upfront. This pre-funds the eventual claim so neither you nor the relayer pays SOL out of pocket at claim time.
+
+The SOL fee covers two costs:
+
+- **Treap node rent** — Solana requires a minimum SOL balance to keep the nullifier account (a `TreapNode`) rent-exempt on-chain. This is approximately the minimum rent for a 48-byte account at current Solana rent rates.
+- **Costliest claim path** — the fee includes enough SOL to cover the on-chain compute and transaction costs of the most expensive possible claim route out of the mixer.
+
+The fee is dynamically calculated at UTXO creation time from the current Solana rent schedule. It is non-refundable — once inserted, the commitment is in the tree and the SOL is committed.
+
+<Note>
+The mixer SOL fee is denominated in SOL (lamports), not in the token being transferred. It is separate from and in addition to the protocol fee and relayer fee, which are denominated in the transferred token.
+</Note>
+
+---
+
+## Which Operations Carry Which Fees
+
+**Encrypted balance operations:**
+- Self-deposit (public ATA → encrypted balance): 0 protocol fee for standard self-shielding
+- Withdrawal (encrypted balance → public ATA): protocol fee applies
+- Cross-account confidential transfer: protocol fee applies
+
+**Mixer operations:**
+- UTXO creation (encrypted balance → mixer): protocol fee on SPL amount + mixer SOL fee
+- UTXO creation (public ATA → mixer): protocol fee on SPL amount + mixer SOL fee
+- Claiming a UTXO (mixer → encrypted balance): protocol fee applies, relayer fee applies (currently 0)
+- Claiming a UTXO (mixer → public ATA): protocol fee applies, relayer fee applies (currently 0)
+
+---
+
+## Token-2022 Transfer Fees
+
+If the token mint has a Token-2022 transfer fee extension configured, that fee is deducted by the SPL program before tokens reach the Umbra pool. Umbra then measures the actual amount received and applies its protocol fee on top of that — it never charges protocol fees on the portion taken by the Token-2022 mechanism.
+
+```
+User sends:              transfer_amount
+T22 deducts:             token_transfer_fee    (set on the mint, outside Umbra's control)
+Pool receives:           actual_received = transfer_amount - token_transfer_fee
+Umbra deducts:           protocol_fee = floor(actual_received × 35 / 10,000)
+Encrypted balance gets:  actual_received - protocol_fee
+```
+
+---
+
+## Fee Configuration
+
+Protocol and relayer fee rates are stored in on-chain `ProtocolFeesConfiguration` and `RelayerFeesConfiguration` accounts, configurable by the pool admin and relayer operators respectively. The values above reflect the current live configuration.
+
+If you are building a production integration and need exact fee amounts for display or pre-flight checks, fetch the on-chain fee configuration accounts directly rather than hardcoding the SDK defaults.

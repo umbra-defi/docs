@@ -1,0 +1,151 @@
+---
+title: "Conversion"
+description: "Convert encrypted token accounts from MXE mode to shared mode, and rotate per-mint X25519 encryption keys."
+---
+
+## getConvertToSharedEncryptionFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getConvertToSharedEncryptionFunction(
+  args: GetConvertToSharedEncryptionFunctionArgs,
+  deps?: GetConvertToSharedEncryptionFunctionDeps,
+): ConvertToSharedEncryptionFunction
+```
+
+Converts one or more encrypted token accounts from MXE-mode (network-decryptable only) to shared-mode (user-decryptable). Conversion is per-mint and involves an on-chain Arcium MPC computation. Mints that are already in shared mode, uninitialized, or non-existent are skipped rather than erroring.
+
+---
+
+### GetConvertToSharedEncryptionFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetConvertToSharedEncryptionFunctionDeps
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+
+### Returns
+
+`ConvertToSharedEncryptionFunction`
+
+```typescript
+type ConvertToSharedEncryptionFunction = (
+  mints: readonly Address[],
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<ConvertToSharedEncryptionResult>
+```
+
+- `mints: readonly Address[]` - Token mints to convert. Processed sequentially - each successful conversion is independent.
+
+### ConvertToSharedEncryptionResult
+
+```typescript
+interface ConvertToSharedEncryptionResult {
+  converted: Map<Address, TransactionSignature>;
+  skipped: Map<Address, ConvertToSharedEncryptionSkipReason>;
+}
+```
+
+- `converted` - Mints successfully converted. Value is the transaction signature.
+- `skipped` - Mints not converted. Value is the reason.
+
+### ConvertToSharedEncryptionSkipReason
+
+- `"non_existent"` - No encrypted token account exists for this mint.
+- `"not_initialised"` - The encrypted token account has not been initialised.
+- `"already_shared"` - This mint is already in shared mode.
+- `"balance_not_initialised"` - The balance state is not yet initialised (e.g. no deposits have occurred).
+
+---
+
+### Errors
+
+Throws `ConversionError` if any non-skippable error occurs. See [Errors](./errors#conversionerror).
+
+### Example
+
+```typescript
+import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+
+const convert = getConvertToSharedEncryptionFunction({ client });
+const result = await convert([usdcMint, solMint]);
+
+for (const [mint, sig] of result.converted) {
+  console.log(`Converted ${mint}:`, sig);
+}
+for (const [mint, reason] of result.skipped) {
+  console.log(`Skipped ${mint}: ${reason}`);
+}
+```
+
+---
+
+## getRotateMintX25519EncryptionKeyFunction
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+function getRotateMintX25519EncryptionKeyFunction(
+  args: GetRotateMintX25519EncryptionKeyFunctionArgs,
+  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
+): RotateMintX25519EncryptionKeyFunction
+```
+
+Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
+
+---
+
+### GetRotateMintX25519EncryptionKeyFunctionArgs
+
+- `client: IUmbraClient`
+
+### GetRotateMintX25519EncryptionKeyFunctionDeps
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction` - Override the per-mint X25519 keypair derivation.
+
+### Returns
+
+`RotateMintX25519EncryptionKeyFunction`
+
+```typescript
+type RotateMintX25519EncryptionKeyFunction = (
+  mint: Address,
+  optionalData?: OptionalData32,
+  callbacks?: TransactionCallbacks,
+) => Promise<TransactionSignature>
+```
+
+- `mint: Address` - The token mint whose X25519 key to rotate.
+
+---
+
+### Errors
+
+Throws `ConversionError`. See [Errors](./errors#conversionerror).
+
+### Example
+
+```typescript
+import { getRotateMintX25519EncryptionKeyFunction } from "@umbra-privacy/sdk";
+
+const rotateMintKey = getRotateMintX25519EncryptionKeyFunction({ client });
+const signature = await rotateMintKey(usdcMint);
+```
+
+---
+
+## ConversionError
+
+Thrown by both conversion functions.
+
+Stage values: `"initialization"` | `"account-fetch"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
+
+See [Errors](./errors#conversionerror) for full documentation.

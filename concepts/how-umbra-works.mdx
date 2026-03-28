@@ -1,0 +1,103 @@
+---
+title: "How Umbra Works"
+description: "A plain-language explanation of Umbra's privacy model for Solana developers."
+---
+
+## The Problem with Public Blockchains
+
+Every transaction on Solana is publicly readable. Anyone can look up your wallet address and see exactly how much of any token you hold and every transfer you've ever made. For many use cases - payroll, business payments, personal finance - this is unacceptable.
+
+Umbra fixes this without requiring you to move your tokens off Solana or trust a centralized custodian.
+
+## The Two Privacy Modes
+
+Umbra provides two distinct privacy tools that can be used independently or together:
+
+<CardGroup cols={2}>
+  <Card title="Encrypted Balances" icon="shield">
+    Your token balance is stored on-chain, but the amount is encrypted. Transfers still happen on-chain - what's hidden is *how much*.
+  </Card>
+  <Card title="Mixer" icon="shuffle">
+    Tokens are deposited into a shared pool and withdrawn separately, with no on-chain link between the deposit and withdrawal addresses. *Who transferred to whom* is hidden.
+  </Card>
+</CardGroup>
+
+You can use encrypted balances alone (hide amounts), the mixer alone (hide the transfer path), or both together for the strongest privacy guarantees.
+
+## How Encrypted Balances Work
+
+When you deposit tokens into an encrypted balance:
+
+1. Your tokens move from your public SPL or Token-2022 account to the **shielded pool** - still on-chain, still real tokens, locked in the program
+2. The program creates an **Encrypted Token Account (ETA)** for your `(wallet, mint)` pair
+3. Your balance is encrypted and stored in that ETA using **Arcium MPC**
+
+The encryption means no one - not Umbra, not Arcium, not Solana validators - can read your balance without the decryption key.
+
+### What is Arcium MPC?
+
+Arcium is a network of nodes that perform computation on encrypted data using **[Multi-Party Computation (MPC)](https://dl.acm.org/doi/10.1145/62212.62213)**. You don't need to understand the details, but the key property is:
+
+> No single node can decrypt your data. The computation is split across multiple independent parties so that learning your balance requires compromising a majority of them simultaneously.
+
+From a developer's perspective: Arcium is the computation backend. The SDK handles all communication with it automatically.
+
+### Encryption Modes
+
+When your balance is encrypted, it can be in one of two modes:
+
+- **MXE-only** - Only the Arcium MPC network can decrypt it. Withdrawals require MPC to perform the decryption. You cannot decrypt it locally.
+- **Shared** - Encrypted under both the Arcium MPC key *and* your personal [X25519](https://www.rfc-editor.org/rfc/rfc7748) key. You can decrypt your own balance client-side without MPC. Available after you register your X25519 key.
+
+<Note>
+After [registering](/sdk/registration) with `confidential: true`, your deposits automatically use Shared mode so you can query your balance locally.
+</Note>
+
+## How the Mixer Works
+
+The mixer uses a cryptographic structure called an **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** combined with **[zero-knowledge proofs](https://dl.acm.org/doi/10.1145/22145.22178)**.
+
+Here's the simplified version:
+
+<Steps>
+  <Step title="Deposit into the pool">
+    You create a **commitment** - a cryptographic hash of `(amount, recipient, secret)` - and insert it as a leaf into the Merkle tree. The commitment is public; the contents are not.
+  </Step>
+  <Step title="Wait">
+    More users deposit into the same tree. Your commitment is now one of many thousands of leaves. The larger the set, the stronger the anonymity.
+  </Step>
+  <Step title="Claim to any address">
+    You present a **zero-knowledge proof** that you know the secret behind one of the leaves in the tree without revealing *which* leaf. The proof is verified on-chain, the nullifier is burned to prevent double-spending, and the tokens are released.
+  </Step>
+</Steps>
+
+The deposit address and the claim address need not be related. An observer sees a deposit and a withdrawal happening, but cannot link them.
+
+## The Dual-Instruction Pattern
+
+Every confidential operation in Umbra involves two on-chain transactions:
+
+1. **Handler** - your wallet signs a transaction that validates inputs and queues a computation request with Arcium
+2. **Callback** - Arcium completes the off-chain computation and posts the result back on-chain, triggering the program's callback instruction to update state
+
+The SDK waits for both transactions to confirm before returning. You don't need to manage this yourself.
+
+<Note>
+This is why Umbra operations take a few seconds longer than a standard token transfer - there is an off-chain MPC round-trip between the two on-chain instructions.
+</Note>
+
+## Privacy Guarantees Summary
+
+- **Token balance amount** - hidden by Encrypted Balances. Encrypted with MPC; auditors can be granted selective access.
+- **Transfer counterparty** - hidden by the Mixer. Requires a sufficient anonymity set (other users in the same tree).
+- **Transaction history** - strongest guarantees when mixer + encrypted balances are used together.
+
+## What is NOT Hidden
+
+- **That you are using Umbra** - on-chain interactions with the Umbra program are visible
+- **Deposit and withdrawal amounts** when using the mixer - the amount is committed at deposit and revealed at claim
+- **Timing** - if you deposit and immediately withdraw, temporal analysis can correlate them
+
+## Compliance
+
+Umbra includes a built-in compliance system. Users can create **viewing grants** that allow specific parties (auditors, regulators) to decrypt their balances. See the [Compliance](/sdk/compliance) guide for details.

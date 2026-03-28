@@ -1,0 +1,178 @@
+---
+title: "Key Rotation & Deps Reference"
+description: "Rotate derived keys using numeric offsets, and a complete map of which injectable deps each factory function accepts."
+---
+
+## Key Rotation via Offsets
+
+Key rotation is a distinct mechanism from dependency injection. Rather than replacing the generator function, you increment a numeric offset at client construction time. This causes the [KMAC256](/sdk/advanced/cryptography/kmac256) derivation to produce a completely different key for the same wallet, without changing any code.
+
+```typescript
+const client = await getUmbraClientFromSigner({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  offsets: {
+    x25519UserAccountPrivateKey: 1n,   // rotate the token encryption key
+    poseidonPrivateKey: 0n,
+    masterViewingKey: 0n,
+    x25519MasterViewingKeyEncryptingPrivateKey: 0n,
+    mintX25519PrivateKey: 0n,
+    rescueCommitmentBlindingFactor: 0n,
+    randomCommitmentFactor: 0n,
+  },
+});
+```
+
+Available offset keys:
+- `masterViewingKey`
+- `poseidonPrivateKey`
+- `x25519UserAccountPrivateKey`
+- `x25519MasterViewingKeyEncryptingPrivateKey`
+- `mintX25519PrivateKey`
+- `rescueCommitmentBlindingFactor`
+- `randomCommitmentFactor`
+
+<Warning>
+Rotating an offset produces a different derived key. Any on-chain state - registered X25519 keys, encrypted balances, compliance grants - was created under the old key and cannot be accessed with the rotated key. Always re-register after rotating the user account key, and update any grants that referenced the old MVK X25519 key.
+</Warning>
+
+---
+
+## Per-Function Deps Reference
+
+A complete map of which injectable deps each factory function accepts.
+
+### Registration
+
+**`getUserRegistrationFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+- `masterViewingKeyGenerator`, `masterViewingKeyBlindingFactorGenerator`
+- `poseidonPrivateKeyGenerator`, `poseidonBlindingFactorGenerator`
+- `userAccountX25519KeypairGenerator`, `masterViewingKeyEncryptingX25519KeypairGenerator`
+- `mintX25519KeypairGenerator`
+- `rescueCommitmentBlindingFactorGenerator`, `randomFactorGenerator`
+- `getRcKeyGenerator`, `getRcEncryptor`, `rescueCommitmentGenerator`
+- `userCommitmentGenerator`
+- `fiatShamirChallengeGenerator`, `challengePowersFunction`, `polynomialEvaluator`
+- `poseidonAggregator`
+- `bn254ModInverter`, `computeLimbwiseSumInverse`
+- `zkProver` (`IZkProverForUserRegistration`) - **required**
+
+### Deposit
+
+**`getDirectDepositIntoEncryptedBalanceFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`, `getEpochInfo`
+
+### Withdrawal
+
+**`getDirectWithdrawIntoPublicBalanceV3Function`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+### Query
+
+**`getQueryUserAccountFunction`**
+- `accountInfoProvider`
+
+**`getQueryEncryptedBalanceFunction`**
+- `accountInfoProvider`
+- `rcDecryptor` - override to provide a custom Rescue cipher decryption backend
+
+**`getFetchClaimableUtxosFunction`**
+- `accountInfoProvider`
+- `merkleProofFetcher` - override to fetch Merkle proofs from a custom indexer
+- `utxoDataFetcher` - override to fetch UTXO data from a custom indexer
+
+### UTXO Creation - from Encrypted Balance
+
+**`getCreateSelfClaimableUtxoFromEncryptedBalanceFunction`**
+- `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`
+- `masterViewingKeyGenerator`, `masterViewingKeyBlindingFactorGenerator`
+- `poseidonPrivateKeyGenerator`, `poseidonBlindingFactorGenerator`
+- `userAccountX25519KeypairGenerator`
+- `secondViewingKeyGenerator`
+- `ephemeralUtxoMasterViewingKeyGenerator`, `ephemeralUtxoMasterViewingKeyBlindingFactorGenerator`
+- `ephemeralUtxoPoseidonKeyGenerator`, `ephemeralUtxoPoseidonKeyBlindingFactorGenerator`
+- `ephemeralUtxoNullifierGenerator`, `ephemeralUtxoH2RandomSecretGenerator`
+- `poseidonKeystreamBlindingFactorGenerator`
+- `poseidonHasher`, `poseidonEncryptor`, `poseidonKeystreamGenerator`, `keystreamCommitmentGenerator`
+- `rescueEncryptor`, `aesEncryptor`
+- `fiatShamirChallengeGenerator`, `userCommitmentGenerator`, `h2Generator`
+- `getUtcNow`, `generateRandomU256`, `getRandomComputationOffset`
+- `zkProver` (`IZkProverForSelfClaimableUtxo`) - **required**
+
+**`getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction`**
+- Same set as self-claimable from encrypted balance
+- `zkProver` (`IZkProverForReceiverClaimableUtxo`) - **required**
+
+### UTXO Creation - from Public Balance
+
+**`getCreateSelfClaimableUtxoFromPublicBalanceFunction`**
+- `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`
+- `masterViewingKeyGenerator`, `poseidonPrivateKeyGenerator`
+- Ephemeral UTXO key generators (same as above)
+- Cryptographic operation functions (Poseidon, Rescue, AES, Fiat-Shamir)
+- `zkProver` (`IZkProverForSelfClaimableUtxo`) - **required**
+
+**`getCreateReceiverClaimableUtxoFromPublicBalanceFunction`**
+- Same set as self-claimable from public balance
+- `zkProver` (`IZkProverForReceiverClaimableUtxo`) - **required**
+
+### UTXO Claiming
+
+**`getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+- Key derivation generators (master viewing key, Poseidon, X25519)
+- Ephemeral UTXO key generators
+- Cryptographic operation functions
+- `zkProver` (`IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`) - **required**
+
+**`getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+- Key derivation generators
+- Cryptographic operation functions
+- `zkProver` (`IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`) - **required**
+
+**`getClaimSelfClaimableUtxoIntoPublicBalanceFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+- Key derivation generators
+- Cryptographic operation functions
+- `zkProver` (`IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`) - **required**
+
+### Conversion
+
+**`getConvertToSharedEncryptionFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getRotateMintX25519EncryptionKeyFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+- `mintX25519KeypairGenerator` - override to supply the new keypair directly
+
+### Compliance Grants
+
+**`getCreateUserGrantedComplianceGrantFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getDeleteUserGrantedComplianceGrantFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getReencryptSharedCiphertextsUserGrantFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getQueryUserComplianceGrantFunction`**
+- `accountInfoProvider`
+
+### Miscellaneous
+
+**`getClaimStagedSolFromPoolFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getClaimStagedSplFromPoolFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getUpdateRandomGenerationSeedFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
+
+**`getUpdateTokenAccountRandomGenerationSeedFunction`**
+- `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`

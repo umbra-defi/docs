@@ -1,0 +1,152 @@
+---
+title: "Client"
+description: "getUmbraClientFromSigner - the primary SDK entry point. IUmbraClient and IUmbraSigner interfaces."
+---
+
+## getUmbraClientFromSigner
+
+**Import:** `@umbra-privacy/sdk`
+
+```typescript
+async function getUmbraClientFromSigner(
+  args: GetUmbraClientFromSignerArgs,
+  deps?: GetUmbraClientFromSignerDeps,
+): Promise<IUmbraClient>
+```
+
+The primary SDK entry point. Call this once per session with a connected wallet to construct the `IUmbraClient` that all factory functions consume.
+
+By default this immediately prompts the wallet to sign the master seed derivation message. Pass `deferMasterSeedSignature: true` to skip that prompt at construction time - it will be requested on the first operation that requires key material.
+
+---
+
+### GetUmbraClientFromSignerArgs
+
+- `signer: IUmbraSigner` - Connected wallet. Must implement `signMessage` and `signTransaction`.
+- `network: Network` - `"mainnet"` | `"devnet"` | `"localnet"`.
+- `rpcUrl: string` - HTTPS RPC endpoint URL for the Solana cluster.
+- `rpcSubscriptionsUrl: string` - WebSocket RPC endpoint URL for transaction confirmation.
+- `indexerApiEndpoint?: string` - Base URL for the Umbra indexer (e.g. `"https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com"`). Required for mixer operations (`getFetchClaimableUtxosFunction`).
+- `commitment?: "processed" | "confirmed" | "finalized"` - Commitment level for RPC calls. Defaults to `"confirmed"`.
+- `deferMasterSeedSignature?: boolean` - Skip the master seed signature prompt at construction time. Defaults to `false`.
+- `versions?` - Override version specifiers. Leave unset to use SDK defaults.
+  - `protocol?: ProtocolVersionSpecifierFunction`
+  - `algorithm?: AlgorithmVersionSpecifierFunction`
+  - `scheme?: SchemeVersionSpecifierFunction`
+- `offsets?` - Per-key derivation path offsets (`U512`). Used for key rotation - leave unset unless rotating.
+  - `masterViewingKey?: U512`
+  - `poseidonPrivateKey?: U512`
+  - `x25519UserAccountPrivateKey?: U512`
+  - `x25519MasterViewingKeyEncryptingPrivateKey?: U512`
+  - `mintX25519PrivateKey?: U512`
+  - `rescueCommitmentBlindingFactor?: U512`
+  - `randomCommitmentFactor?: U512`
+
+---
+
+### GetUmbraClientFromSignerDeps
+
+All fields are optional. Provide overrides for custom infrastructure or testing.
+
+- `accountInfoProvider?: AccountInfoProviderFunction` - Override the default RPC-based account fetcher.
+- `blockhashProvider?: GetLatestBlockhash` - Override the default blockhash fetcher.
+- `transactionForwarder?: TransactionForwarder` - Override transaction broadcasting (e.g. for Jito bundles or custom retry logic).
+- `epochInfoProvider?: GetEpochInfo` - Override the epoch info fetcher (used for Token-2022 fee schedules).
+- `masterSeedStorage?` - Override master seed persistence.
+  - `load?: MasterSeedLoaderFunction` - Load the cached master seed (e.g. from encrypted local storage).
+  - `store?: MasterSeedStorerFunction` - Persist the master seed after derivation.
+  - `generate?: MasterSeedGeneratorFunction` - Derive the master seed from a wallet signature (override the default KMAC256-based derivation).
+
+---
+
+### Returns
+
+`Promise<IUmbraClient>` - The client configuration object. Pass `client` to every factory function.
+
+---
+
+### Example
+
+```typescript
+import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClientFromSigner({
+  signer: walletAdapter,
+  network: "mainnet",
+  rpcUrl: "https://api.mainnet-beta.solana.com",
+  rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
+  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+});
+```
+
+---
+
+## IUmbraClient
+
+The read-only configuration object produced by `getUmbraClientFromSigner`. All factory functions accept it as `args.client`. Do not call methods on it directly.
+
+- `signer: IUmbraSigner` - The connected wallet.
+- `network: Network` - The configured network.
+- `networkConfig: NetworkConfig` - On-chain program IDs and addresses for the configured network.
+- `versions: ResolvedVersions` - Resolved protocol, algorithm, and scheme version identifiers.
+- `offsets: ResolvedOffsets` - Resolved key derivation offsets.
+- `commitment: "processed" | "confirmed" | "finalized"` - Configured commitment level.
+- `accountInfoProvider: AccountInfoProviderFunction` - Account data fetcher (RPC-based or overridden).
+- `blockhashProvider: GetLatestBlockhash` - Blockhash fetcher (RPC-based or overridden).
+- `transactionForwarder: TransactionForwarder` - Transaction broadcaster (WebSocket-based or overridden).
+- `epochInfoProvider: GetEpochInfo` - Epoch info fetcher (RPC-based or overridden).
+- `fetchMerkleProof?: FetchMerkleProofFunction` - Indexer-based Merkle proof fetcher. Present only when `indexerApiEndpoint` is set.
+- `fetchUtxoData?: FetchUtxoDataFunction` - Indexer-based UTXO discovery fetcher. Present only when `indexerApiEndpoint` is set.
+- `masterSeed: { load, store, generate, getMasterSeed }` - Master seed storage operations. `load` attempts to load an existing seed, `store` persists it, `generate` derives a new seed via signature, and `getMasterSeed` is a convenience method combining load and generate.
+
+---
+
+## IUmbraSigner
+
+The wallet interface the SDK requires. Any connected wallet that can sign messages and transactions satisfies this interface.
+
+```typescript
+interface IUmbraSigner {
+  readonly address: Address;
+  signTransaction(transaction: SignableTransaction): Promise<SignedTransaction>;
+  signTransactions(transactions: readonly SignableTransaction[]): Promise<SignedTransaction[]>;
+  signMessage(message: Uint8Array): Promise<SignedMessage>;
+}
+```
+
+### address
+
+The base58-encoded Ed25519 public key that uniquely identifies this signer on the Solana network. Used as the account owner, fee payer identifier, and key lookup in signed transactions.
+
+- `address: Address` - Read-only public address.
+
+### signTransaction
+
+Signs a compiled Solana versioned transaction.
+
+- `transaction: SignableTransaction` - The versioned transaction to sign.
+- Returns: `Promise<SignedTransaction>` - The signed transaction ready for network submission.
+
+### signTransactions
+
+Signs multiple transactions in a batch. Returns them in the same order with signatures added.
+
+- `transactions: readonly SignableTransaction[]` - Array of transactions to sign.
+- Returns: `Promise<SignedTransaction[]>` - The signed transactions in the same order as input.
+
+### signMessage
+
+Signs an arbitrary byte sequence. Used once per session to derive the master seed - this is the only non-transaction signature the user sees.
+
+- `message: Uint8Array` - The bytes to sign. The SDK passes a deterministic human-readable message encoding the derivation intent.
+- Returns: `Promise<SignedMessage>` - Contains the original message bytes, the 64-byte Ed25519 signature, and the signer's address.
+
+---
+
+## Network
+
+```typescript
+type Network = "mainnet" | "devnet" | "localnet";
+```
+
+Selects the set of on-chain program IDs and addresses the SDK uses. Pass this in `GetUmbraClientFromSignerArgs.network`.

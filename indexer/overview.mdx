@@ -1,0 +1,84 @@
+---
+title: "Indexer Overview"
+description: "The Umbra indexer is a read-only REST API that tracks UTXO commitments on-chain and generates Merkle inclusion proofs for the mixer."
+---
+
+## What is the Indexer?
+
+The Umbra indexer is an off-chain service that continuously watches the Solana chain for Umbra program transactions, extracts UTXO commitments and encrypted ciphertexts, and stores them in a queryable database. It acts as the data layer that bridges on-chain Merkle tree state with the SDK and any other client that needs to interact with the mixer.
+
+It exposes two primary capabilities:
+
+- **UTXO data** - fetch encrypted UTXO ciphertexts by tree or absolute index. The SDK uses this to scan for UTXOs addressed to your [X25519](https://www.rfc-editor.org/rfc/rfc7748) key by trying to decrypt each ciphertext.
+- **Merkle proofs** - generate a Merkle inclusion proof (authentication path) for any leaf. This is required to construct a valid claim transaction on-chain.
+
+Beyond the SDK, the indexer is useful for analytics, monitoring, and custom integrations such as building your own wallet or scanning pipeline.
+
+## Base URLs
+
+- **Mainnet** - `https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com`
+
+## Response Format
+
+All endpoints return **[Protobuf](https://protobuf.dev/)** (`application/x-protobuf`) regardless of the `Accept` header. Protobuf is used by design - binary data like 32-byte hash arrays and ciphertext payloads compress significantly better than JSON.
+
+The health endpoints are the exception: they support both JSON (default) and Protobuf via `Accept` header negotiation.
+
+## Rate Limiting
+
+All endpoints are subject to rate limiting. Exceeded limits return `429 Too Many Requests`. Contact the Umbra team if you need higher rate limit allowances for production workloads.
+
+## Tree Structure
+
+UTXO commitments are organized into **Indexed Merkle Trees**, each holding up to **1,048,576 leaves** (depth-20). When a tree is full, the indexer begins a new tree at the next sequential index.
+
+- Tree 0 holds leaves at absolute indices `0` to `1,048,575`
+- Tree 1 holds leaves at absolute indices `1,048,576` to `2,097,151`
+- And so on
+
+The absolute index of any leaf is:
+
+```
+absolute_index = tree_index x 1_048_576 + insertion_index
+```
+
+## SDK Integration
+
+When you pass `indexerApiEndpoint` to `getUmbraClientFromSigner`, the SDK automatically constructs two internal providers:
+
+- `client.fetchUtxoData` - calls `GET /v1/utxos` to retrieve ciphertext batches for decryption
+- `client.fetchMerkleProof` - calls `GET /v1/trees/{tree_index}/proof/{insertion_index}` for each claimable UTXO
+
+Both are consumed internally by `getFetchClaimableUtxosFunction`. You do not need to call the indexer directly when using the SDK.
+
+## Planned Improvements
+
+<Info>
+The SDK currently calls the indexer directly using the `indexerApiEndpoint` you provide. We are planning to migrate this to an **IP Obfuscation Service** that will proxy indexer requests through an anonymizing relay, so that fetching your UTXOs does not leak your IP address to the indexer. This will be a transparent upgrade -- the SDK interface will not change.
+</Info>
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="Stats" icon="chart-bar" href="/indexer/api-reference/stats">
+    Aggregate statistics for the entire UTXO index.
+  </Card>
+  <Card title="Health" icon="heart-pulse" href="/indexer/api-reference/health/basic">
+    Basic, detailed, liveness, and readiness health checks.
+  </Card>
+  <Card title="Tree Metadata" icon="tree" href="/indexer/api-reference/tree-metadata">
+    Current root hash, leaf count, and UTXO count for a specific tree.
+  </Card>
+  <Card title="Tree UTXOs" icon="database" href="/indexer/api-reference/tree-utxos">
+    Paginated UTXO records for a specific tree.
+  </Card>
+  <Card title="Merkle Proof" icon="shield-check" href="/indexer/api-reference/merkle-proofs">
+    Generate an inclusion proof for a specific leaf.
+  </Card>
+  <Card title="Global UTXOs" icon="list" href="/indexer/api-reference/utxos">
+    Paginated UTXO queries spanning all trees.
+  </Card>
+  <Card title="Single UTXO" icon="magnifying-glass" href="/indexer/api-reference/utxo-single">
+    Fetch a single UTXO by absolute index.
+  </Card>
+</CardGroup>
