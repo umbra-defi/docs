@@ -1,0 +1,74 @@
+---
+title: "Relayer Overview"
+description: "The Umbra relayer submits claim transactions on your behalf so your wallet never appears as the fee payer on-chain."
+---
+
+## What is the Relayer?
+
+The Umbra relayer is a transaction submission service that builds, signs, and submits claim transactions for users. When you claim a UTXO from the mixer, the relayer pays the Solana transaction fees and submits the claim on your behalf — ensuring your wallet address never appears as the fee payer in the transaction, preserving your privacy.
+
+The relayer is used internally by the SDK's claim functions. You do not need to interact with the relayer API directly unless you are building a custom integration.
+
+## Base URL
+
+- **Mainnet:** `https://relayer.api.umbraprivacy.com`
+
+<Note>
+A devnet relayer is not yet available.
+</Note>
+
+## How It Works
+
+1. You call a claim function in the SDK (e.g., `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction`)
+2. The SDK constructs the claim proof data and UTXO slot data locally
+3. The SDK submits a claim request to the relayer via `POST /v1/claims`
+4. The relayer validates the request, builds the on-chain transactions, and submits them
+5. The SDK polls `GET /v1/claims/{request_id}` until the claim reaches a terminal status
+6. The claimed tokens appear in your encrypted balance or public ATA
+
+## SDK Integration
+
+```typescript
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
+});
+```
+
+The relayer object is passed as a dependency to claim factory functions:
+
+```typescript
+const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
+  { client },
+  { zkProver, relayer },
+);
+```
+
+## Claim Lifecycle
+
+A claim request progresses through these statuses:
+
+- `received` — Accepted by the relayer API
+- `validating` — Preflight checks running (Merkle root, nullifiers, account state)
+- `offsets_reserved` — Nullifier offsets reserved for deduplication
+- `building_tx` — Transactions being constructed
+- `tx_built` — Transactions ready
+- `submitting` — Sending to Solana
+- `submitted` — Confirmed on-chain
+- `awaiting_callback` — Waiting for Arcium MPC callback
+- `callback_received` — MPC callback detected
+- `finalizing` — Running cleanup transactions
+- `completed` — Claim successful
+- `failed` — Error occurred (see `failure_reason`)
+- `timed_out` — MPC callback deadline exceeded
+
+Terminal statuses: `completed`, `failed`, `timed_out`
+
+## Response Format
+
+All relayer endpoints return JSON.
+
+## Rate Limiting
+
+All endpoints are subject to rate limiting. Exceeded limits return `429 Too Many Requests`.

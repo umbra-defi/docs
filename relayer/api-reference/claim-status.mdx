@@ -1,0 +1,80 @@
+---
+title: "Claim Status"
+description: "Poll the status of a submitted claim request."
+---
+
+## Endpoint
+
+`GET /v1/claims/{request_id}`
+
+Returns the current status of a previously submitted claim request. The SDK polls this endpoint automatically — you only need to call it directly if building a custom integration.
+
+## Authentication
+
+None. Knowledge of the `request_id` UUID is required.
+
+## Path Parameters
+
+- `request_id` (string) — UUID returned from `POST /v1/claims`.
+
+## Response
+
+**200 OK** — JSON object:
+
+- `request_id` (string) — Echo of the path parameter.
+- `status` (string) — Current lifecycle status (see [Claim Lifecycle](/relayer/overview#claim-lifecycle)).
+- `variant` (string) — `"encrypted_balance"` or `"public_balance"`.
+- `resolved_variant` (string, nullable) — The specific on-chain instruction variant selected by the preflight validator (e.g., `"claim_into_existing_shared_balance_v11"`).
+- `tx_signature` (string, nullable) — Solana transaction signature of the claim instruction. Set after submission.
+- `callback_signature` (string, nullable) — Solana transaction signature of the Arcium MPC callback. Set after callback detection.
+- `computation_account` (string, nullable) — Base58-encoded computation account address.
+- `failure_reason` (string, nullable) — Error message if status is `failed`.
+- `created_at` (string) — ISO 8601 timestamp of when the claim was submitted.
+- `updated_at` (string) — ISO 8601 timestamp of the last status update.
+
+**Example (in progress):**
+
+```json
+{
+  "request_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "awaiting_callback",
+  "variant": "encrypted_balance",
+  "resolved_variant": "claim_into_existing_shared_balance_v11",
+  "tx_signature": "5KtP...base58...",
+  "callback_signature": null,
+  "computation_account": "Comp...base58...",
+  "failure_reason": null,
+  "created_at": "2026-03-31T12:00:00Z",
+  "updated_at": "2026-03-31T12:00:15Z"
+}
+```
+
+**Example (completed):**
+
+```json
+{
+  "request_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "completed",
+  "variant": "encrypted_balance",
+  "resolved_variant": "claim_into_existing_shared_balance_v11",
+  "tx_signature": "5KtP...base58...",
+  "callback_signature": "7RmQ...base58...",
+  "computation_account": "Comp...base58...",
+  "failure_reason": null,
+  "created_at": "2026-03-31T12:00:00Z",
+  "updated_at": "2026-03-31T12:01:30Z"
+}
+```
+
+## Polling Recommendations
+
+- Poll every **3 seconds** (the SDK default).
+- Stop polling when status is `completed`, `failed`, or `timed_out`.
+- Maximum recommended polling duration: **120 seconds**.
+- If the claim reaches `timed_out`, the MPC callback was not received within the expected block window. This does not necessarily mean the claim failed — the callback may still arrive.
+
+## Errors
+
+- **404** `NOT_FOUND` — No claim found with the given `request_id`.
+- **500** `STORAGE_ERROR` — Internal database failure.
+- **500** `INTERNAL_ERROR` — Unexpected server error.

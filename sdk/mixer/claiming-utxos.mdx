@@ -26,7 +26,7 @@ import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-priv
 
 const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
-  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
 });
 
 const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
@@ -48,7 +48,7 @@ import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy
 
 const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
 const relayer = getUmbraRelayer({
-  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
 });
 
 const claim = getSelfClaimableUtxoToPublicBalanceClaimerFunction(
@@ -70,7 +70,7 @@ import { getReceiverClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-
 
 const zkProver = getReceiverClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
-  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
 });
 
 const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
@@ -125,7 +125,7 @@ if (result.selfBurnable.length === 0) {
 // Step 2: Claim the first self-burnable UTXO into encrypted balance
 const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
-  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
 });
 
 const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
@@ -150,7 +150,7 @@ import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy
 
 const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
 const relayer = getUmbraRelayer({
-  apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
+  apiEndpoint: "https://relayer.api.umbraprivacy.com",
 });
 
 const scan = getClaimableUtxoScannerFunction({ client });

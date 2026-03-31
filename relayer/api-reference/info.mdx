@@ -1,0 +1,44 @@
+---
+title: "Relayer Info"
+description: "Get relayer identity, supported mints, and active stealth pool indices."
+---
+
+## Endpoint
+
+`GET /v1/relayer/info`
+
+Returns the relayer's on-chain identity and configuration. Use this to verify the relayer is operational and supports the mint you want to claim.
+
+## Authentication
+
+None. This is a public endpoint.
+
+## Request
+
+No parameters or request body.
+
+## Response
+
+**200 OK** — JSON object:
+
+- `address` (string) — Base58-encoded Solana public key of the relayer's fee payer account.
+- `supported_mints` (string[]) — Array of base58-encoded mint addresses the relayer will accept claims for.
+- `active_stealth_pool_indices` (string[]) — Array of stealth pool indices the relayer monitors.
+
+**Example:**
+
+```json
+{
+  "address": "Re1ayerPubkeyHere111111111111111111111111",
+  "supported_mints": [
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "So11111111111111111111111111111111111111112"
+  ],
+  "active_stealth_pool_indices": ["0"]
+}
+```
+
+## Errors
+
+- **500 Internal Server Error** — Failed to derive relayer address from keypair.

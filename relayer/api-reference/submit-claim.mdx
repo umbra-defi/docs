@@ -1,0 +1,118 @@
+---
+title: "Submit Claim"
+description: "Submit a UTXO claim request to the relayer for processing."
+---
+
+## Endpoint
+
+`POST /v1/claims`
+
+Submits a claim request. The relayer validates the request, builds the on-chain transactions, and submits them asynchronously. Returns immediately with a `request_id` for polling.
+
+<Warning>
+This endpoint is designed to be called by the SDK, not directly. The request body contains cryptographic proof data that must be generated correctly. Use the SDK's claim functions instead.
+</Warning>
+
+## Authentication
+
+None. The cryptographic proof data itself serves as authorization — only the UTXO owner can generate a valid proof.
+
+## Request Body
+
+JSON object with the following fields:
+
+- `variant` (string) — `"encrypted_balance"` or `"public_balance"`. Determines which claim instruction variant the relayer uses.
+- `user_pubkey` (string) — Base58-encoded Solana public key of the claiming user.
+- `mint` (string) — Base58-encoded token mint address.
+- `stealth_pool_index` (u128) — Index of the stealth pool containing the UTXOs.
+- `max_utxo_capacity` (u32) — Maximum number of UTXOs in this claim batch. Must be greater than 0.
+- `optional_data` (string) — Base64-encoded 32-byte metadata field.
+
+### proof_account_data (required)
+
+Cryptographic proof data for the claim:
+
+- `rescue_encryption_public_key` (string) — Base64-encoded 32-byte X25519 public key.
+- `encryption_nonce` (string) — Decimal-encoded u128 Rescue cipher nonce.
+- `merkle_root` (string) — Base64-encoded 32-byte Poseidon Merkle root.
+- `tvk_timestamp` (i64) — Temporal viewing key timestamp.
+- `groth16_proof_a` (string) — Base64-encoded 64-byte Groth16 proof element A.
+- `groth16_proof_b` (string) — Base64-encoded 128-byte Groth16 proof element B.
+- `groth16_proof_c` (string) — Base64-encoded 64-byte Groth16 proof element C.
+- `rescue_encryption_commitment` (string) — Base64-encoded 32 bytes.
+- `encryption_validation_polynomial` (string) — Base64-encoded 32 bytes.
+- `rescue_encrypted_master_viewing_key_low` (string) — Base64-encoded encrypted MVK low half.
+- `rescue_encrypted_master_viewing_key_high` (string) — Base64-encoded encrypted MVK high half.
+- `rescue_encrypted_blinding_factor_low` (string) — Base64-encoded encrypted blinding factor low half.
+- `rescue_encrypted_blinding_factor_high` (string) — Base64-encoded encrypted blinding factor high half.
+
+**Additional fields for `encrypted_balance` variant only:**
+
+- `rescue_encrypted_total_amount` (string) — Base64-encoded 32-byte encrypted total claim amount.
+- `rescue_encrypted_relayer_commission_fee` (string) — Base64-encoded encrypted relayer fee.
+- `rescue_encrypted_protocol_commission_fee` (string) — Base64-encoded encrypted protocol fee.
+- `total_relayer_fees` (u64) — Total relayer fees in token base units.
+
+### utxo_slot_data (required, array)
+
+Array of UTXO slot objects. Each slot represents one UTXO being claimed:
+
+- `slot_index` (u32) — Position of this UTXO in the batch.
+- `nullifier` (string) — Base64-encoded 32-byte nullifier. Must be unique within the request.
+- `linker_encryptions` (string[]) — Array of base64-encoded Poseidon linker encryptions. 6 elements for `encrypted_balance`, 5 for `public_balance`.
+- `linker_key_commitments` (string[]) — Array of base64-encoded Poseidon key commitments. 6 elements for `encrypted_balance`, 5 for `public_balance`.
+
+### fee_proof_data (required for `public_balance` only)
+
+Fee Merkle proof data for public balance claims:
+
+- `amount` (string) — Claim amount.
+- `relayer_fixed_sol_fees` (string) — SOL fees in lamports.
+- `protocol_fees_amount_lower_bound` (string) — Protocol fee lower bound.
+- `protocol_fees_amount_upper_bound` (string) — Protocol fee upper bound.
+- `protocol_fees_base_fees_in_spl` (string) — Base fee in SPL units.
+- `protocol_fees_commission_fee_in_spl` (u16) — Commission fee in BPS.
+- `protocol_fees_merkle_path` (string[4]) — Four sibling hashes for fee schedule proof.
+- `protocol_fees_leaf_index` (u8) — Leaf index in fee Merkle tree.
+- `relayer_fees_amount_lower_bound` (string) — Relayer fee lower bound.
+- `relayer_fees_amount_upper_bound` (string) — Relayer fee upper bound.
+- `relayer_fees_base_fees_in_spl` (string) — Base fee.
+- `relayer_fees_commission_fee_in_spl` (u16) — Commission fee in BPS.
+- `relayer_fees_merkle_path` (string[4]) — Four sibling hashes.
+- `relayer_fees_leaf_index` (u8) — Leaf index.
+
+## Response
+
+**202 Accepted** — Claim request received and queued for processing.
+
+- `request_id` (string) — UUID for polling the claim status.
+- `status` (string) — Always `"received"`.
+
+**Example:**
+
+```json
+{
+  "request_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "received"
+}
+```
+
+## Errors
+
+All error responses follow this format:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable description"
+  }
+}
+```
+
+- **400** `INVALID_REQUEST_BODY` — Malformed JSON.
+- **400** `VALIDATION_FAILED` — Invalid fields (missing proof data, wrong array lengths, invalid base58, duplicate nullifiers, etc.).
+- **409** `DUPLICATE_OFFSET` — A nullifier in this request is already being processed by another claim.
+- **500** `STORAGE_ERROR` — Internal database failure.
+- **500** `QUEUE_ERROR` — Internal queue failure.
+- **500** `INTERNAL_ERROR` — Unexpected server error.

@@ -1,0 +1,46 @@
+---
+title: "Batch Merkle Proofs"
+description: "Retrieve multiple Merkle inclusion proofs atomically under the same tree root."
+---
+
+## Endpoint
+
+`POST /v1/trees/{tree_index}/proofs`
+
+Returns multiple Merkle inclusion proofs for the specified insertion indices, all guaranteed to be computed against the same tree root. This is critical for claim operations that batch multiple UTXOs into a single ZK proof.
+
+## Path Parameters
+
+- `tree_index` (u64) -- Zero-based index of the Merkle tree.
+
+## Request Body
+
+JSON object with a single field:
+
+- `insertion_indices` (array of u64) -- Leaf positions to generate proofs for. Maximum 8 indices per request.
+
+**Example:**
+
+```json
+{
+  "insertion_indices": [42, 108, 255]
+}
+```
+
+## Response
+
+Protobuf `BatchProofResponse` containing an array of proof objects. Each proof has the same structure as the single proof endpoint:
+
+- `root` (string) -- 64-character little-endian hex-encoded Poseidon root hash. Identical across all proofs in the batch.
+- `tree_index` (int64) -- Echo of the path parameter.
+- `insertion_index` (int64) -- The leaf position this proof corresponds to.
+- `proof` (array of 20 strings) -- Sibling hashes from leaf to root, each 64-character hex.
+- `leaf` (string) -- 64-character hex-encoded final commitment.
+
+## Why Batch?
+
+Single proof requests (`GET /v1/trees/{tree_index}/proof/{insertion_index}`) do not guarantee a consistent root across multiple calls -- the tree may grow between requests. The batch endpoint acquires a read lock on the tree, ensuring all returned proofs share the same root. This is required for Groth16 ZK proofs that reference multiple UTXO commitments.
+
+<Note>
+The SDK's claim functions use this endpoint internally when claiming multiple UTXOs in a single batch.
+</Note>

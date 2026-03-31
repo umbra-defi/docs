@@ -52,7 +52,7 @@ const client = await getUmbraClient(args, deps?);
   Base URL for the Umbra indexer. Required for UTXO discovery and Merkle proof generation when using the mixer. Omit if you are only using encrypted balances (deposit/withdraw) and not the mixer.
 
   ```
-  https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com  # mainnet
+  https://indexer.api.umbraprivacy.com  # mainnet
   ```
 </ParamField>
 
@@ -179,7 +179,7 @@ const client = await getUmbraClient({
   network: "mainnet",
   rpcUrl: "https://rpc.helius.xyz/?api-key=YOUR_KEY",
   rpcSubscriptionsUrl: "wss://rpc.helius.xyz/?api-key=YOUR_KEY",
-  indexerApiEndpoint: "https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com",
+  indexerApiEndpoint: "https://indexer.api.umbraprivacy.com",
 });
 ```
 
