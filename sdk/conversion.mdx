@@ -5,7 +5,7 @@ description: "Upgrade an existing MXE-only encrypted balance to Shared encryptio
 
 ## Overview
 
-When a user registers their X25519 key after already having encrypted token accounts in MXE-only mode, those existing balances remain in MXE-only mode. `getConvertToSharedEncryptionFunction` upgrades them to **Shared mode** - re-encrypting the balance under both the Arcium MPC key and the user's X25519 key, enabling local balance queries in the future.
+When a user registers their X25519 key after already having encrypted token accounts in MXE-only mode, those existing balances remain in MXE-only mode. `getNetworkEncryptionToSharedEncryptionConverterFunction` upgrades them to **Shared mode** - re-encrypting the balance under both the Arcium MPC key and the user's X25519 key, enabling local balance queries in the future.
 
 <Note>
 This step is only necessary if you deposited tokens before registering your X25519 key (i.e., before calling `register({ confidential: true })`). Deposits made after X25519 registration automatically use Shared mode.
@@ -14,9 +14,9 @@ This step is only necessary if you deposited tokens before registering your X255
 ## Usage
 
 ```typescript
-import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
 
-const convert = getConvertToSharedEncryptionFunction({ client });
+const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
 
 const result = await convert(mints, optionalData?, callbacks?);
 ```
@@ -57,12 +57,12 @@ Skip reasons:
 ## Example
 
 ```typescript
-import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
-const convert = getConvertToSharedEncryptionFunction({ client });
+const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
 
 const result = await convert([USDC, USDT]);
 
@@ -75,6 +75,19 @@ for (const [mint, reason] of result.skipped) {
 }
 ```
 
+## Rotate Mint Encryption Key
+
+If a per-mint X25519 key may have been compromised, use `getMintEncryptionKeyRotatorFunction` to rotate it:
+
+```typescript
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
+
+const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
+const signature = await rotateMintKey(mint);
+```
+
+The account must already be in Shared mode. See [Key Rotation](/sdk/understanding-the-sdk/key-rotation) for details on when and how to rotate keys.
+
 ## When to Call This
 
 A typical onboarding flow checks whether conversion is needed after completing registration:
@@ -82,8 +95,8 @@ A typical onboarding flow checks whether conversion is needed after completing r
 ```typescript
 import {
   getUserRegistrationFunction,
-  getConvertToSharedEncryptionFunction,
-  getQueryEncryptedBalanceFunction,
+  getNetworkEncryptionToSharedEncryptionConverterFunction,
+  getEncryptedBalanceQuerierFunction,
 } from "@umbra-privacy/sdk";
 
 // 1. Register (ensures X25519 key is on-chain)
@@ -91,7 +104,7 @@ const register = getUserRegistrationFunction({ client });
 await register({ confidential: true, anonymous: true });
 
 // 2. Check which mints need conversion
-const queryBalance = getQueryEncryptedBalanceFunction({ client });
+const queryBalance = getEncryptedBalanceQuerierFunction({ client });
 const MINTS_TO_CHECK = [USDC, USDT];
 const balances = await queryBalance(MINTS_TO_CHECK);
 
@@ -101,7 +114,7 @@ const mxeOnlyMints = [...balances.entries()]
 
 if (mxeOnlyMints.length > 0) {
   // 3. Upgrade MXE-only balances to Shared mode
-  const convert = getConvertToSharedEncryptionFunction({ client });
+  const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
   const conversionResult = await convert(mxeOnlyMints);
   console.log(`Converted ${conversionResult.converted.size} balance(s) to Shared mode`);
 }

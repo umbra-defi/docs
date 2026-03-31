@@ -9,12 +9,12 @@ Compliance functions allow users to voluntarily grant selective viewing access t
 
 ---
 
-## `getCreateUserGrantedComplianceGrantFunction`
+## `getComplianceGrantIssuerFunction`
 
 ```typescript
-import { getCreateUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
 
-function getCreateUserGrantedComplianceGrantFunction(
+function getComplianceGrantIssuerFunction(
   args: { client: IUmbraClient },
 ): CreateUserGrantedComplianceGrantFunction
 ```
@@ -26,7 +26,7 @@ Factory function that returns a callable function to create a compliance grant o
 Creates a scoped viewing key grant, allowing the grantee to re-encrypt and view specific encrypted balances.
 
 ```typescript
-const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+const createGrant = getComplianceGrantIssuerFunction({ client });
 const signature = await createGrant({ granteeAddress, viewingKeyScope });
 ```
 
@@ -34,12 +34,12 @@ Returns `Promise<TransactionSignature>`.
 
 ---
 
-## `getDeleteUserGrantedComplianceGrantFunction`
+## `getComplianceGrantRevokerFunction`
 
 ```typescript
-import { getDeleteUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantRevokerFunction } from "@umbra-privacy/sdk";
 
-function getDeleteUserGrantedComplianceGrantFunction(
+function getComplianceGrantRevokerFunction(
   args: { client: IUmbraClient },
 ): DeleteUserGrantedComplianceGrantFunction
 ```
@@ -47,7 +47,7 @@ function getDeleteUserGrantedComplianceGrantFunction(
 Factory function that returns a callable function to revoke a compliance grant.
 
 ```typescript
-const deleteGrant = getDeleteUserGrantedComplianceGrantFunction({ client });
+const deleteGrant = getComplianceGrantRevokerFunction({ client });
 const signature = await deleteGrant({ granteeAddress, viewingKeyScope });
 ```
 
@@ -59,12 +59,12 @@ Revoking a grant prevents future re-encryption requests but does not invalidate 
 
 ---
 
-## `getQueryUserComplianceGrantFunction`
+## `getUserComplianceGrantQuerierFunction`
 
 ```typescript
-import { getQueryUserComplianceGrantFunction } from "@umbra-privacy/sdk";
+import { getUserComplianceGrantQuerierFunction } from "@umbra-privacy/sdk";
 
-function getQueryUserComplianceGrantFunction(args: {
+function getUserComplianceGrantQuerierFunction(args: {
   accountInfoProvider: AccountInfoProviderFunction;
 }): QueryUserComplianceGrantFunction
 ```
@@ -91,12 +91,12 @@ type ComplianceGrantQueryResult =
 
 ---
 
-## `getReencryptSharedCiphertextsUserGrantFunction`
+## `getSharedCiphertextReencryptorForUserGrantFunction`
 
 ```typescript
-import { getReencryptSharedCiphertextsUserGrantFunction } from "@umbra-privacy/sdk";
+import { getSharedCiphertextReencryptorForUserGrantFunction } from "@umbra-privacy/sdk";
 
-function getReencryptSharedCiphertextsUserGrantFunction(
+function getSharedCiphertextReencryptorForUserGrantFunction(
   args: { client: IUmbraClient },
 ): ReencryptSharedCiphertextsUserGrantFunction
 ```
@@ -106,7 +106,7 @@ Factory function that returns a callable function for a grantee to trigger re-en
 Requires an active compliance grant (created by the granter). Uses Arcium MPC for re-encryption.
 
 ```typescript
-const reencrypt = getReencryptSharedCiphertextsUserGrantFunction({ client });
+const reencrypt = getSharedCiphertextReencryptorForUserGrantFunction({ client });
 const signature = await reencrypt({ userAddress, granteeAddress, mint });
 ```
 

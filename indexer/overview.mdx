@@ -44,12 +44,12 @@ absolute_index = tree_index x 1_048_576 + insertion_index
 
 ## SDK Integration
 
-When you pass `indexerApiEndpoint` to `getUmbraClientFromSigner`, the SDK automatically constructs two internal providers:
+When you pass `indexerApiEndpoint` to `getUmbraClient`, the SDK automatically constructs two internal providers:
 
 - `client.fetchUtxoData` - calls `GET /v1/utxos` to retrieve ciphertext batches for decryption
 - `client.fetchMerkleProof` - calls `GET /v1/trees/{tree_index}/proof/{insertion_index}` for each claimable UTXO
 
-Both are consumed internally by `getFetchClaimableUtxosFunction`. You do not need to call the indexer directly when using the SDK.
+Both are consumed internally by `getClaimableUtxoScannerFunction`. You do not need to call the indexer directly when using the SDK.
 
 ## Planned Improvements
 

@@ -16,7 +16,7 @@ Hash the target leaf with each sibling in order and compare the final result to 
 
 ## Usage in the SDK
 
-The Umbra SDK calls this endpoint automatically via `getFetchClaimableUtxosFunction`. The proof is passed directly to the claim functions -- you do not need to call this endpoint manually when using the SDK.
+The Umbra SDK calls this endpoint automatically via `getClaimableUtxoScannerFunction`. The proof is passed directly to the claim functions -- you do not need to call this endpoint manually when using the SDK.
 
 If you are building a custom claim flow or integrating with the protocol directly, use this endpoint to fetch fresh proofs immediately before submitting a claim transaction.
 

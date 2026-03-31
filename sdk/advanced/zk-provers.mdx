@@ -33,8 +33,8 @@ import {
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
 } from "@umbra-privacy/web-zk-prover";
 import {
-  getCreateReceiverClaimableUtxoFromPublicBalanceFunction,
-  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getPublicBalanceToReceiverClaimableUtxoCreatorFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
 } from "@umbra-privacy/sdk";
 
 // 1. Create the provers you need (uses CDN asset provider by default)
@@ -42,12 +42,12 @@ const utxoProver = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
 const claimProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
 // 2. Pass them to SDK functions
-const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver: utxoProver },
 );
 
-const claimUtxo = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+const claimUtxo = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
   { zkProver: claimProver },
 );
@@ -128,13 +128,13 @@ Pass the prover as the second argument (`deps`) to the relevant factory function
 ```typescript
 import { getCreateSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 import {
-  getCreateSelfClaimableUtxoFromPublicBalanceFunction,
-  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  getPublicBalanceToSelfClaimableUtxoCreatorFunction,
+  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
 } from "@umbra-privacy/sdk";
 
 const zkProver = getCreateSelfClaimableUtxoFromPublicBalanceProver();
 
-const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToSelfClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
@@ -162,7 +162,7 @@ import type { IZkProverForReceiverClaimableUtxo } from "@umbra-privacy/sdk/inter
 const worker = new Worker(new URL("./prover-worker.ts", import.meta.url));
 const zkProver = wrap<IZkProverForReceiverClaimableUtxo>(worker);
 
-const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );

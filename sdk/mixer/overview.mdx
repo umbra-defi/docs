@@ -45,10 +45,10 @@ Each variant can be funded from two sources:
 
 This gives four factory functions in total:
 
-- `getCreateSelfClaimableUtxoFromEncryptedBalanceFunction` - source: encrypted balance, unlocker: you
-- `getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction` - source: encrypted balance, unlocker: recipient
-- `getCreateSelfClaimableUtxoFromPublicBalanceFunction` - source: ATA, unlocker: you
-- `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` - source: ATA, unlocker: recipient
+- `getEncryptedBalanceToSelfClaimableUtxoCreatorFunction` - source: encrypted balance, unlocker: you
+- `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` - source: encrypted balance, unlocker: recipient
+- `getPublicBalanceToSelfClaimableUtxoCreatorFunction` - source: ATA, unlocker: you
+- `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` - source: ATA, unlocker: recipient
 
 See [Creating UTXOs](/sdk/mixer/creating-utxos) for full API details.
 
@@ -80,7 +80,7 @@ See [Creating UTXOs](/sdk/mixer/creating-utxos) for full API details.
 UTXO discovery requires the Umbra indexer. Pass `indexerApiEndpoint` when constructing the client:
 
 ```typescript
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl: "...",
@@ -89,7 +89,7 @@ const client = await getUmbraClientFromSigner({
 });
 ```
 
-Without it, `getFetchClaimableUtxosFunction` will fail. The indexer is not required for creating UTXOs - only for discovering and claiming them.
+Without it, `getClaimableUtxoScannerFunction` will fail. The indexer is not required for creating UTXOs - only for discovering and claiming them.
 
 ## Privacy Considerations
 

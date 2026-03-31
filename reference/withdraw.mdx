@@ -3,28 +3,28 @@ title: "Withdrawal"
 description: "Direct withdrawal from an encrypted balance back to a public associated token account."
 ---
 
-## getDirectWithdrawIntoPublicBalanceV3Function
+## getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getDirectWithdrawIntoPublicBalanceV3Function(
-  args: GetWithdrawIntoPublicBalanceV3FunctionArgs,
-  deps?: GetWithdrawIntoPublicBalanceV3FunctionDeps,
-): WithdrawIntoPublicBalanceV3Function
+function getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction(
+  args: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs,
+  deps?: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps,
+): EncryptedBalanceToPublicBalanceDirectWithdrawerFunction
 ```
 
-Withdraws tokens from the caller's encrypted balance to a public associated token account (ATA). This is the primary withdrawal path - no ZK proof required. The withdrawal queues an Arcium MPC computation; the Arcium network processes it and calls back on-chain to execute the transfer.
+Withdraws tokens from the caller's encrypted balance to a public associated token account (ATA). This is the primary withdrawal path - no ZK proof required. The withdrawal queues an Arcium MPC computation; the Arcium network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
 ---
 
-### GetWithdrawIntoPublicBalanceV3FunctionArgs
+### GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs
 
 - `client: IUmbraClient`
 
 ---
 
-### GetWithdrawIntoPublicBalanceV3FunctionDeps
+### GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps
 
 All fields are optional.
 
@@ -36,26 +36,49 @@ All fields are optional.
 
 ### Returns
 
-`WithdrawIntoPublicBalanceV3Function`
+`EncryptedBalanceToPublicBalanceDirectWithdrawerFunction`
 
 ```typescript
-type WithdrawIntoPublicBalanceV3Function = (
+type EncryptedBalanceToPublicBalanceDirectWithdrawerFunction = (
   destinationAddress: Address,
   mint: Address,
   withdrawalAmount: U64,
-  options?: WithdrawIntoPublicBalanceV3Options,
-) => Promise<TransactionSignature>
+  options?: WithdrawOptions,
+) => Promise<WithdrawResult>
 ```
 
 - `destinationAddress: Address` - The public ATA recipient. Must be an initialised token account for `mint`.
 - `mint: Address` - Token mint address.
 - `withdrawalAmount: U64` - Amount in base token units to withdraw from the encrypted balance.
 
-### WithdrawIntoPublicBalanceV3Options
+### WithdrawOptions
 
 - `priorityFees?: U64` - Compute unit price in micro-lamports. Default: `0n`.
 - `purpose?: number` - Caller-defined purpose tag stored on-chain. Default: `0`.
 - `optionalData?: OptionalData32` - 32-byte caller metadata. Default: 32 zero bytes.
+- `awaitCallback?: boolean` - Whether to wait for the MPC callback. Default: `true`.
+- `skipPreflight?: boolean` - Skip Solana preflight simulation. Default: `false`.
+- `maxRetries?: number` - Max RPC retry attempts for transaction sending.
+- `accountInfoCommitment?: Commitment` - Per-call commitment for RPC account reads. Default: `"confirmed"`.
+- `epochInfoCommitment?: Commitment` - Per-call commitment for epoch info fetches. Default: `"confirmed"`.
+
+### WithdrawResult
+
+```typescript
+interface WithdrawResult {
+  queueSignature: TransactionSignature;
+  callbackSignature?: TransactionSignature;
+  callbackElapsedMs?: number;
+  rentClaimSignature?: TransactionSignature;
+  rentClaimError?: Error;
+}
+```
+
+- `queueSignature` - Signature of the handler (queue computation) transaction.
+- `callbackSignature` - Signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackElapsedMs` - Milliseconds spent waiting for the callback.
+- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
 
 ---
 
@@ -68,22 +91,23 @@ Throws `EncryptedWithdrawalError`. See [Errors](./errors#encryptedwithdrawalerro
 ### Example
 
 ```typescript
-import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
 
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
 
-const signature = await withdraw(
+const result = await withdraw(
   destinationAta,  // public ATA to receive tokens
   mintAddress,
   500_000n,        // amount in base units
 );
+console.log("Queue signature:", result.queueSignature);
 ```
 
 ---
 
 ## EncryptedWithdrawalError
 
-Thrown by `getDirectWithdrawIntoPublicBalanceV3Function`.
+Thrown by `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`.
 
 Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-send"`
 

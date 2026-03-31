@@ -75,7 +75,7 @@ Every major SDK operation throws a dedicated staged error. The `stage` field pin
 
 ### EncryptedDepositError
 
-Thrown by `getDirectDepositIntoEncryptedBalanceFunction`.
+Thrown by `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`.
 
 ```typescript
 class EncryptedDepositError extends UmbraError {
@@ -103,7 +103,7 @@ function isEncryptedDepositError(error: unknown): error is EncryptedDepositError
 
 ### EncryptedWithdrawalError
 
-Thrown by `getDirectWithdrawIntoPublicBalanceV3Function`.
+Thrown by `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`.
 
 ```typescript
 class EncryptedWithdrawalError extends UmbraError {
@@ -156,7 +156,7 @@ function isRegistrationError(error: unknown): error is RegistrationError;
 
 ### ConversionError
 
-Thrown by `getConvertToSharedEncryptionFunction` and `getRotateMintX25519EncryptionKeyFunction`.
+Thrown by `getNetworkEncryptionToSharedEncryptionConverterFunction` and `getMintEncryptionKeyRotatorFunction`.
 
 ```typescript
 class ConversionError extends UmbraError {
@@ -211,7 +211,7 @@ function isCreateUtxoError(error: unknown): error is CreateUtxoError;
 
 ### FetchUtxosError
 
-Thrown by `getFetchClaimableUtxosFunction`.
+Thrown by `getClaimableUtxoScannerFunction`.
 
 ```typescript
 class FetchUtxosError extends UmbraError {
@@ -259,7 +259,7 @@ function isClaimUtxoError(error: unknown): error is ClaimUtxoError;
 
 ### QueryError
 
-Thrown by `getQueryUserAccountFunction` and `getQueryEncryptedBalanceFunction`.
+Thrown by `getUserAccountQuerierFunction` and `getEncryptedBalanceQuerierFunction`.
 
 ```typescript
 class QueryError extends UmbraError {
@@ -443,7 +443,7 @@ function isTransactionSigningError(error: unknown): error is TransactionSigningE
 
 Thrown when the user declines to sign the master seed derivation message. Extends `TransactionSigningError`. Always has `wasRejected: true`. Error code: `"MASTER_SEED_SIGNING_REJECTED"`.
 
-This surfaces during the first operation that needs key material in a session - typically `register()`, or `getUmbraClientFromSigner()` in non-deferred mode.
+This surfaces during the first operation that needs key material in a session - typically `register()`, or `getUmbraClient()` in non-deferred mode.
 
 ```typescript
 class MasterSeedSigningRejectedError extends TransactionSigningError {

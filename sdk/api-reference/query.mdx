@@ -3,14 +3,14 @@ title: "Query API Reference"
 description: "Complete reference for read-only state query functions."
 ---
 
-## `getQueryUserAccountFunction`
+## `getUserAccountQuerierFunction`
 
 ```typescript
-import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
-function getQueryUserAccountFunction(args: {
+function getUserAccountQuerierFunction(args: {
   accountInfoProvider: AccountInfoProviderFunction;
-}): QueryUserAccountFunction
+}): UserAccountQuerierFunction
 ```
 
 Factory function returning a read-only query for any user's registration state.
@@ -18,8 +18,21 @@ Factory function returning a read-only query for any user's registration state.
 ### Returned Function
 
 ```typescript
-async function queryUserAccount(userAddress: Address): Promise<QueryUserAccountResult>
+async function queryUserAccount(
+  userAddress: Address,
+  options?: { commitment?: Commitment },
+): Promise<QueryUserAccountResult>
 ```
+
+### Parameters
+
+<ParamField path="userAddress" type="Address" required>
+  The wallet address to query.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level for the RPC account read. Per-call override.
+</ParamField>
 
 ### `QueryUserAccountResult`
 
@@ -57,14 +70,14 @@ type QueryUserAccountResult =
 
 ---
 
-## `getQueryEncryptedBalanceFunction`
+## `getEncryptedBalanceQuerierFunction`
 
 ```typescript
-import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
 
-function getQueryEncryptedBalanceFunction(args: {
+function getEncryptedBalanceQuerierFunction(args: {
   client: IUmbraClient;
-}): QueryEncryptedBalanceFunction
+}): EncryptedBalanceQuerierFunction
 ```
 
 Factory function returning a query for the signing user's encrypted balances across multiple mints.
@@ -74,10 +87,21 @@ Factory function returning a query for the signing user's encrypted balances acr
 ```typescript
 async function queryEncryptedBalance(
   mints: readonly Address[],
+  options?: { commitment?: Commitment },
 ): Promise<Map<Address, QueryEncryptedBalanceResult>>
 ```
 
 Queries the calling user's encrypted token account PDAs for each mint in the array. Returns a `Map` from mint address to result.
+
+### Parameters
+
+<ParamField path="mints" type="readonly Address[]" required>
+  Mint addresses to query.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level for the RPC account reads. Per-call override.
+</ParamField>
 
 ### `QueryEncryptedBalanceResult`
 

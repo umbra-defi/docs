@@ -7,20 +7,30 @@ description: "Read a user's on-chain Umbra account state and encrypted balance m
 
 Two query functions let you inspect on-chain state without modifying it:
 
-- **`getQueryUserAccountFunction`** - reads registration status and account metadata for any address
-- **`getQueryEncryptedBalanceFunction`** - reads encrypted balance metadata for the calling user across multiple mints
+- **`getUserAccountQuerierFunction`** - reads registration status and account metadata for any address
+- **`getEncryptedBalanceQuerierFunction`** - reads encrypted balance metadata for the calling user across multiple mints
 
 Both are read-only and do not require a wallet signing prompt.
 
 ## Query User Account
 
 ```typescript
-import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
-const query = getQueryUserAccountFunction({ client });
+const query = getUserAccountQuerierFunction({ client });
 
-const result = await query(userAddress);
+const result = await query(userAddress, options?);
 ```
+
+### Parameters
+
+<ParamField path="userAddress" type="Address" required>
+  The wallet address to query registration status for.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for the RPC account read. Overrides the default on a per-call basis.
+</ParamField>
 
 ### Return Value
 
@@ -89,12 +99,12 @@ if (data.isActiveForAnonymousUsage) {
 ## Query Encrypted Balance
 
 ```typescript
-import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
 
-const query = getQueryEncryptedBalanceFunction({ client });
+const query = getEncryptedBalanceQuerierFunction({ client });
 
 // Query your encrypted balances for one or more mints
-const balances = await query([USDC_MINT, USDT_MINT]);
+const balances = await query([USDC_MINT, USDT_MINT], options?);
 // Returns Map<Address, QueryEncryptedBalanceResult>
 ```
 
@@ -104,6 +114,10 @@ The function queries the calling user's own encrypted balances. Pass an array of
 
 <ParamField path="mints" type="Address[]" required>
   An array of SPL or Token-2022 mint addresses to query. The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for the RPC account reads. Overrides the default on a per-call basis.
 </ParamField>
 
 ### Return Value
@@ -126,12 +140,12 @@ The four states represent:
 ### Example
 
 ```typescript
-import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
-const query = getQueryEncryptedBalanceFunction({ client });
+const query = getEncryptedBalanceQuerierFunction({ client });
 const balances = await query([USDC, USDT]);
 
 for (const [mint, result] of balances) {
@@ -165,7 +179,7 @@ Shared-mode accounts return the decrypted balance automatically. MXE-mode accoun
 Before depositing to an external address, verify the recipient is registered:
 
 ```typescript
-const recipientQuery = getQueryUserAccountFunction({ client });
+const recipientQuery = getUserAccountQuerierFunction({ client });
 const recipientResult = await recipientQuery(recipientAddress);
 
 if (
@@ -185,7 +199,7 @@ For UI flows where you start registration and want to confirm it landed:
 
 ```typescript
 async function waitForRegistration(address: Address, maxAttempts = 10) {
-  const query = getQueryUserAccountFunction({ client });
+  const query = getUserAccountQuerierFunction({ client });
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const result = await query(address);
@@ -210,7 +224,7 @@ const MINTS = [
   "So11111111111111111111111111111111111111112",     // wSOL
 ];
 
-const query = getQueryEncryptedBalanceFunction({ client });
+const query = getEncryptedBalanceQuerierFunction({ client });
 const results = await query(MINTS);
 
 const activeBalances = [...results.entries()]

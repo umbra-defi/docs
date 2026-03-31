@@ -3,20 +3,20 @@ title: "Withdraw API Reference"
 description: "Complete reference for direct withdrawal from encrypted balance."
 ---
 
-## `getDirectWithdrawIntoPublicBalanceV3Function`
+## `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`
 
 ```typescript
-import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
 
-function getDirectWithdrawIntoPublicBalanceV3Function(
-  args: GetDirectWithdrawIntoPublicBalanceFunctionArgs,
-  deps?: GetDirectWithdrawIntoPublicBalanceFunctionDeps,
-): DirectWithdrawIntoPublicBalanceFunction
+function getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction(
+  args: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs,
+  deps?: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps,
+): EncryptedBalanceToPublicBalanceDirectWithdrawerFunction
 ```
 
 Factory function that returns a callable withdrawal function.
 
-### `GetDirectWithdrawIntoPublicBalanceFunctionArgs`
+### `GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -26,19 +26,22 @@ Factory function that returns a callable withdrawal function.
 
 ```typescript
 async function withdraw(
+  destinationAddress: Address,
   mint: Address,
   amount: bigint,
   options?: DirectWithdrawOptions,
-): Promise<TransactionSignature>
+): Promise<WithdrawResult>
 ```
 
-Moves tokens from the signer's encrypted balance back to their public ATA.
+Moves tokens from the signer's encrypted balance back to the destination's public ATA.
 
 Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - waits for both the handler transaction and the Arcium MPC callback transaction to confirm before resolving. Total wall-clock time is typically a few seconds.
 
-Returns the confirmed callback transaction signature.
-
 ### Parameters
+
+<ParamField path="destinationAddress" type="Address" required>
+  The Solana address to receive the withdrawn tokens. This is typically `client.signer.address`.
+</ParamField>
 
 <ParamField path="mint" type="Address" required>
   SPL or Token-2022 mint address. Must match a mint for which the signer has an existing encrypted balance.
@@ -56,11 +59,41 @@ Returns the confirmed callback transaction signature.
   32 bytes of optional metadata stored with the withdrawal. Defaults to zero bytes.
 </ParamField>
 
+<ParamField path="options.awaitCallback" type="boolean" default="true">
+  Whether to wait for the Arcium MPC callback transaction to confirm before resolving.
+</ParamField>
+
+<ParamField path="options.skipPreflight" type="boolean" default="false">
+  Skip Solana transaction preflight simulation.
+</ParamField>
+
+<ParamField path="options.maxRetries" type="number">
+  Maximum number of times the RPC node should retry sending the transaction.
+</ParamField>
+
+<ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level for RPC account reads. Per-call override.
+</ParamField>
+
+<ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level for epoch info fetches (Token-2022 fee schedule). Per-call override.
+</ParamField>
+
+### Return Value
+
+Returns `Promise<WithdrawResult>`:
+
+- `queueSignature` - Transaction signature of the handler (queue computation) transaction.
+- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackElapsedMs` - Milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
+- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
+
 ---
 
 ## Withdrawal Destination
 
-Tokens are always sent to the ATA associated with `client.signer.address` for the given mint. The destination cannot be changed. To send to a different address, use the [mixer flow](/sdk/mixer/overview).
+Tokens are sent to the ATA associated with `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail. To send to a different address anonymously, use the [mixer flow](/sdk/mixer/overview).
 
 ---
 
@@ -69,7 +102,7 @@ Tokens are always sent to the ATA associated with `client.signer.address` for th
 The withdrawal uses the dual-instruction pattern:
 
 1. Handler instruction - sent and confirmed immediately
-2. Arcium MPC computation - runs off-chain (typically 1–5 seconds)
+2. Arcium MPC computation - runs off-chain (typically 1-5 seconds)
 3. Callback instruction - sent and confirmed by the SDK after MPC completes
 
 The SDK's `await withdraw(...)` call spans all three steps.
@@ -84,7 +117,7 @@ Throws `EncryptedWithdrawalError` on failure.
 import { isEncryptedWithdrawalError } from "@umbra-privacy/sdk/errors";
 
 try {
-  await withdraw(mint, amount);
+  await withdraw(client.signer.address, mint, amount);
 } catch (err) {
   if (isEncryptedWithdrawalError(err)) {
     console.error("Stage:", err.stage, "Message:", err.message);

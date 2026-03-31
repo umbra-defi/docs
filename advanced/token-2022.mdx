@@ -31,11 +31,11 @@ The provider defaults to an RPC-based implementation constructed from `rpcUrl`. 
 
 ```typescript
 import {
-  getUmbraClientFromSigner,
+  getUmbraClient,
   getRpcBasedEpochInfoProvider,
 } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClientFromSigner(
+const client = await getUmbraClient(
   { signer, network, rpcUrl, rpcSubscriptionsUrl },
   {
     // Custom epoch info provider (e.g., for testing with a fixed epoch)
@@ -70,8 +70,8 @@ You do not need to do anything special to use Token-2022 mints. Simply pass the 
 ```typescript
 const TOKEN22_MINT = "TokenMintAddressHere...";
 
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
-const signature = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const result = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
 ```
 
 The SDK detects that the mint is a Token-2022 program account, checks for a transfer fee extension, and handles the fee deduction automatically.
@@ -80,8 +80,10 @@ The SDK detects that the mint is a Token-2022 program account, checks for a tran
 
 Transfer fee handling applies to these operations:
 
-- `getDirectDepositIntoEncryptedBalanceFunction` - fetches epoch info only when a Token-2022 transfer fee is detected
-- `getCreateSelfClaimableUtxoFromPublicBalanceFunction` - same
-- `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` - same
+- `getPublicBalanceToEncryptedBalanceDirectDepositorFunction` - fetches epoch info only when a Token-2022 transfer fee is detected
+- `getPublicBalanceToSelfClaimableUtxoCreatorFunction` - same
+- `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` - same
 
 Operations that draw from an encrypted balance rather than a public ATA are not affected by Token-2022 transfer fees, because the transfer happens within the Umbra program and does not cross the Token-2022 transfer fee boundary.
+
+Each of these functions accepts an `epochInfoCommitment` option (defaults to `"confirmed"`) to control the commitment level used when fetching the current epoch for fee schedule selection.

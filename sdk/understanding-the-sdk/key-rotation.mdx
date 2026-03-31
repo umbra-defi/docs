@@ -8,7 +8,7 @@ description: "Rotate derived keys using numeric offsets, and a complete map of w
 Key rotation is a distinct mechanism from dependency injection. Rather than replacing the generator function, you increment a numeric offset at client construction time. This causes the [KMAC256](/sdk/advanced/cryptography/kmac256) derivation to produce a completely different key for the same wallet, without changing any code.
 
 ```typescript
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl,
@@ -62,31 +62,31 @@ A complete map of which injectable deps each factory function accepts.
 
 ### Deposit
 
-**`getDirectDepositIntoEncryptedBalanceFunction`**
+**`getPublicBalanceToEncryptedBalanceDirectDepositorFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`, `getEpochInfo`
 
 ### Withdrawal
 
-**`getDirectWithdrawIntoPublicBalanceV3Function`**
+**`getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 
 ### Query
 
-**`getQueryUserAccountFunction`**
+**`getUserAccountQuerierFunction`**
 - `accountInfoProvider`
 
-**`getQueryEncryptedBalanceFunction`**
+**`getEncryptedBalanceQuerierFunction`**
 - `accountInfoProvider`
 - `rcDecryptor` - override to provide a custom Rescue cipher decryption backend
 
-**`getFetchClaimableUtxosFunction`**
+**`getClaimableUtxoScannerFunction`**
 - `accountInfoProvider`
 - `merkleProofFetcher` - override to fetch Merkle proofs from a custom indexer
 - `utxoDataFetcher` - override to fetch UTXO data from a custom indexer
 
 ### UTXO Creation - from Encrypted Balance
 
-**`getCreateSelfClaimableUtxoFromEncryptedBalanceFunction`**
+**`getEncryptedBalanceToSelfClaimableUtxoCreatorFunction`**
 - `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`
 - `masterViewingKeyGenerator`, `masterViewingKeyBlindingFactorGenerator`
 - `poseidonPrivateKeyGenerator`, `poseidonBlindingFactorGenerator`
@@ -102,39 +102,39 @@ A complete map of which injectable deps each factory function accepts.
 - `getUtcNow`, `generateRandomU256`, `getRandomComputationOffset`
 - `zkProver` (`IZkProverForSelfClaimableUtxo`) - **required**
 
-**`getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction`**
+**`getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction`**
 - Same set as self-claimable from encrypted balance
 - `zkProver` (`IZkProverForReceiverClaimableUtxo`) - **required**
 
 ### UTXO Creation - from Public Balance
 
-**`getCreateSelfClaimableUtxoFromPublicBalanceFunction`**
+**`getPublicBalanceToSelfClaimableUtxoCreatorFunction`**
 - `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`
 - `masterViewingKeyGenerator`, `poseidonPrivateKeyGenerator`
 - Ephemeral UTXO key generators (same as above)
 - Cryptographic operation functions (Poseidon, Rescue, AES, Fiat-Shamir)
 - `zkProver` (`IZkProverForSelfClaimableUtxo`) - **required**
 
-**`getCreateReceiverClaimableUtxoFromPublicBalanceFunction`**
+**`getPublicBalanceToReceiverClaimableUtxoCreatorFunction`**
 - Same set as self-claimable from public balance
 - `zkProver` (`IZkProverForReceiverClaimableUtxo`) - **required**
 
 ### UTXO Claiming
 
-**`getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction`**
+**`getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 - Key derivation generators (master viewing key, Poseidon, X25519)
 - Ephemeral UTXO key generators
 - Cryptographic operation functions
 - `zkProver` (`IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`) - **required**
 
-**`getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction`**
+**`getSelfClaimableUtxoToEncryptedBalanceClaimerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 - Key derivation generators
 - Cryptographic operation functions
 - `zkProver` (`IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`) - **required**
 
-**`getClaimSelfClaimableUtxoIntoPublicBalanceFunction`**
+**`getSelfClaimableUtxoToPublicBalanceClaimerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 - Key derivation generators
 - Cryptographic operation functions
@@ -142,25 +142,25 @@ A complete map of which injectable deps each factory function accepts.
 
 ### Conversion
 
-**`getConvertToSharedEncryptionFunction`**
+**`getNetworkEncryptionToSharedEncryptionConverterFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 
-**`getRotateMintX25519EncryptionKeyFunction`**
+**`getMintEncryptionKeyRotatorFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 - `mintX25519KeypairGenerator` - override to supply the new keypair directly
 
 ### Compliance Grants
 
-**`getCreateUserGrantedComplianceGrantFunction`**
+**`getComplianceGrantIssuerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 
-**`getDeleteUserGrantedComplianceGrantFunction`**
+**`getComplianceGrantRevokerFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 
-**`getReencryptSharedCiphertextsUserGrantFunction`**
+**`getSharedCiphertextReencryptorForUserGrantFunction`**
 - `accountInfoProvider`, `getLatestBlockhash`, `transactionForwarder`
 
-**`getQueryUserComplianceGrantFunction`**
+**`getUserComplianceGrantQuerierFunction`**
 - `accountInfoProvider`
 
 ### Miscellaneous

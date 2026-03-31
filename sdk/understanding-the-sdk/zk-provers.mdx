@@ -39,7 +39,7 @@ interface IZkProverForSelfClaimableUtxo {
 }
 ```
 
-Required by: `getCreateSelfClaimableUtxoFromEncryptedBalanceFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForSelfClaimableUtxoFromPublicBalance` below.
+Required by: `getEncryptedBalanceToSelfClaimableUtxoCreatorFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForSelfClaimableUtxoFromPublicBalance` below.
 
 ---
 
@@ -55,7 +55,7 @@ interface IZkProverForReceiverClaimableUtxo {
 }
 ```
 
-Required by: `getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForReceiverClaimableUtxoFromPublicBalance` below.
+Required by: `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` deps (`zkProver`). For public-balance UTXO creation, see `ZkProverForReceiverClaimableUtxoFromPublicBalance` below.
 
 ---
 
@@ -72,7 +72,7 @@ interface IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance {
 }
 ```
 
-Required by: `getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction` deps (`zkProver`).
+Required by: `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction` deps (`zkProver`).
 
 ---
 
@@ -91,7 +91,7 @@ interface IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance {
 }
 ```
 
-Required by: `getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction` deps (`zkProver`). This prover accepts a batch size `nLeaves` (1–16) because there are 16 distinct circuits, one per batch size.
+Required by: `getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction` deps (`zkProver`). This prover accepts a batch size `nLeaves` (1–16) because there are 16 distinct circuits, one per batch size.
 
 ---
 
@@ -108,7 +108,7 @@ interface IZkProverForClaimSelfClaimableUtxoIntoPublicBalance {
 }
 ```
 
-Required by: `getClaimSelfClaimableUtxoIntoPublicBalanceFunction` deps (`zkProver`).
+Required by: `getSelfClaimableUtxoToPublicBalanceClaimerFunction` deps (`zkProver`).
 
 ---
 
@@ -124,7 +124,7 @@ interface ZkProverForSelfClaimableUtxoFromPublicBalance {
 }
 ```
 
-Required by: `getCreateSelfClaimableUtxoFromPublicBalanceFunction` deps (`zkProver`).
+Required by: `getPublicBalanceToSelfClaimableUtxoCreatorFunction` deps (`zkProver`).
 
 ---
 
@@ -140,7 +140,7 @@ interface ZkProverForReceiverClaimableUtxoFromPublicBalance {
 }
 ```
 
-Required by: `getCreateReceiverClaimableUtxoFromPublicBalanceFunction` deps (`zkProver`).
+Required by: `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` deps (`zkProver`).
 
 ---
 

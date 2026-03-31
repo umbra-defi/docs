@@ -7,7 +7,7 @@ This reference covers the full public API surface of `@umbra-privacy/sdk`. Pages
 
 ## Import Paths
 
-- `@umbra-privacy/sdk` - `getUmbraClientFromSigner`, all service factory functions, cryptographic primitives
+- `@umbra-privacy/sdk` - `getUmbraClient`, all service factory functions, cryptographic primitives
 - `@umbra-privacy/sdk/errors` - All error classes, type guards, and stage union types
 - `@umbra-privacy/sdk/types` - Branded primitive types and assertion functions
 - `@umbra-privacy/sdk/interfaces` - TypeScript function type definitions
@@ -46,14 +46,14 @@ Types referenced across all pages:
 - `RcEncryptionNonce` - Rescue cipher encryption nonce (branded `Uint8Array`).
 - `OptionalData32` - 32-byte `Uint8Array` for caller-defined metadata attached to on-chain instructions. Defaults to 32 zero bytes when omitted.
 - `TransactionCallbacks` - `{ pre?: (tx: CompiledTransaction) => Promise<void>; post?: (tx: CompiledTransaction, sig: TransactionSignature) => Promise<void> }`. Hooks invoked before signing and after confirmation.
-- `IUmbraClient` - The client configuration object produced by `getUmbraClientFromSigner`. Passed to every factory function as `args.client`.
+- `IUmbraClient` - The client configuration object produced by `getUmbraClient`. Passed to every factory function as `args.client`.
 - `Network` - `"mainnet" | "devnet" | "localnet"`.
 
 ---
 
 ## Pages in This Reference
 
-- [Client](/reference/client) - `getUmbraClientFromSigner`, `IUmbraClient`, `IUmbraSigner`
+- [Client](/reference/client) - `getUmbraClient`, `IUmbraClient`, `IUmbraSigner`
 - [Registration](/reference/registration) - User registration, key rotation, seed updates, staged fund recovery
 - [Deposit](/reference/deposit) - Direct deposit, self-claimable and receiver-claimable UTXO creation
 - [Withdrawal](/reference/withdraw) - Direct withdrawal from encrypted balance to public balance

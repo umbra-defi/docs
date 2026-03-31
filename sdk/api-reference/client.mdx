@@ -1,22 +1,26 @@
 ---
 title: "Client API Reference"
-description: "Complete reference for getUmbraClientFromSigner and the IUmbraClient interface."
+description: "Complete reference for getUmbraClient and the IUmbraClient interface."
 ---
 
-## `getUmbraClientFromSigner`
+## `getUmbraClient`
 
 ```typescript
-import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
-async function getUmbraClientFromSigner(
-  args: GetUmbraClientFromSignerArgs,
-  deps?: GetUmbraClientFromSignerDeps,
+async function getUmbraClient(
+  args: GetUmbraClientArgs,
+  deps?: GetUmbraClientDeps,
 ): Promise<IUmbraClient>
 ```
 
 Factory function that constructs an `IUmbraClient`. All Umbra SDK service functions accept a client and use it as their shared context.
 
-### `GetUmbraClientFromSignerArgs`
+<Note>
+In v2.0.x, there is no client-level `commitment` parameter. Instead, each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment` and `epochInfoCommitment`). Both default to `"confirmed"`.
+</Note>
+
+### `GetUmbraClientArgs`
 
 <ParamField path="signer" type="IUmbraSigner" required>
   The wallet signer. See [Wallet Adapters](/sdk/wallet-adapters) for adapter options.
@@ -38,10 +42,6 @@ Factory function that constructs an `IUmbraClient`. All Umbra SDK service functi
   Umbra indexer base URL. Required for all mixer operations. Omit for deposit/withdraw-only usage.
 </ParamField>
 
-<ParamField path="commitment" type='"processed" | "confirmed" | "finalized"' default='"confirmed"'>
-  Transaction confirmation level.
-</ParamField>
-
 <ParamField path="deferMasterSeedSignature" type="boolean" default="true">
   When `true` (default): master seed derivation is lazy - the wallet prompt fires on first use. When `false`: master seed is eagerly derived at construction time, before the returned `Promise` resolves.
 </ParamField>
@@ -56,7 +56,7 @@ Factory function that constructs an `IUmbraClient`. All Umbra SDK service functi
   Version specifier overrides for protocol, algorithm, and scheme versioning. Used for key space migrations. Leave unset unless instructed.
 </ParamField>
 
-### `GetUmbraClientFromSignerDeps`
+### `GetUmbraClientDeps`
 
 <ParamField path="deps.accountInfoProvider" type="AccountInfoProviderFunction">
   Override the account fetcher. Defaults to RPC-based fetcher built from `rpcUrl`.
@@ -90,7 +90,7 @@ Factory function that constructs an `IUmbraClient`. All Umbra SDK service functi
 
 ## `IUmbraClient`
 
-The client object returned by `getUmbraClientFromSigner`. All fields are read-only.
+The client object returned by `getUmbraClient`. All fields are read-only.
 
 ### Identity and Network
 
@@ -173,12 +173,6 @@ Each derived key type has its own `{ load, store, generate }` triple on the clie
 - `client.randomCommitmentFactor` - random factor for polynomial commitments
 
 See [Key Derivation](/sdk/advanced/key-derivation) for a full explanation of the key hierarchy.
-
-### Commitment Level
-
-<ResponseField name="commitment" type='"processed" | "confirmed" | "finalized" | undefined'>
-  The configured commitment level. `undefined` falls back to `"confirmed"`.
-</ResponseField>
 
 ---
 

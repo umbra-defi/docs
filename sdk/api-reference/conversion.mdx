@@ -3,20 +3,20 @@ title: "Conversion API Reference"
 description: "Complete reference for converting MXE-only encrypted balances to Shared mode."
 ---
 
-## `getConvertToSharedEncryptionFunction`
+## `getNetworkEncryptionToSharedEncryptionConverterFunction`
 
 ```typescript
-import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
 
-function getConvertToSharedEncryptionFunction(
-  args: GetConvertToSharedEncryptionFunctionArgs,
-  deps?: GetConvertToSharedEncryptionFunctionDeps,
-): ConvertToSharedEncryptionFunction
+function getNetworkEncryptionToSharedEncryptionConverterFunction(
+  args: GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs,
+  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
+): NetworkEncryptionToSharedEncryptionConverterFunction
 ```
 
 Factory function that returns a callable conversion function.
 
-### `GetConvertToSharedEncryptionFunctionArgs`
+### `GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance. Must have an X25519 key registered on-chain (via `register({ confidential: true })`).
@@ -61,6 +61,55 @@ type ConvertToSharedEncryptionSkipReason =
   | "not_initialised"        // Encrypted balance exists but is not initialized
   | "already_shared"         // Encrypted balance is already in Shared mode
   | "balance_not_initialised"; // Arcium balance not yet initialized
+```
+
+---
+
+## `getMintEncryptionKeyRotatorFunction`
+
+```typescript
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
+
+function getMintEncryptionKeyRotatorFunction(
+  args: GetMintEncryptionKeyRotatorFunctionArgs,
+  deps?: GetMintEncryptionKeyRotatorFunctionDeps,
+): MintEncryptionKeyRotatorFunction
+```
+
+Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
+
+### `GetMintEncryptionKeyRotatorFunctionArgs`
+
+<ParamField path="client" type="IUmbraClient" required>
+  The Umbra client instance.
+</ParamField>
+
+### `GetMintEncryptionKeyRotatorFunctionDeps`
+
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction` - Override the per-mint X25519 keypair derivation.
+
+### Returned Function
+
+```typescript
+async function rotateMintKey(
+  mint: Address,
+  optionalData?: Uint8Array,
+  callbacks?: TransactionCallbacks,
+): Promise<TransactionSignature>
+```
+
+- `mint: Address` - The token mint whose X25519 key to rotate.
+
+### Example
+
+```typescript
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
+
+const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
+const signature = await rotateMintKey(usdcMint);
 ```
 
 ---

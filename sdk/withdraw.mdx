@@ -9,9 +9,9 @@ The `withdraw` operation is the reverse of a deposit. It moves tokens from a use
 
 ```
 Encrypted Balance (on-chain)
-          │
-          ▼
-  Umbra Vault (on-chain SPL)  ──withdraw──►  Your Public ATA
+          |
+          v
+  Umbra Vault (on-chain SPL)  --withdraw-->  Your Public ATA
 ```
 
 Arcium MPC verifies the withdrawal authorization. The operation follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK waits for both the handler and the callback transactions to confirm before returning.
@@ -19,11 +19,11 @@ Arcium MPC verifies the withdrawal authorization. The operation follows the [dua
 ## Usage
 
 ```typescript
-import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
 
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
 
-const signature = await withdraw(
+const result = await withdraw(
   destinationAddress, // where tokens go (typically client.signer.address)
   mint,               // SPL or Token-2022 mint address
   amount,             // amount in native token units (U64)
@@ -53,21 +53,48 @@ const signature = await withdraw(
   32 bytes of arbitrary metadata stored with the withdrawal. Defaults to all zeros.
 </ParamField>
 
+<ParamField path="options.awaitCallback" type="boolean" default="true">
+  Whether to wait for the Arcium MPC callback transaction to confirm before resolving. When `true`, the returned `WithdrawResult` includes `callbackSignature` and `callbackElapsedMs`. When `false`, returns immediately after the handler (queue) transaction confirms.
+</ParamField>
+
+<ParamField path="options.skipPreflight" type="boolean" default="false">
+  Skip Solana transaction preflight simulation.
+</ParamField>
+
+<ParamField path="options.maxRetries" type="number">
+  Maximum number of times the RPC node should retry sending the transaction.
+</ParamField>
+
+<ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for RPC account reads during withdrawal preparation. Overrides the default on a per-call basis.
+</ParamField>
+
+<ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for fetching epoch info (Token-2022 transfer fee schedule). Overrides the default on a per-call basis.
+</ParamField>
+
 ## Return Value
 
-Returns a `Promise<TransactionSignature>` - the signature of the confirmed withdrawal transaction (the callback instruction).
+Returns a `Promise<WithdrawResult>`. The `WithdrawResult` object contains:
+
+- `queueSignature` - The transaction signature of the handler (queue computation) transaction.
+- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `awaitCallback` is `true` (the default).
+- `callbackElapsedMs` - Wall-clock milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
+- `rentClaimSignature` - Transaction signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error encountered during rent reclaim, if any. The withdrawal itself still succeeded.
 
 ## Example
 
 ```typescript
-import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
 
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-const signature = await withdraw(client.signer.address, USDC, 50_000_000n); // 50 USDC
-console.log("Withdrawal confirmed:", signature);
+const result = await withdraw(client.signer.address, USDC, 50_000_000n); // 50 USDC
+console.log("Queue signature:", result.queueSignature);
+console.log("Callback signature:", result.callbackSignature);
 ```
 
 ## Withdrawal Destination
@@ -82,7 +109,7 @@ Withdrawal errors are typed with a `stage` field identifying exactly where in th
 import { isEncryptedWithdrawalError } from "@umbra-privacy/sdk/errors";
 
 try {
-  const signature = await withdraw(mint, amount);
+  const result = await withdraw(client.signer.address, mint, amount);
 } catch (err) {
   if (isEncryptedWithdrawalError(err)) {
     switch (err.stage) {

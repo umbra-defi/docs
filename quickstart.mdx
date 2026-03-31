@@ -44,9 +44,9 @@ An in-memory keypair is ephemeral - it disappears when your process exits. Use a
 ## 3. Create the Umbra Client
 
 ```typescript
-import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl: "https://api.mainnet-beta.solana.com",
@@ -56,11 +56,11 @@ const client = await getUmbraClientFromSigner({
 ```
 
 <Note>
-The Umbra program address is different on devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
+The Umbra program address differs between devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
 </Note>
 
 <Note>
-Client construction is **synchronous and instant**. The wallet signing prompt does not appear until an operation requires the master seed - typically at your first `register()` or `deposit()` call.
+The first operation that requires the master seed (typically `register()` or `deposit()`) will prompt the user to sign a consent message. Subsequent operations reuse the cached seed without re-prompting.
 </Note>
 
 ## 4. Register Your Account
@@ -88,20 +88,21 @@ console.log(`Registered in ${signatures.length} transaction(s)`);
 Shield an SPL or Token-2022 token balance by moving it from your public wallet into an encrypted account.
 
 ```typescript
-import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
 const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
 const amount = 1_000_000n; // 1 token (6 decimals)
 
-const signature = await deposit(
+const result = await deposit(
   client.signer.address, // deposit into your own encrypted account
   MINT,
   amount,
 );
 
-console.log("Deposit confirmed:", signature);
+console.log("Deposit queued:", result.queueSignature);
+console.log("Callback confirmed:", result.callbackSignature);
 ```
 
 ## 6. Withdraw Tokens
@@ -109,17 +110,18 @@ console.log("Deposit confirmed:", signature);
 Move tokens back from your encrypted account to your public wallet.
 
 ```typescript
-import { getDirectWithdrawIntoPublicBalanceV3Function } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
 
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
 
-const signature = await withdraw(
+const result = await withdraw(
   client.signer.address, // destination address
   MINT,
   amount,
 );
 
-console.log("Withdrawal confirmed:", signature);
+console.log("Withdrawal queued:", result.queueSignature);
+console.log("Callback confirmed:", result.callbackSignature);
 ```
 
 ## 7. Create a Receiver-Claimable UTXO
@@ -131,12 +133,12 @@ UTXO creation requires a `zkProver` dependency for Groth16 proof generation. Ins
 </Note>
 
 ```typescript
-import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
 import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
 
 const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
 
-const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
@@ -156,14 +158,14 @@ console.log("UTXO created:", signatures[0]);
 As the recipient, scan the Merkle tree for UTXOs addressed to your X25519 key. The SDK attempts to decrypt each ciphertext and returns only those belonging to you.
 
 ```typescript
-import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
 
-const fetchUtxos = getFetchClaimableUtxosFunction({ client });
+const fetchUtxos = getClaimableUtxoScannerFunction({ client });
 
 // Scan tree 0 from the start - pass your last seen index to resume
-const { receiver } = await fetchUtxos(0, 0);
+const { received } = await fetchUtxos(0, 0);
 
-console.log("Received UTXOs:", receiver.length);
+console.log("Received UTXOs:", received.length);
 ```
 
 ## 9. Claim the UTXO
@@ -172,7 +174,7 @@ Present a ZK proof on-chain to burn the UTXO and receive the tokens. Claiming in
 
 ```typescript
 import {
-  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
 import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
@@ -182,14 +184,14 @@ const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
 
-const result = await claim([receiver[0]]);
+const claimResult = await claim([received[0]]);
 
-console.log("Claimed into encrypted balance:", result.signatures);
+console.log("Claimed into encrypted balance:", claimResult);
 ```
 
 ## Full Example
@@ -197,13 +199,13 @@ console.log("Claimed into encrypted balance:", result.signatures);
 ```typescript
 import {
   createInMemorySigner,
-  getUmbraClientFromSigner,
+  getUmbraClient,
   getUserRegistrationFunction,
-  getDirectDepositIntoEncryptedBalanceFunction,
-  getDirectWithdrawIntoPublicBalanceV3Function,
-  getCreateReceiverClaimableUtxoFromPublicBalanceFunction,
-  getFetchClaimableUtxosFunction,
-  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getPublicBalanceToEncryptedBalanceDirectDepositorFunction,
+  getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction,
+  getPublicBalanceToReceiverClaimableUtxoCreatorFunction,
+  getClaimableUtxoScannerFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
 import {
@@ -216,7 +218,7 @@ async function main() {
   const signer = await createInMemorySigner();
 
   // 2. Client
-  const client = await getUmbraClientFromSigner({
+  const client = await getUmbraClient({
     signer,
     network: "mainnet",
     rpcUrl: "https://api.mainnet-beta.solana.com",
@@ -231,19 +233,21 @@ async function main() {
   const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
 
   // 4. Deposit into encrypted balance
-  const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
-  await deposit(signer.address, MINT, 1_000_000n);
+  const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+  const depositResult = await deposit(signer.address, MINT, 1_000_000n);
+  console.log("Deposited:", depositResult.queueSignature);
 
   // 5. Withdraw back to public wallet
-  const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
-  await withdraw(signer.address, MINT, 1_000_000n);
+  const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
+  const withdrawResult = await withdraw(signer.address, MINT, 1_000_000n);
+  console.log("Withdrawn:", withdrawResult.queueSignature);
 
   // 6. Set up ZK provers
   const utxoProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
   const claimProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
   // 7. Create a receiver-claimable UTXO
-  const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+  const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
     { client },
     { zkProver: utxoProver },
   );
@@ -255,21 +259,21 @@ async function main() {
   });
 
   // 8. Fetch UTXOs addressed to this wallet (as the recipient)
-  const fetchUtxos = getFetchClaimableUtxosFunction({ client });
-  const { receiver } = await fetchUtxos(0, 0);
+  const fetchUtxos = getClaimableUtxoScannerFunction({ client });
+  const { received } = await fetchUtxos(0, 0);
 
   // 9. Claim the first received UTXO into an encrypted balance
   const relayer = getUmbraRelayer({
     apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
   });
 
-  if (receiver.length > 0) {
-    const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+  if (received.length > 0) {
+    const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
       { client },
       { zkProver: claimProver, relayer },
     );
-    const result = await claim([receiver[0]]);
-    console.log("Claimed:", result.signatures);
+    const claimResult = await claim([received[0]]);
+    console.log("Claimed:", claimResult);
   }
 }
 

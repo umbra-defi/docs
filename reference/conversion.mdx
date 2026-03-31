@@ -3,26 +3,26 @@ title: "Conversion"
 description: "Convert encrypted token accounts from MXE mode to shared mode, and rotate per-mint X25519 encryption keys."
 ---
 
-## getConvertToSharedEncryptionFunction
+## getNetworkEncryptionToSharedEncryptionConverterFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getConvertToSharedEncryptionFunction(
-  args: GetConvertToSharedEncryptionFunctionArgs,
-  deps?: GetConvertToSharedEncryptionFunctionDeps,
-): ConvertToSharedEncryptionFunction
+function getNetworkEncryptionToSharedEncryptionConverterFunction(
+  args: GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs,
+  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
+): NetworkEncryptionToSharedEncryptionConverterFunction
 ```
 
 Converts one or more encrypted token accounts from MXE-mode (network-decryptable only) to shared-mode (user-decryptable). Conversion is per-mint and involves an on-chain Arcium MPC computation. Mints that are already in shared mode, uninitialized, or non-existent are skipped rather than erroring.
 
 ---
 
-### GetConvertToSharedEncryptionFunctionArgs
+### GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetConvertToSharedEncryptionFunctionDeps
+### GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `getLatestBlockhash?: GetLatestBlockhash`
@@ -30,10 +30,10 @@ Converts one or more encrypted token accounts from MXE-mode (network-decryptable
 
 ### Returns
 
-`ConvertToSharedEncryptionFunction`
+`NetworkEncryptionToSharedEncryptionConverterFunction`
 
 ```typescript
-type ConvertToSharedEncryptionFunction = (
+type NetworkEncryptionToSharedEncryptionConverterFunction = (
   mints: readonly Address[],
   optionalData?: OptionalData32,
   callbacks?: TransactionCallbacks,
@@ -70,9 +70,9 @@ Throws `ConversionError` if any non-skippable error occurs. See [Errors](./error
 ### Example
 
 ```typescript
-import { getConvertToSharedEncryptionFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
 
-const convert = getConvertToSharedEncryptionFunction({ client });
+const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
 const result = await convert([usdcMint, solMint]);
 
 for (const [mint, sig] of result.converted) {
@@ -85,26 +85,26 @@ for (const [mint, reason] of result.skipped) {
 
 ---
 
-## getRotateMintX25519EncryptionKeyFunction
+## getMintEncryptionKeyRotatorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getRotateMintX25519EncryptionKeyFunction(
-  args: GetRotateMintX25519EncryptionKeyFunctionArgs,
-  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
-): RotateMintX25519EncryptionKeyFunction
+function getMintEncryptionKeyRotatorFunction(
+  args: GetMintEncryptionKeyRotatorFunctionArgs,
+  deps?: GetMintEncryptionKeyRotatorFunctionDeps,
+): MintEncryptionKeyRotatorFunction
 ```
 
 Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
 
 ---
 
-### GetRotateMintX25519EncryptionKeyFunctionArgs
+### GetMintEncryptionKeyRotatorFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetRotateMintX25519EncryptionKeyFunctionDeps
+### GetMintEncryptionKeyRotatorFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `getLatestBlockhash?: GetLatestBlockhash`
@@ -113,10 +113,10 @@ Rotates the X25519 encryption key for a specific mint's shared-mode encrypted to
 
 ### Returns
 
-`RotateMintX25519EncryptionKeyFunction`
+`MintEncryptionKeyRotatorFunction`
 
 ```typescript
-type RotateMintX25519EncryptionKeyFunction = (
+type MintEncryptionKeyRotatorFunction = (
   mint: Address,
   optionalData?: OptionalData32,
   callbacks?: TransactionCallbacks,
@@ -134,9 +134,9 @@ Throws `ConversionError`. See [Errors](./errors#conversionerror).
 ### Example
 
 ```typescript
-import { getRotateMintX25519EncryptionKeyFunction } from "@umbra-privacy/sdk";
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
 
-const rotateMintKey = getRotateMintX25519EncryptionKeyFunction({ client });
+const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
 const signature = await rotateMintKey(usdcMint);
 ```
 

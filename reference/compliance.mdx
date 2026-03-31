@@ -10,12 +10,12 @@ Compliance grants allow authorized third parties (regulators, compliance tools) 
 
 ---
 
-## getCreateUserGrantedComplianceGrantFunction
+## getComplianceGrantIssuerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getCreateUserGrantedComplianceGrantFunction(
+function getComplianceGrantIssuerFunction(
   args: GetCreateUserGrantedComplianceGrantFunctionArgs,
   deps?: GetCreateUserGrantedComplianceGrantFunctionDeps,
 ): CreateUserGrantedComplianceGrantFunction
@@ -56,9 +56,9 @@ type CreateUserGrantedComplianceGrantFunction = (
 ### Example
 
 ```typescript
-import { getCreateUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
 
-const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+const createGrant = getComplianceGrantIssuerFunction({ client });
 const signature = await createGrant(
   receiverAddress,
   granterX25519PublicKey,
@@ -69,12 +69,12 @@ const signature = await createGrant(
 
 ---
 
-## getDeleteUserGrantedComplianceGrantFunction
+## getComplianceGrantRevokerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getDeleteUserGrantedComplianceGrantFunction(
+function getComplianceGrantRevokerFunction(
   args: GetDeleteUserGrantedComplianceGrantFunctionArgs,
   deps?: GetDeleteUserGrantedComplianceGrantFunctionDeps,
 ): DeleteUserGrantedComplianceGrantFunction
@@ -111,12 +111,12 @@ Parameters are identical to `CreateUserGrantedComplianceGrantFunction` - pass th
 
 ---
 
-## getQueryUserComplianceGrantFunction
+## getUserComplianceGrantQuerierFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getQueryUserComplianceGrantFunction(
+function getUserComplianceGrantQuerierFunction(
   args: GetQueryUserComplianceGrantFunctionArgs,
   deps?: GetQueryUserComplianceGrantFunctionDeps,
 ): QueryUserComplianceGrantFunction
@@ -250,15 +250,15 @@ type ReencryptMxeCiphertextsNetworkGrantFunction = (
 
 ---
 
-## getReencryptSharedCiphertextsNetworkGrantFunction
+## getSharedCiphertextReencryptorForNetworkGrantFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getReencryptSharedCiphertextsNetworkGrantFunction(
-  args: GetReencryptSharedCiphertextsNetworkGrantFunctionArgs,
-  deps?: GetReencryptSharedCiphertextsNetworkGrantFunctionDeps,
-): ReencryptSharedCiphertextsNetworkGrantFunction
+function getSharedCiphertextReencryptorForNetworkGrantFunction(
+  args: GetSharedCiphertextReencryptorForNetworkGrantFunctionArgs,
+  deps?: GetSharedCiphertextReencryptorForNetworkGrantFunctionDeps,
+): SharedCiphertextReencryptorForNetworkGrantFunction
 ```
 
 Re-encrypts shared-mode ciphertexts under a network shared grant.
@@ -285,12 +285,12 @@ type ReencryptSharedCiphertextsNetworkGrantFunction = (
 
 ---
 
-## getReencryptSharedCiphertextsUserGrantFunction
+## getSharedCiphertextReencryptorForUserGrantFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getReencryptSharedCiphertextsUserGrantFunction(
+function getSharedCiphertextReencryptorForUserGrantFunction(
   args: GetReencryptSharedCiphertextsUserGrantFunctionArgs,
   deps?: GetReencryptSharedCiphertextsUserGrantFunctionDeps,
 ): ReencryptSharedCiphertextsUserGrantFunction

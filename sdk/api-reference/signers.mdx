@@ -22,6 +22,8 @@ const signer = await createInMemorySigner();
 console.log(signer.address); // base58 public key
 ```
 
+**Alias:** `generateKeyPairSigner()` is re-exported as a convenience alias for `createInMemorySigner()`.
+
 ---
 
 ### `createSignerFromPrivateKeyBytes`
@@ -44,6 +46,8 @@ import { readFileSync } from "fs";
 const keyFile = JSON.parse(readFileSync("/path/to/id.json", "utf8"));
 const signer = await createSignerFromPrivateKeyBytes(new Uint8Array(keyFile));
 ```
+
+**Alias:** `getUmbraSignerFromKeypairBytes()` is available as an alternative name for `createSignerFromPrivateKeyBytes()`.
 
 ---
 
@@ -103,8 +107,10 @@ const { wallet, account } = useWallet();
 const signer = createSignerFromWalletAccount(wallet, account);
 ```
 
+**Alias:** `getUmbraSignerFromWalletStandardWallet()` is available as an alternative name for `createSignerFromWalletAccount()`.
+
 **Transaction signing flow:**
-1. Serializes `@solana/kit` `Transaction` → wire bytes via `getTransactionEncoder()`
+1. Serializes `@solana/kit` `Transaction` to wire bytes via `getTransactionEncoder()`
 2. Calls `wallet.features["solana:signTransaction"].signTransaction(wireBytes)`
 3. Decodes signed bytes via `getTransactionDecoder()`
 4. Merges returned signatures back into the original transaction object (preserving `lifetimeConstraint`)

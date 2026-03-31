@@ -46,16 +46,16 @@ Master Viewing Key
 
 ## Deriving Viewing Keys
 
-Each level of the hierarchy has a corresponding generator factory function. Pass `{ client }` to get a generator, then call it with the appropriate parameters.
+Each level of the hierarchy has a corresponding deriver factory function. Pass `{ client }` to get a deriver, then call it with the appropriate parameters.
 
 ### Master Viewing Key
 
 ```typescript
-import { getMasterViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getMasterViewingKeyDeriver } from "@umbra-privacy/sdk";
 
 // Derives the root of the hierarchy
-const generateMvk = getMasterViewingKeyGenerator({ client });
-const mvk = await generateMvk();
+const deriveMvk = getMasterViewingKeyDeriver({ client });
+const mvk = await deriveMvk();
 
 // mvk is a bigint (BN254 field element)
 console.log("Master Viewing Key:", mvk.toString());
@@ -68,13 +68,13 @@ The master viewing key gives unrestricted read access to all your mixer activity
 ### Mint Viewing Key
 
 ```typescript
-import { getMintViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getMintViewingKeyDeriver } from "@umbra-privacy/sdk";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Derives the mint-specific viewing key
-const generateMintVk = getMintViewingKeyGenerator({ client });
-const mintVk = await generateMintVk(USDC);
+const deriveMintVk = getMintViewingKeyDeriver({ client });
+const mintVk = await deriveMintVk(USDC);
 
 // Scope: all time, but only USDC activity
 console.log("USDC Viewing Key:", mintVk.toString());
@@ -83,14 +83,14 @@ console.log("USDC Viewing Key:", mintVk.toString());
 ### Yearly Viewing Key
 
 ```typescript
-import { getYearlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getYearlyViewingKeyDeriver } from "@umbra-privacy/sdk";
 import type { Year } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Derives the yearly viewing key for 2025 under the USDC mint key
-const generateYearlyVk = getYearlyViewingKeyGenerator({ client });
-const yearlyVk = await generateYearlyVk(USDC, 2025n as Year);
+const deriveYearlyVk = getYearlyViewingKeyDeriver({ client });
+const yearlyVk = await deriveYearlyVk(USDC, 2025n as Year);
 
 // Scope: all USDC activity in 2025 only
 console.log("2025 USDC Viewing Key:", yearlyVk.toString());
@@ -99,14 +99,14 @@ console.log("2025 USDC Viewing Key:", yearlyVk.toString());
 ### Monthly Viewing Key
 
 ```typescript
-import { getMonthlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk";
 import type { Year, Month } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Derives the monthly viewing key for February 2025
-const generateMonthlyVk = getMonthlyViewingKeyGenerator({ client });
-const monthlyVk = await generateMonthlyVk(USDC, 2025n as Year, 2n as Month);
+const deriveMonthlyVk = getMonthlyViewingKeyDeriver({ client });
+const monthlyVk = await deriveMonthlyVk(USDC, 2025n as Year, 2n as Month);
 
 // Scope: USDC activity in February 2025 only
 console.log("Feb 2025 USDC Viewing Key:", monthlyVk.toString());
@@ -115,14 +115,14 @@ console.log("Feb 2025 USDC Viewing Key:", monthlyVk.toString());
 ### Daily Viewing Key
 
 ```typescript
-import { getDailyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getDailyViewingKeyDeriver } from "@umbra-privacy/sdk";
 import type { Year, Month, Day } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Derives the daily viewing key for February 14, 2025
-const generateDailyVk = getDailyViewingKeyGenerator({ client });
-const dailyVk = await generateDailyVk(USDC, 2025n as Year, 2n as Month, 14n as Day);
+const deriveDailyVk = getDailyViewingKeyDeriver({ client });
+const dailyVk = await deriveDailyVk(USDC, 2025n as Year, 2n as Month, 14n as Day);
 
 // Scope: USDC activity on Feb 14, 2025 only
 console.log("Feb 14 2025 USDC Viewing Key:", dailyVk.toString());
@@ -157,17 +157,17 @@ function importViewingKeyHex(hex: string): bigint {
 ### Sharing Example
 
 ```typescript
-import { getMonthlyViewingKeyGenerator } from "@umbra-privacy/sdk";
+import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk";
 import type { Year, Month } from "@umbra-privacy/sdk/types";
 
 // 1. Choose a scope - e.g., monthly key for an audit of Q1 2025
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const generateMonthlyVk = getMonthlyViewingKeyGenerator({ client });
+const deriveMonthlyVk = getMonthlyViewingKeyDeriver({ client });
 
 const q1Keys = await Promise.all([
-  generateMonthlyVk(USDC, 2025n as Year, 1n as Month), // January
-  generateMonthlyVk(USDC, 2025n as Year, 2n as Month), // February
-  generateMonthlyVk(USDC, 2025n as Year, 3n as Month), // March
+  deriveMonthlyVk(USDC, 2025n as Year, 1n as Month), // January
+  deriveMonthlyVk(USDC, 2025n as Year, 2n as Month), // February
+  deriveMonthlyVk(USDC, 2025n as Year, 3n as Month), // March
 ]);
 
 // 2. Export as strings

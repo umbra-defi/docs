@@ -8,7 +8,8 @@ description: "How Umbra derives all cryptographic keys from a single wallet sign
 All cryptographic keys in Umbra flow from a single 64-byte **master seed**. The seed is derived from a deterministic wallet signature (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)):
 
 ```
-message = UTF8("Umbra Privacy - Master Seed Generation - {wallet_address}")
+message = UMBRA_MESSAGE_TO_SIGN   // multi-paragraph legal consent message
+                                  // exported from @umbra-privacy/sdk
 signature = Ed25519.sign(message, wallet_private_key)
 
 master_seed = KMAC256(
@@ -19,7 +20,7 @@ master_seed = KMAC256(
 )
 ```
 
-The KMAC256 step ensures the seed is uniformly distributed regardless of the signature's internal structure, and adds domain separation to prevent the raw signature from being used as a key elsewhere.
+The signing message is a multi-paragraph legal consent text exported as `UMBRA_MESSAGE_TO_SIGN` from `@umbra-privacy/sdk`. It includes the wallet address and a consent statement. The KMAC256 step ensures the seed is uniformly distributed regardless of the signature's internal structure, and adds domain separation to prevent the raw signature from being used as a key elsewhere.
 
 The master seed is derived once per session. It is cached in memory (or in custom storage if configured) and reused for all subsequent key derivations without further wallet prompts.
 
@@ -77,7 +78,7 @@ This is useful when:
 Configure offsets at client construction time:
 
 ```typescript
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl,

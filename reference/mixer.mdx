@@ -3,28 +3,28 @@ title: "Mixer"
 description: "Fetch claimable UTXOs from the indexer and claim them into encrypted or public balances."
 ---
 
-## getFetchClaimableUtxosFunction
+## getClaimableUtxoScannerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getFetchClaimableUtxosFunction(
-  args: GetFetchClaimableUtxosFunctionArgs,
-  deps?: GetFetchClaimableUtxosFunctionDeps,
-): FetchClaimableUtxosFunction
+function getClaimableUtxoScannerFunction(
+  args: GetClaimableUtxoScannerFunctionArgs,
+  deps?: GetClaimableUtxoScannerFunctionDeps,
+): ClaimableUtxoScannerFunction
 ```
 
 Returns a function that discovers UTXOs claimable by the caller within a given insertion index range of a mixer tree. Queries the Umbra indexer to find UTXO ciphertexts, then attempts to decrypt them using the caller's X25519 private key and AES decryption. UTXOs that decrypt successfully are returned as claimable.
 
-`client.indexerApiEndpoint` must be set (pass it to `getUmbraClientFromSigner`).
+`client.indexerApiEndpoint` must be set (pass it to `getUmbraClient`).
 
 ---
 
-### GetFetchClaimableUtxosFunctionArgs
+### GetClaimableUtxoScannerFunctionArgs
 
 - `client: IUmbraClient` - Must have `indexerApiEndpoint` configured.
 
-### GetFetchClaimableUtxosFunctionDeps
+### GetClaimableUtxoScannerFunctionDeps
 
 - `fetchUtxoData?: FetchUtxoDataFunction` - Override the default indexer UTXO data fetcher.
 - `fetchMerkleProof?: FetchMerkleProofFunction` - Override the default indexer Merkle proof fetcher.
@@ -33,24 +33,24 @@ Returns a function that discovers UTXOs claimable by the caller within a given i
 
 ### Returns
 
-`FetchClaimableUtxosFunction`
+`ClaimableUtxoScannerFunction`
 
 ```typescript
-type FetchClaimableUtxosFunction = (
-  treeIndex: number,
-  startInsertionIndex: number,
-  endInsertionIndex?: number,
-) => Promise<ClaimableUtxoResult>
+type ClaimableUtxoScannerFunction = (
+  treeIndex: U32,
+  startInsertionIndex: U32,
+  endInsertionIndex?: U32,
+) => Promise<ScannedUtxoResult>
 ```
 
-- `treeIndex: number` - The mixer tree index to scan.
-- `startInsertionIndex: number` - Inclusive start of the UTXO insertion range to scan.
-- `endInsertionIndex?: number` - Exclusive end of the range. Defaults to the current tree size.
+- `treeIndex: U32` - The mixer tree index to scan. Branded `U32` type.
+- `startInsertionIndex: U32` - Inclusive start of the UTXO insertion range to scan. Branded `U32` type.
+- `endInsertionIndex?: U32` - Exclusive end of the range. Defaults to the current tree size. Branded `U32` type.
 
-### ClaimableUtxoResult
+### ScannedUtxoResult
 
 ```typescript
-interface ClaimableUtxoResult {
+interface ScannedUtxoResult {
   selfBurnable: ClaimableUtxoData[];
   received: ClaimableUtxoData[];
   publicSelfBurnable: ClaimableUtxoData[];
@@ -94,12 +94,12 @@ Throws `FetchUtxosError`. See [Errors](./errors#fetchutxoserror).
 ### Example
 
 ```typescript
-import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
 
-const fetchUtxos = getFetchClaimableUtxosFunction({ client });
+const scanUtxos = getClaimableUtxoScannerFunction({ client });
 
 // Scan tree 0 from insertion index 0 to 1000
-const result = await fetchUtxos(0, 0, 1000);
+const result = await scanUtxos(0, 0, 1000);
 
 console.log("Self-burnable UTXOs:", result.selfBurnable.length);
 console.log("Received UTXOs:", result.received.length);
@@ -107,26 +107,26 @@ console.log("Received UTXOs:", result.received.length);
 
 ---
 
-## getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction
+## getSelfClaimableUtxoToEncryptedBalanceClaimerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
-  args: GetClaimSelfClaimableUtxoIntoEncryptedBalanceFunctionArgs,
-  deps: GetClaimSelfClaimableUtxoIntoEncryptedBalanceFunctionDeps,
-): ClaimSelfClaimableUtxoIntoEncryptedBalanceFunction
+function getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
+  args: GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionArgs,
+  deps: GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionDeps,
+): SelfClaimableUtxoToEncryptedBalanceClaimerFunction
 ```
 
 Claims a self-burnable UTXO (one you created yourself) and deposits its value into the caller's encrypted balance. Requires a Groth16 ZK proof - `deps.zkProver` is **required**. The nullifier is burned on-chain after a successful claim to prevent double-spending.
 
 ---
 
-### GetClaimSelfClaimableUtxoIntoEncryptedBalanceFunctionArgs
+### GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetClaimSelfClaimableUtxoIntoEncryptedBalanceFunctionDeps
+### GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionDeps
 
 - `zkProver: IZkProverForClaimSelfClaimableUtxo` - **Required.** Groth16 prover for the claim circuit.
 - `accountInfoProvider?: AccountInfoProviderFunction`
@@ -136,16 +136,16 @@ Claims a self-burnable UTXO (one you created yourself) and deposits its value in
 
 ### Returns
 
-`ClaimSelfClaimableUtxoIntoEncryptedBalanceFunction`
+`SelfClaimableUtxoToEncryptedBalanceClaimerFunction`
 
 ```typescript
-type ClaimSelfClaimableUtxoIntoEncryptedBalanceFunction = (
+type SelfClaimableUtxoToEncryptedBalanceClaimerFunction = (
   utxos: readonly ClaimableUtxoData[],
   optionalData?: OptionalData32,
 ) => Promise<ClaimUtxoIntoEncryptedBalanceResult>
 ```
 
-- `utxos: readonly ClaimableUtxoData[]` - Array of claimable UTXOs from `getFetchClaimableUtxosFunction`. Use UTXOs from `result.selfBurnable`.
+- `utxos: readonly ClaimableUtxoData[]` - Array of claimable UTXOs from `getClaimableUtxoScannerFunction`. Use UTXOs from `result.selfBurnable`.
 - `optionalData?: OptionalData32` - Optional 32-byte caller metadata.
 
 Returns `ClaimUtxoIntoEncryptedBalanceResult` with `signatures: Record<number, TransactionSignature[]>` organized by batch index.
@@ -158,25 +158,25 @@ Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror). The `"transactio
 
 ---
 
-## getClaimSelfClaimableUtxoIntoPublicBalanceFunction
+## getSelfClaimableUtxoToPublicBalanceClaimerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getClaimSelfClaimableUtxoIntoPublicBalanceFunction(
-  args: GetClaimSelfClaimableUtxoIntoPublicBalanceFunctionArgs,
-  deps: GetClaimSelfClaimableUtxoIntoPublicBalanceFunctionDeps,
-): ClaimSelfClaimableUtxoIntoPublicBalanceFunction
+function getSelfClaimableUtxoToPublicBalanceClaimerFunction(
+  args: GetSelfClaimableUtxoToPublicBalanceClaimerFunctionArgs,
+  deps: GetSelfClaimableUtxoToPublicBalanceClaimerFunctionDeps,
+): SelfClaimableUtxoToPublicBalanceClaimerFunction
 ```
 
-Claims a self-burnable UTXO (one you created yourself) and sends its value to a public ATA. Same flow as `getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction` but the output goes to a public account instead of an encrypted balance. `deps.zkProver` is **required**.
+Claims a self-burnable UTXO (one you created yourself) and sends its value to a public ATA. Same flow as `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction` but the output goes to a public account instead of an encrypted balance. `deps.zkProver` is **required**.
 
 ### Returns
 
-`ClaimSelfClaimableUtxoIntoPublicBalanceFunction`
+`SelfClaimableUtxoToPublicBalanceClaimerFunction`
 
 ```typescript
-type ClaimSelfClaimableUtxoIntoPublicBalanceFunction = (
+type SelfClaimableUtxoToPublicBalanceClaimerFunction = (
   utxos: readonly ClaimableUtxoData[],
   optionalData?: OptionalData32,
 ) => Promise<ClaimUtxoIntoPublicBalanceResult>
@@ -193,25 +193,25 @@ Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror).
 
 ---
 
-## getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction
+## getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
-  args: GetClaimReceiverClaimableUtxoIntoEncryptedBalanceFunctionArgs,
-  deps: GetClaimReceiverClaimableUtxoIntoEncryptedBalanceFunctionDeps,
-): ClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction
+function getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+  args: GetReceiverClaimableUtxoToEncryptedBalanceClaimerFunctionArgs,
+  deps: GetReceiverClaimableUtxoToEncryptedBalanceClaimerFunctionDeps,
+): ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction
 ```
 
 Claims a receiver-addressed UTXO (one sent to the caller by another user) and deposits its value into the caller's encrypted balance. `deps.zkProver` is **required**.
 
 ### Returns
 
-`ClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction`
+`ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction`
 
 ```typescript
-type ClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction = (
+type ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction = (
   utxos: readonly ClaimableUtxoData[],
   optionalData?: OptionalData32,
 ) => Promise<ClaimUtxoIntoEncryptedBalanceResult>
@@ -232,25 +232,25 @@ Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror).
 
 ```typescript
 import {
-  getFetchClaimableUtxosFunction,
-  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
-  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getClaimableUtxoScannerFunction,
+  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
 } from "@umbra-privacy/sdk";
-import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver, getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver, getReceiverClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
 // Build functions (once)
-const fetchUtxos = getFetchClaimableUtxosFunction({ client });
-const claimSelf = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
+const scanUtxos = getClaimableUtxoScannerFunction({ client });
+const claimSelf = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
-  { zkProver: getClaimSelfClaimableUtxoIntoEncryptedBalanceProver() },
+  { zkProver: getSelfClaimableUtxoToEncryptedBalanceClaimerProver() },
 );
-const claimReceived = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+const claimReceived = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
-  { zkProver: getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver() },
+  { zkProver: getReceiverClaimableUtxoToEncryptedBalanceClaimerProver() },
 );
 
 // Fetch claimable UTXOs
-const { selfBurnable, received } = await fetchUtxos(0, 0, 1000);
+const { selfBurnable, received } = await scanUtxos(0, 0, 1000);
 
 // Claim each one
 if (selfBurnable.length > 0) {
@@ -267,7 +267,7 @@ if (received.length > 0) {
 
 ## FetchUtxosError
 
-Thrown by `getFetchClaimableUtxosFunction`.
+Thrown by `getClaimableUtxoScannerFunction`.
 
 Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"indexer-fetch"` | `"proof-fetch"`
 
@@ -277,7 +277,7 @@ See [Errors](./errors#fetchutxoserror) for full documentation.
 
 ## ClaimUtxoError
 
-Thrown by all three claim functions.
+Thrown by all claim functions.
 
 Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
 

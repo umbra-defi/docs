@@ -36,6 +36,14 @@ console.log(`Completed ${signatures.length} registration transaction(s)`);
   Register the user commitment for mixer / anonymous transfer support. Can be used independently of `confidential`.
 </ParamField>
 
+<ParamField path="accountInfoCommitment" type='"processed" | "confirmed" | "finalized"' default="confirmed">
+  Override the commitment level used for on-chain account reads during registration. Defaults to `"confirmed"`.
+</ParamField>
+
+<ParamField path="epochInfoCommitment" type='"processed" | "confirmed" | "finalized"' default="confirmed">
+  Override the commitment level used for epoch info reads (relevant for Token-2022 transfer fee calculations). Defaults to `"confirmed"`.
+</ParamField>
+
 <ParamField path="callbacks" type="object">
   Optional lifecycle hooks called before and after each step. `pre` receives the signed transaction before it is sent; `post` receives the transaction and its confirmed signature. Skipped steps do not invoke callbacks.
 

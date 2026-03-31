@@ -35,7 +35,7 @@ type Curve25519KeypairGeneratorFunction = () => Promise<Curve25519KeypairResult>
 type MintX25519KeypairGeneratorFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
 ```
 
-Used by: registration, UTXO creation. Also exposed via `getRotateMintX25519EncryptionKeyFunction` deps.
+Used by: registration, UTXO creation. Also exposed via `getMintEncryptionKeyRotatorFunction` deps.
 
 ### Viewing Key Generators (Poseidon sub-hierarchy)
 
@@ -135,7 +135,7 @@ type RcKeyGeneratorFunction = (
 ```
 
 - `getRcEncryptor` and `getRcKeyGenerator` appear in: registration, UTXO creation deps
-- `rcDecryptor` appears in: `getQueryEncryptedBalanceFunction` deps - override to provide a custom decryption backend
+- `rcDecryptor` appears in: `getEncryptedBalanceQuerierFunction` deps - override to provide a custom decryption backend
 
 ### AES Encryption
 

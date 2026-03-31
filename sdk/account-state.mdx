@@ -5,14 +5,12 @@ description: "Query a user's registration state on-chain and check what steps ha
 
 ## Checking Registration Status
 
-Use `getQueryUserAccountFunction` to inspect an account's current registration state without triggering any transactions:
+Use `getUserAccountQuerierFunction` to inspect an account's current registration state without triggering any transactions:
 
 ```typescript
-import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
-const query = getQueryUserAccountFunction({
-  accountInfoProvider: client.accountInfoProvider,
-});
+const query = getUserAccountQuerierFunction({ client });
 
 const result = await query(client.signer.address);
 
@@ -32,7 +30,7 @@ if (result.state === "non_existent") {
 Register once, at account setup time. Check state before calling `register()` so you avoid unnecessary transaction prompts for users who are already fully set up:
 
 ```typescript
-const query = getQueryUserAccountFunction({ client });
+const query = getUserAccountQuerierFunction({ client });
 const result = await query(client.signer.address);
 
 const isFullyRegistered =

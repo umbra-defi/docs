@@ -47,15 +47,14 @@ Your App
               └── Umbra Indexer - indexes UTXOs and generates Merkle proofs
 ```
 
-## Program ID
+## Program IDs
 
-The Umbra on-chain program is deployed at:
+The Umbra on-chain program is deployed at different addresses per network:
 
-```
-UMBRAkrfUTHuPAjDQXgmpoQjGGyhtqiRqWNrMroEijV
-```
+- **Mainnet:** `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh`
+- **Devnet:** `342qFp62fzTt4zowrVPhrDdcRLGapPCMe8w5kFSoJ4f4`
 
-This address is the same on mainnet, devnet, and localnet test deployments.
+The SDK resolves the correct program address automatically based on the `network` parameter.
 
 ## Supported Networks
 

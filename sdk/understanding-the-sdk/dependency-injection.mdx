@@ -5,12 +5,12 @@ description: "Set infrastructure defaults at the client level and override any p
 
 ## Client-Level Defaults
 
-`getUmbraClientFromSigner` accepts its own `deps` object that sets the **default** for every downstream function. Any function-level `deps` override takes precedence.
+`getUmbraClient` accepts its own `deps` object that sets the **default** for every downstream function. Any function-level `deps` override takes precedence.
 
 ```typescript
-import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClientFromSigner(
+const client = await getUmbraClient(
   {
     signer,
     network: "mainnet",
@@ -130,14 +130,14 @@ Default: in-memory (no persistence across page loads).
 
 ```typescript
 // CI - fixed deterministic seed, no wallet prompt
-const client = await getUmbraClientFromSigner(args, {
+const client = await getUmbraClient(args, {
   masterSeedStorage: {
     generate: async () => FIXED_TEST_SEED,
   },
 });
 
 // Production - persist across refreshes in encrypted sessionStorage
-const client = await getUmbraClientFromSigner(args, {
+const client = await getUmbraClient(args, {
   masterSeedStorage: {
     load: async () => {
       const raw = sessionStorage.getItem("umbra_seed");

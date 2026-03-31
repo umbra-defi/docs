@@ -19,12 +19,14 @@ The protocol fee is deducted from the SPL or Token-2022 token amount involved in
 
 **Current rates:**
 - Fixed base: 0 token micro-units
-- Proportional: 35 bps (0.35%) of the amount
+- Proportional: 35 bps
 
 **Formula:**
 
+Umbra uses a power-of-two BPS divisor (`2^14 = 16,384`) rather than the traditional `10,000`. This means 35 bps corresponds to `35 / 16,384 ≈ 0.2136%`.
+
 ```
-protocol_fee = floor(amount × 35 / 10_000)
+protocol_fee = floor(amount × 35 / 16_384)
 ```
 
 ### Example — 1,000 USDC withdrawal
@@ -32,22 +34,24 @@ protocol_fee = floor(amount × 35 / 10_000)
 ```
 1,000 USDC = 1,000,000,000 µUSDC
 
-protocol_fee = floor(1,000,000,000 × 35 / 10,000) = 3,500,000 µUSDC = 3.50 USDC
+protocol_fee = floor(1,000,000,000 × 35 / 16,384) = 2,136,230 µUSDC ≈ 2.14 USDC
 
-net received = 1,000,000,000 - 3,500,000 = 996,500,000 µUSDC = 996.50 USDC
+net received = 1,000,000,000 - 2,136,230 = 997,863,770 µUSDC ≈ 997.86 USDC
 ```
 
 ### Estimating programmatically
 
 ```typescript
-import { PROTOCOL_FEE, BPS_DIVISOR } from "@umbra-privacy/sdk";
+import { BPS_DIVISOR } from "@umbra-privacy/sdk";
+
+const bps = 35n;
 
 function estimateProtocolFee(amount: bigint): bigint {
-  return (amount * PROTOCOL_FEE.BPS) / BPS_DIVISOR;
+  return (amount * bps) / BPS_DIVISOR; // BPS_DIVISOR = 16_384n
 }
 
-const fee = estimateProtocolFee(1_000_000n); // 1 USDC
-// fee = 1_000_000n × 35n / 10_000n = 3_500n µUSDC (0.0035 USDC)
+const fee = estimateProtocolFee(1_000_000n); // 1 USDC (6 decimals)
+// fee = 1_000_000n × 35n / 16_384n = 2_136n µUSDC
 ```
 
 ---
@@ -61,7 +65,7 @@ The relayer submits claim transactions on your behalf so your wallet never appea
 When relayer fees are non-zero, they are applied on top of the protocol fee and deducted from the same token amount:
 
 ```
-relayer_fee = RELAYER_BASE_FEE + floor(amount × RELAYER_BPS / 10_000)
+relayer_fee = RELAYER_BASE_FEE + floor(amount × RELAYER_BPS / 16_384)
 net = amount - protocol_fee - relayer_fee
 ```
 
@@ -107,7 +111,7 @@ If the token mint has a Token-2022 transfer fee extension configured, that fee i
 User sends:              transfer_amount
 T22 deducts:             token_transfer_fee    (set on the mint, outside Umbra's control)
 Pool receives:           actual_received = transfer_amount - token_transfer_fee
-Umbra deducts:           protocol_fee = floor(actual_received × 35 / 10,000)
+Umbra deducts:           protocol_fee = floor(actual_received × 35 / 16,384)
 Encrypted balance gets:  actual_received - protocol_fee
 ```
 

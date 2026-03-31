@@ -20,21 +20,22 @@ Every returned function has a named type exported from `@umbra-privacy/sdk/inter
 
 ```typescript
 import type {
-  DepositIntoEncryptedBalanceFunction,
+  PublicBalanceToEncryptedBalanceDirectDepositorFunction,
   UserRegistrationFunction,
-  FetchClaimableUtxosFunction,
-  ClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  ClaimableUtxoScannerFunction,
+  SelfClaimableUtxoToEncryptedBalanceClaimerFunction,
 } from "@umbra-privacy/sdk/interfaces";
 ```
 
 This is useful when you build a factory function once and store it in React state or a context:
 
 ```typescript
-const [deposit, setDeposit] = useState<DepositIntoEncryptedBalanceFunction | null>(null);
+const [deposit, setDeposit] =
+  useState<PublicBalanceToEncryptedBalanceDirectDepositorFunction | null>(null);
 
 useEffect(() => {
   if (client) {
-    setDeposit(() => getDirectDepositIntoEncryptedBalanceFunction({ client }));
+    setDeposit(() => getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client }));
   }
 }, [client]);
 ```

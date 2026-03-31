@@ -81,9 +81,9 @@ Each encrypted token account has a **nonce** - a monotonically increasing counte
 If you are registered in Shared mode, you can query your current encrypted balance:
 
 ```typescript
-import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
 
-const query = getQueryEncryptedBalanceFunction({ client });
+const query = getEncryptedBalanceQuerierFunction({ client });
 
 const balances = await query([USDC_MINT]);
 const result = balances.get(USDC_MINT);

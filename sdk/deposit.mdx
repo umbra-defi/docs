@@ -30,11 +30,11 @@ Deposit transactions are publicly visible on-chain. The depositor's wallet addre
 ## Usage
 
 ```typescript
-import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
-const signature = await deposit(
+const result = await deposit(
   destinationAddress,  // whose encrypted balance to credit
   mint,                // SPL or Token-2022 mint address
   transferAmount,      // amount in native token units (U64)
@@ -68,9 +68,37 @@ const signature = await deposit(
   32 bytes of arbitrary metadata stored with the deposit. Defaults to all zeros.
 </ParamField>
 
+<ParamField path="options.awaitCallback" type="boolean" default="true">
+  Whether to wait for the Arcium MPC callback transaction to confirm before resolving. When `true`, the returned `DepositResult` includes `callbackSignature` and `callbackElapsedMs`. When `false`, returns immediately after the handler (queue) transaction confirms.
+</ParamField>
+
+<ParamField path="options.skipPreflight" type="boolean" default="false">
+  Skip Solana transaction preflight simulation. Useful when preflight nodes are behind.
+</ParamField>
+
+<ParamField path="options.maxRetries" type="number">
+  Maximum number of times the RPC node should retry sending the transaction.
+</ParamField>
+
+<ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for RPC account reads during deposit preparation. Overrides the default on a per-call basis.
+</ParamField>
+
+<ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for fetching epoch info (Token-2022 transfer fee schedule). Overrides the default on a per-call basis.
+</ParamField>
+
 ## Return Value
 
-Returns a `Promise<TransactionSignature>` - the signature of the confirmed deposit transaction.
+Returns a `Promise<DepositResult>`. The `DepositResult` object contains:
+
+- `queueSignature` - The transaction signature of the handler (queue computation) transaction.
+- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `awaitCallback` is `true` (the default).
+- `callbackElapsedMs` - Wall-clock milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
+- `rentClaimSignature` - Transaction signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error encountered during rent reclaim, if any. The deposit itself still succeeded.
+
+Deposits follow the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium to complete the MPC computation, then waits for the callback transaction to confirm.
 
 ## Encryption Mode Selection
 
@@ -88,7 +116,7 @@ You do not need to specify the mode manually.
 Fees are deducted from the `transferAmount` before crediting the encrypted balance. The amount credited is:
 
 ```
-credited = transferAmount - baseFee - floor((transferAmount - baseFee) × commissionBps / 10000)
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 10000)
 ```
 
 Protocol fee configuration is set on-chain by the pool admin and may vary per pool. The current default is a small fixed base fee plus a 0.3% commission.
@@ -100,16 +128,17 @@ In most cases, direct deposits from your own ATA to your own encrypted balance c
 ## Example: Self-Deposit
 
 ```typescript
-import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
 // Deposit 100 USDC into your own encrypted balance
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const ONE_HUNDRED_USDC = 100_000_000n; // 6 decimals
 
-const signature = await deposit(client.signer.address, USDC, ONE_HUNDRED_USDC);
-console.log("Deposit signature:", signature);
+const result = await deposit(client.signer.address, USDC, ONE_HUNDRED_USDC);
+console.log("Queue signature:", result.queueSignature);
+console.log("Callback signature:", result.callbackSignature);
 ```
 
 ## Example: Deposit to Another User
@@ -119,7 +148,7 @@ You can shield tokens directly into another registered user's encrypted balance:
 ```typescript
 const RECIPIENT = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";
 
-const signature = await deposit(RECIPIENT, USDC, ONE_HUNDRED_USDC);
+const result = await deposit(RECIPIENT, USDC, ONE_HUNDRED_USDC);
 ```
 
 The tokens are encrypted under the recipient's X25519 key. Only they can withdraw them.

@@ -34,7 +34,7 @@ Re-creating the client from the same wallet automatically re-derives the same ma
 // On a new session, device, or after a refresh
 const signer = createSignerFromWalletAccount(wallet, account);
 
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl,
@@ -55,9 +55,9 @@ The user will be prompted once for the master seed derivation signature. After t
 The indexer stores all UTXO ciphertexts permanently. After recovery, rescan from insertion index 0 to find all claimable UTXOs:
 
 ```typescript
-import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
 
-const fetch = getFetchClaimableUtxosFunction({ client });
+const fetch = getClaimableUtxoScannerFunction({ client });
 
 // Scan tree 0 from the beginning
 const result = await fetch(0, 0);
@@ -70,7 +70,7 @@ For users with many UTXOs or large trees, use paginated scanning:
 
 ```typescript
 async function recoverAllUtxos(treeIndex: number) {
-  const fetch = getFetchClaimableUtxosFunction({ client });
+  const fetch = getClaimableUtxoScannerFunction({ client });
   const allUtxos = [];
   const CHUNK_SIZE = 10_000;
   let cursor = 0;
@@ -95,7 +95,7 @@ If you want to avoid the wallet signing prompt on every page load, persist the m
 
 ```typescript
 // Session storage: cleared when the tab closes
-const client = await getUmbraClientFromSigner(
+const client = await getUmbraClient(
   { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
   {
     masterSeedStorage: {
@@ -117,7 +117,7 @@ For React Native / mobile applications, use the platform's secure storage:
 ```typescript
 import * as SecureStore from "expo-secure-store";
 
-const client = await getUmbraClientFromSigner(
+const client = await getUmbraClient(
   { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
   {
     masterSeedStorage: {
@@ -144,7 +144,7 @@ If you suspect a key may be compromised, rotate it by incrementing its offset an
 
 ```typescript
 // Rotate the X25519 encryption key
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl,

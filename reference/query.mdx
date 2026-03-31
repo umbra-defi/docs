@@ -3,36 +3,37 @@ title: "Query"
 description: "Query on-chain user account state and decrypt encrypted token balances."
 ---
 
-## getQueryUserAccountFunction
+## getUserAccountQuerierFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getQueryUserAccountFunction(
-  args: GetQueryUserAccountFunctionArgs,
-  deps?: GetQueryUserAccountFunctionDeps,
-): QueryUserAccountFunction
+function getUserAccountQuerierFunction(
+  args: GetUserAccountQuerierFunctionArgs,
+  deps?: GetUserAccountQuerierFunctionDeps,
+): UserAccountQuerierFunction
 ```
 
 Returns a function that fetches and decodes the on-chain user account for any Umbra address.
 
 ---
 
-### GetQueryUserAccountFunctionArgs
+### GetUserAccountQuerierFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetQueryUserAccountFunctionDeps
+### GetUserAccountQuerierFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 
 ### Returns
 
-`QueryUserAccountFunction`
+`UserAccountQuerierFunction`
 
 ```typescript
-type QueryUserAccountFunction = (
+type UserAccountQuerierFunction = (
   userAddress: Address,
+  options?: { commitment?: Commitment },
 ) => Promise<QueryUserAccountResult>
 ```
 
@@ -67,9 +68,9 @@ Throws `QueryError`. See [Errors](./errors#queryerror).
 ### Example
 
 ```typescript
-import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
-const queryUserAccount = getQueryUserAccountFunction({ client });
+const queryUserAccount = getUserAccountQuerierFunction({ client });
 const result = await queryUserAccount(userAddress);
 
 if (result.state === "exists") {
@@ -82,37 +83,38 @@ if (result.state === "exists") {
 
 ---
 
-## getQueryEncryptedBalanceFunction
+## getEncryptedBalanceQuerierFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getQueryEncryptedBalanceFunction(
-  args: GetQueryEncryptedBalanceFunctionArgs,
-  deps?: GetQueryEncryptedBalanceFunctionDeps,
-): QueryEncryptedBalanceFunction
+function getEncryptedBalanceQuerierFunction(
+  args: GetEncryptedBalanceQuerierFunctionArgs,
+  deps?: GetEncryptedBalanceQuerierFunctionDeps,
+): EncryptedBalanceQuerierFunction
 ```
 
 Returns a function that fetches and decrypts encrypted token balances for a set of mints. For shared-mode accounts, the balance is decrypted locally using the caller's X25519 private key. For MXE-mode accounts, the ciphertext cannot be decrypted client-side.
 
 ---
 
-### GetQueryEncryptedBalanceFunctionArgs
+### GetEncryptedBalanceQuerierFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetQueryEncryptedBalanceFunctionDeps
+### GetEncryptedBalanceQuerierFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `rcDecryptor?: RcDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
 
 ### Returns
 
-`QueryEncryptedBalanceFunction`
+`EncryptedBalanceQuerierFunction`
 
 ```typescript
-type QueryEncryptedBalanceFunction = (
+type EncryptedBalanceQuerierFunction = (
   mints: readonly Address[],
+  options?: { commitment?: Commitment },
 ) => Promise<Map<Address, QueryEncryptedBalanceResult>>
 ```
 
@@ -136,9 +138,9 @@ Throws `QueryError`. See [Errors](./errors#queryerror).
 ### Example
 
 ```typescript
-import { getQueryEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
 
-const queryBalances = getQueryEncryptedBalanceFunction({ client });
+const queryBalances = getEncryptedBalanceQuerierFunction({ client });
 const balances = await queryBalances([usdcMint, solMint]);
 
 for (const [mint, result] of balances) {
@@ -160,6 +162,6 @@ Thrown by both query functions.
 
 Stage values: `"initialization"` | `"pda-derivation"` | `"account-fetch"` | `"account-decode"` | `"key-derivation"` | `"decryption"`
 
-- `"key-derivation"` and `"decryption"` are only reachable from `getQueryEncryptedBalanceFunction` (shared-mode decryption path).
+- `"key-derivation"` and `"decryption"` are only reachable from `getEncryptedBalanceQuerierFunction` (shared-mode decryption path).
 
 See [Errors](./errors#queryerror) for full documentation.

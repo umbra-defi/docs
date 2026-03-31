@@ -1,16 +1,16 @@
 ---
 title: "Client"
-description: "getUmbraClientFromSigner - the primary SDK entry point. IUmbraClient and IUmbraSigner interfaces."
+description: "getUmbraClient - the primary SDK entry point. IUmbraClient and IUmbraSigner interfaces."
 ---
 
-## getUmbraClientFromSigner
+## getUmbraClient
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-async function getUmbraClientFromSigner(
-  args: GetUmbraClientFromSignerArgs,
-  deps?: GetUmbraClientFromSignerDeps,
+async function getUmbraClient(
+  args: GetUmbraClientArgs,
+  deps?: GetUmbraClientDeps,
 ): Promise<IUmbraClient>
 ```
 
@@ -18,16 +18,19 @@ The primary SDK entry point. Call this once per session with a connected wallet 
 
 By default this immediately prompts the wallet to sign the master seed derivation message. Pass `deferMasterSeedSignature: true` to skip that prompt at construction time - it will be requested on the first operation that requires key material.
 
+<Note>
+In v2.0.x, there is no client-level `commitment` parameter. Each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment`, `epochInfoCommitment`, or `commitment`). Both default to `"confirmed"`.
+</Note>
+
 ---
 
-### GetUmbraClientFromSignerArgs
+### GetUmbraClientArgs
 
 - `signer: IUmbraSigner` - Connected wallet. Must implement `signMessage` and `signTransaction`.
 - `network: Network` - `"mainnet"` | `"devnet"` | `"localnet"`.
 - `rpcUrl: string` - HTTPS RPC endpoint URL for the Solana cluster.
 - `rpcSubscriptionsUrl: string` - WebSocket RPC endpoint URL for transaction confirmation.
-- `indexerApiEndpoint?: string` - Base URL for the Umbra indexer (e.g. `"https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com"`). Required for mixer operations (`getFetchClaimableUtxosFunction`).
-- `commitment?: "processed" | "confirmed" | "finalized"` - Commitment level for RPC calls. Defaults to `"confirmed"`.
+- `indexerApiEndpoint?: string` - Base URL for the Umbra indexer (e.g. `"https://acqzie0a1h.execute-api.eu-central-1.amazonaws.com"`). Required for mixer operations (`getClaimableUtxoScannerFunction`).
 - `deferMasterSeedSignature?: boolean` - Skip the master seed signature prompt at construction time. Defaults to `false`.
 - `versions?` - Override version specifiers. Leave unset to use SDK defaults.
   - `protocol?: ProtocolVersionSpecifierFunction`
@@ -44,7 +47,7 @@ By default this immediately prompts the wallet to sign the master seed derivatio
 
 ---
 
-### GetUmbraClientFromSignerDeps
+### GetUmbraClientDeps
 
 All fields are optional. Provide overrides for custom infrastructure or testing.
 
@@ -68,9 +71,9 @@ All fields are optional. Provide overrides for custom infrastructure or testing.
 ### Example
 
 ```typescript
-import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClientFromSigner({
+const client = await getUmbraClient({
   signer: walletAdapter,
   network: "mainnet",
   rpcUrl: "https://api.mainnet-beta.solana.com",
@@ -83,14 +86,13 @@ const client = await getUmbraClientFromSigner({
 
 ## IUmbraClient
 
-The read-only configuration object produced by `getUmbraClientFromSigner`. All factory functions accept it as `args.client`. Do not call methods on it directly.
+The read-only configuration object produced by `getUmbraClient`. All factory functions accept it as `args.client`. Do not call methods on it directly.
 
 - `signer: IUmbraSigner` - The connected wallet.
 - `network: Network` - The configured network.
 - `networkConfig: NetworkConfig` - On-chain program IDs and addresses for the configured network.
 - `versions: ResolvedVersions` - Resolved protocol, algorithm, and scheme version identifiers.
-- `offsets: ResolvedOffsets` - Resolved key derivation offsets.
-- `commitment: "processed" | "confirmed" | "finalized"` - Configured commitment level.
+- `offsets: ResolvedOffsets` - Resolved key derivation offsets. Commitment is not stored on the client - each SDK function accepts per-call commitment overrides.
 - `accountInfoProvider: AccountInfoProviderFunction` - Account data fetcher (RPC-based or overridden).
 - `blockhashProvider: GetLatestBlockhash` - Blockhash fetcher (RPC-based or overridden).
 - `transactionForwarder: TransactionForwarder` - Transaction broadcaster (WebSocket-based or overridden).
@@ -149,4 +151,4 @@ Signs an arbitrary byte sequence. Used once per session to derive the master see
 type Network = "mainnet" | "devnet" | "localnet";
 ```
 
-Selects the set of on-chain program IDs and addresses the SDK uses. Pass this in `GetUmbraClientFromSignerArgs.network`.
+Selects the set of on-chain program IDs and addresses the SDK uses. Pass this in the `network` field of `getUmbraClient` args.

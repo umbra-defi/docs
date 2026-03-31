@@ -38,12 +38,12 @@ Pass the mint address directly to any SDK function that accepts a `mint` paramet
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Deposit into encrypted balance
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
-await deposit(client.signer.address, USDC, 1_000_000n);
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const depositResult = await deposit(client.signer.address, USDC, 1_000_000n);
 
 // Withdraw from encrypted balance
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
-await withdraw(client.signer.address, USDC, 1_000_000n);
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
+const withdrawResult = await withdraw(client.signer.address, USDC, 1_000_000n);
 ```
 
 The SDK will fetch the pool configuration on-chain and select the correct instruction variant automatically.

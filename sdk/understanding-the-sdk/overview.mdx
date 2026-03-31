@@ -15,9 +15,9 @@ Every SDK operation follows the same two-step pattern:
 
 ```typescript
 // Step 1 - build the function once, at setup time
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
-// Step 2 - call it at runtime, as many times as needed
+// Step 2 - call it at runtime
 const signature = await deposit(destinationAddress, mint, amount);
 ```
 
@@ -29,24 +29,27 @@ This is the same pattern `@solana/kit` uses for its instruction builders:
 // @solana/kit instruction builder
 const ix = getTransferSolInstruction({ source, destination, amount });
 
-// Umbra SDK factory function - same pattern
-const withdraw = getDirectWithdrawIntoPublicBalanceV3Function({ client });
+// Umbra SDK factory function - same pattern, describing the data flow
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
 ```
 
 ## Naming Conventions
 
-All factory functions use a consistent `get[Verb][Subject]Function` scheme. The verb tells you what the returned function does:
+All factory functions use a consistent `get[Source]To[Target][Verb]Function` scheme. The name describes the data flow and operation:
 
-- `getDirectDeposit...` - credits tokens to an encrypted account
-- `getDirectWithdraw...` - debits tokens from an encrypted account to a public account
-- `getCreate...` - creates a new on-chain entity (UTXO, grant)
-- `getClaim...` - redeems an on-chain entity (UTXO, staged funds)
-- `getFetch...` - queries off-chain data (indexer)
-- `getQuery...` - queries on-chain state (RPC)
-- `getRotate...` - replaces a registered key
-- `getConvert...` - migrates an account between protocol modes
-- `getReencrypt...` - re-encrypts ciphertexts under a new key
-- `getUpdate...` - mutates account metadata
+- `getPublicBalanceToEncryptedBalance...` - credits tokens from a public account to an encrypted account
+- `getEncryptedBalanceToPublicBalance...` - debits tokens from an encrypted account to a public account
+- `getEncryptedBalanceTo...UtxoCreator...` - creates a UTXO from an encrypted balance
+- `getPublicBalanceTo...UtxoCreator...` - creates a UTXO from a public balance
+- `get...UtxoToEncryptedBalanceClaimer...` - claims a UTXO into an encrypted balance
+- `get...UtxoToPublicBalanceClaimer...` - claims a UTXO into a public balance
+- `getClaimableUtxoScanner...` - scans for claimable UTXOs via the indexer
+- `get...Querier...` - queries on-chain state (RPC)
+- `get...Rotator...` - replaces a registered key
+- `get...Converter...` - migrates an account between protocol modes
+- `get...Reencryptor...` - re-encrypts ciphertexts under a new key
+- `getComplianceGrantIssuer...` - creates a compliance grant
+- `getComplianceGrantRevoker...` - deletes a compliance grant
 - `getUserRegistration...` - the full registration flow
 
 ## args and deps
@@ -62,10 +65,10 @@ const fn = getOperationFunction(args, deps?);
 
 ```typescript
 // Using all defaults
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
 // Overriding the transaction forwarder (e.g. Jito bundles)
-const deposit = getDirectDepositIntoEncryptedBalanceFunction(
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
   { client },
   { transactionForwarder: jitoForwarder },
 );

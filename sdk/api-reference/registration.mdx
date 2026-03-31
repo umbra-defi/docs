@@ -65,14 +65,14 @@ Returns an array of transaction signatures - one per step that was executed. An 
 
 ---
 
-## `getQueryUserAccountFunction`
+## `getUserAccountQuerierFunction`
 
 ```typescript
-import { getQueryUserAccountFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
-function getQueryUserAccountFunction(args: {
+function getUserAccountQuerierFunction(args: {
   accountInfoProvider: AccountInfoProviderFunction;
-}): QueryUserAccountFunction
+}): UserAccountQuerierFunction
 ```
 
 Factory function that returns a read-only account state query.
@@ -80,7 +80,10 @@ Factory function that returns a read-only account state query.
 ### Returned Function
 
 ```typescript
-async function queryUserAccount(userAddress: Address): Promise<QueryUserAccountResult>
+async function queryUserAccount(
+  userAddress: Address,
+  options?: { commitment?: Commitment },
+): Promise<QueryUserAccountResult>
 ```
 
 ### `QueryUserAccountResult`

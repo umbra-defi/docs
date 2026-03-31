@@ -16,17 +16,17 @@ Choose the factory function that matches your source (encrypted balance or publi
 Fund the UTXO from your existing encrypted balance. You will claim it yourself.
 
 ```typescript
-import { getCreateSelfClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
-import { getCreateSelfClaimableUtxoFromEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getEncryptedBalanceToSelfClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToSelfClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getCreateSelfClaimableUtxoFromEncryptedBalanceProver();
+const zkProver = getEncryptedBalanceToSelfClaimableUtxoCreatorProver();
 
-const createUtxo = getCreateSelfClaimableUtxoFromEncryptedBalanceFunction(
+const createUtxo = getEncryptedBalanceToSelfClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
 
-const signatures = await createUtxo({
+const result = await createUtxo({
   destinationAddress: client.signer.address, // recipient (yourself)
   mint,
   amount,
@@ -38,17 +38,17 @@ const signatures = await createUtxo({
 Fund the UTXO directly from your public ATA. You will claim it yourself.
 
 ```typescript
-import { getCreateSelfClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getCreateSelfClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getPublicBalanceToSelfClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToSelfClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getCreateSelfClaimableUtxoFromPublicBalanceProver();
+const zkProver = getPublicBalanceToSelfClaimableUtxoCreatorProver();
 
-const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToSelfClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
 
-const signatures = await createUtxo({
+const result = await createUtxo({
   destinationAddress: client.signer.address,
   mint,
   amount,
@@ -60,19 +60,19 @@ const signatures = await createUtxo({
 Fund the UTXO from your public ATA. A specified recipient will claim it (anonymous payment).
 
 ```typescript
-import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getPublicBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToReceiverClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
+const zkProver = getPublicBalanceToReceiverClaimableUtxoCreatorProver();
 
-const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
 
 const RECIPIENT = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";
 
-const signatures = await createUtxo({
+const result = await createUtxo({
   destinationAddress: RECIPIENT, // recipient's wallet address
   mint,
   amount,
@@ -84,17 +84,17 @@ const signatures = await createUtxo({
 Fund the UTXO from your encrypted balance. A specified recipient will claim it.
 
 ```typescript
-import { getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction } from "@umbra-privacy/sdk";
-import { getCreateReceiverClaimableUtxoFromEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToReceiverClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getCreateReceiverClaimableUtxoFromEncryptedBalanceProver();
+const zkProver = getEncryptedBalanceToReceiverClaimableUtxoCreatorProver();
 
-const createUtxo = getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction(
+const createUtxo = getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
 
-const signatures = await createUtxo({
+const result = await createUtxo({
   destinationAddress: RECIPIENT,
   mint,
   amount,
@@ -127,7 +127,10 @@ All create UTXO functions accept a `CreateUtxoArgs` object:
 
 ## Return Value
 
-Returns `Promise<TransactionSignature[]>` - an array containing a single transaction signature for the confirmed UTXO creation transaction.
+The return type depends on the source:
+
+- **From encrypted balance:** `Promise<CreateUtxoFromEncryptedBalanceResult>` - a multi-transaction result with MPC callback. Contains the transaction signatures for both the queue computation and callback transactions.
+- **From public balance:** `Promise<CreateUtxoFromPublicBalanceResult>` - a single-transaction result with no MPC involvement. Contains the transaction signature for the UTXO creation transaction.
 
 ## The ZK Prover Dependency
 
@@ -144,12 +147,12 @@ The `zkProver` dependency is **required** and cannot be omitted. Attempting to c
 Send 50 USDC to a recipient without revealing you as the sender:
 
 ```typescript
-import { getCreateReceiverClaimableUtxoFromPublicBalanceFunction } from "@umbra-privacy/sdk";
-import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getPublicBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToReceiverClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
+const zkProver = getPublicBalanceToReceiverClaimableUtxoCreatorProver();
 
-const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   { client },
   { zkProver },
 );
@@ -157,15 +160,15 @@ const createUtxo = getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
 const RECIPIENT = "RecipientWalletAddressHere...";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-const signatures = await createUtxo({
+const result = await createUtxo({
   destinationAddress: RECIPIENT,
   mint: USDC,
   amount: 50_000_000n,
 });
-console.log("UTXO created:", signatures[0]);
+console.log("UTXO created:", result);
 
-// The recipient can now fetch and claim this UTXO using getFetchClaimableUtxosFunction
-// and getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction
+// The recipient can now fetch and claim this UTXO using getClaimableUtxoScannerFunction
+// and getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction
 ```
 
 ## Error Handling
@@ -217,7 +220,7 @@ try {
 ```
 
 <Warning>
-If `err.stage === "transaction-send"`, do not immediately retry - the transaction may have landed. Fetch the recipient's UTXO list with `getFetchClaimableUtxosFunction` first to confirm whether the commitment was inserted into the tree.
+If `err.stage === "transaction-send"`, do not immediately retry - the transaction may have landed. Fetch the recipient's UTXO list with `getClaimableUtxoScannerFunction` first to confirm whether the commitment was inserted into the tree.
 </Warning>
 
 See [Error Handling](/reference/errors) for a full reference of all error types.

@@ -19,17 +19,17 @@ Three factory functions cover the main claim patterns:
 
 ```typescript
 import {
-  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
+const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const claim = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
+const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
@@ -41,17 +41,17 @@ const result = await claim(utxos); // pass array of ClaimableUtxoData
 
 ```typescript
 import {
-  getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
+  getSelfClaimableUtxoToPublicBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimSelfClaimableUtxoIntoPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
+const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const claim = getClaimSelfClaimableUtxoIntoPublicBalanceFunction(
+const claim = getSelfClaimableUtxoToPublicBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
@@ -63,17 +63,17 @@ const result = await claim(utxos); // pass array of ClaimableUtxoData
 
 ```typescript
 import {
-  getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getReceiverClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+const zkProver = getReceiverClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const claim = getClaimReceiverClaimableUtxoIntoEncryptedBalanceFunction(
+const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
@@ -84,7 +84,7 @@ const result = await claim(utxos); // pass array of ClaimableUtxoData
 ## Parameters
 
 <ParamField path="utxos" type="ClaimableUtxoData[]" required>
-  An array of claimable UTXO data objects returned by `getFetchClaimableUtxosFunction`. Each object contains all the data needed for the claim - UTXO values, Merkle proof, and metadata. Pass them directly from the fetch result without destructuring.
+  An array of claimable UTXO data objects returned by `getClaimableUtxoScannerFunction`. Each object contains all the data needed for the claim - UTXO values, Merkle proof, and metadata. Pass them directly from the fetch result without destructuring.
 </ParamField>
 
 <ParamField path="optionalData" type="Uint8Array">
@@ -107,15 +107,15 @@ Returns a result object with `signatures: Record<number, TransactionSignature[]>
 
 ```typescript
 import {
-  getFetchClaimableUtxosFunction,
-  getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction,
+  getClaimableUtxoScannerFunction,
+  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
 // Step 1: Fetch claimable UTXOs
-const fetch = getFetchClaimableUtxosFunction({ client });
-const result = await fetch(0, 0); // scan tree 0 from the start
+const scan = getClaimableUtxoScannerFunction({ client });
+const result = await scan(0, 0); // scan tree 0 from the start
 
 if (result.selfBurnable.length === 0) {
   console.log("No claimable UTXOs found");
@@ -123,12 +123,12 @@ if (result.selfBurnable.length === 0) {
 }
 
 // Step 2: Claim the first self-burnable UTXO into encrypted balance
-const zkProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
+const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const claim = getClaimSelfClaimableUtxoIntoEncryptedBalanceFunction(
+const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
@@ -142,24 +142,24 @@ console.log("Claimed UTXO, signatures:", claimResult.signatures);
 
 ```typescript
 import {
-  getFetchClaimableUtxosFunction,
-  getClaimSelfClaimableUtxoIntoPublicBalanceFunction,
+  getClaimableUtxoScannerFunction,
+  getSelfClaimableUtxoToPublicBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
-import { getClaimSelfClaimableUtxoIntoPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
 
-const zkProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
+const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
 const relayer = getUmbraRelayer({
   apiEndpoint: "https://6yn4ndrv2i.execute-api.eu-central-1.amazonaws.com",
 });
 
-const fetch = getFetchClaimableUtxosFunction({ client });
-const claim = getClaimSelfClaimableUtxoIntoPublicBalanceFunction(
+const scan = getClaimableUtxoScannerFunction({ client });
+const claim = getSelfClaimableUtxoToPublicBalanceClaimerFunction(
   { client },
   { zkProver, relayer },
 );
 
-const result = await fetch(0, 0);
+const result = await scan(0, 0);
 
 if (result.selfBurnable.length > 0) {
   const claimResult = await claim(result.selfBurnable);
@@ -181,7 +181,7 @@ Proof generation is CPU-intensive and may take 1–5 seconds. Consider showing a
 
 Merkle proofs become stale if the tree root changes between when you fetch the proof and when you submit the claim. This can happen if other UTXOs are inserted into the tree.
 
-If your claim fails with a root mismatch error, re-fetch the proof using `getFetchClaimableUtxosFunction` and try again.
+If your claim fails with a root mismatch error, re-fetch the proof using `getClaimableUtxoScannerFunction` and try again.
 
 <Warning>
 Do not cache Merkle proofs for extended periods. Always fetch a fresh proof immediately before submitting a claim. The indexer's `/v1/trees/{tree_index}/proof/{insertion_index}` endpoint always returns the latest valid proof.
@@ -213,7 +213,7 @@ try {
 
       case "transaction-validate":
         // Pre-flight simulation failed - often indicates a stale Merkle proof.
-        // Re-fetch the proof using getFetchClaimableUtxosFunction and try again.
+        // Re-fetch the proof using getClaimableUtxoScannerFunction and try again.
         console.warn("Claim pre-flight failed - Merkle proof may be stale:", err.message);
         break;
 

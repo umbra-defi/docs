@@ -54,10 +54,10 @@ Most applications only need the main `@umbra-privacy/sdk` import.
 ```typescript
 // Everything you need for standard usage
 import {
-  getUmbraClientFromSigner,
+  getUmbraClient,
   getUserRegistrationFunction,
-  getDirectDepositIntoEncryptedBalanceFunction,
-  getDirectWithdrawIntoPublicBalanceV3Function,
+  getPublicBalanceToEncryptedBalanceDirectDepositorFunction,
+  getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction,
 } from "@umbra-privacy/sdk";
 
 // Error handling

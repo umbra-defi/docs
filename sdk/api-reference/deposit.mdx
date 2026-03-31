@@ -3,20 +3,20 @@ title: "Deposit API Reference"
 description: "Complete reference for direct deposit into encrypted balance."
 ---
 
-## `getDirectDepositIntoEncryptedBalanceFunction`
+## `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`
 
 ```typescript
-import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
-function getDirectDepositIntoEncryptedBalanceFunction(
-  args: GetDirectDepositIntoEncryptedBalanceFunctionArgs,
-  deps?: GetDirectDepositIntoEncryptedBalanceFunctionDeps,
-): DirectDepositIntoEncryptedBalanceFunction
+function getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
+  args: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs,
+  deps?: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps,
+): PublicBalanceToEncryptedBalanceDirectDepositorFunction
 ```
 
 Factory function that returns a callable deposit function.
 
-### `GetDirectDepositIntoEncryptedBalanceFunctionArgs`
+### `GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -30,12 +30,10 @@ async function deposit(
   mint: Address,
   transferAmount: bigint,
   options?: DirectDepositOptions,
-): Promise<TransactionSignature>
+): Promise<DepositResult>
 ```
 
-Moves tokens from the calling user's ATA into their encrypted balance.
-
-Returns the confirmed transaction signature.
+Moves tokens from the calling user's ATA into their encrypted balance. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium MPC, then waits for the callback to confirm.
 
 ### Parameters
 
@@ -63,6 +61,36 @@ Returns the confirmed transaction signature.
   32 bytes of optional metadata stored with the deposit. Defaults to zero bytes.
 </ParamField>
 
+<ParamField path="options.awaitCallback" type="boolean" default="true">
+  Whether to wait for the Arcium MPC callback transaction to confirm before resolving.
+</ParamField>
+
+<ParamField path="options.skipPreflight" type="boolean" default="false">
+  Skip Solana transaction preflight simulation.
+</ParamField>
+
+<ParamField path="options.maxRetries" type="number">
+  Maximum number of times the RPC node should retry sending the transaction.
+</ParamField>
+
+<ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level for RPC account reads. Per-call override.
+</ParamField>
+
+<ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
+  Commitment level for epoch info fetches (Token-2022 fee schedule). Per-call override.
+</ParamField>
+
+### Return Value
+
+Returns `Promise<DepositResult>`:
+
+- `queueSignature` - Transaction signature of the handler (queue computation) transaction.
+- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackElapsedMs` - Milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
+- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error from rent reclaim attempt, if any. The deposit itself still succeeded.
+
 ---
 
 ## Instruction Variant Selection
@@ -81,7 +109,7 @@ No manual mode selection is needed.
 ## Protocol Fee Formula
 
 ```
-credited = transferAmount - baseFee - floor((transferAmount - baseFee) × commissionBps / 10000)
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 10000)
 ```
 
 Fee parameters are set on-chain per pool by the pool administrator.

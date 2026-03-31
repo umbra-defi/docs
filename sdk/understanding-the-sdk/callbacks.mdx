@@ -74,7 +74,7 @@ UTXO creation involves up to three transactions. Each has its own callbacks slot
 
 ```typescript
 // See /sdk/advanced/zk-provers for zkProver setup
-const createUtxo = getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+const createUtxo = getPublicBalanceToSelfClaimableUtxoCreatorFunction(
   { client },
   { zkProver }, // e.g. getCreateSelfClaimableUtxoFromPublicBalanceProver(assetProvider)
 );
@@ -103,7 +103,7 @@ await createUtxo(recipient, mint, amount, {
 Deposits, withdrawals, compliance operations, and most other functions take a single top-level `callbacks` argument:
 
 ```typescript
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
 await deposit(destinationAddress, mint, amount, {
   callbacks: {

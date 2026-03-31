@@ -60,7 +60,7 @@ You obtain the `wallet` and `account` objects via `@wallet-standard/react`'s `us
 import { useWallet } from "@solana/react"; // or @wallet-standard/react
 import {
   createSignerFromWalletAccount,
-  getUmbraClientFromSigner,
+  getUmbraClient,
 } from "@umbra-privacy/sdk";
 
 function useUmbraClient(rpcUrl: string, rpcSubscriptionsUrl: string) {
@@ -72,7 +72,7 @@ function useUmbraClient(rpcUrl: string, rpcSubscriptionsUrl: string) {
   // account - the WalletAccount to sign with
   const signer = createSignerFromWalletAccount(wallet, account);
 
-  return getUmbraClientFromSigner({
+  return getUmbraClient({
     signer,
     network: "mainnet",
     rpcUrl,
@@ -101,13 +101,13 @@ This path is compatible with all Wallet Standard wallets and does not require `@
 
 The first time any cryptographic operation runs (typically during `register()`), the SDK calls `signer.signMessage` with a deterministic message to derive the **master seed** (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). This produces a one-time wallet signing prompt.
 
-The message that the user signs is:
+The message that the user signs is a multi-paragraph legal consent and acknowledgement. It is exported as `UMBRA_MESSAGE_TO_SIGN` from `@umbra-privacy/sdk`:
 
-```
-Umbra Privacy - Master Seed Generation - {signerAddress}
+```typescript
+import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
 ```
 
-where `{signerAddress}` is the user's Solana wallet address. The signature is then hashed with KMAC256 (dkLen=64) to produce the 512-bit master seed.
+The signature is then hashed with KMAC256 (dkLen=64) to produce the 512-bit master seed.
 
 <Warning>
 The master seed is derived deterministically from this signature. If the message changed, a completely different master seed would be produced - all previously registered keys would become inaccessible. Never modify the derivation message.
@@ -115,16 +115,16 @@ The master seed is derived deterministically from this signature. If the message
 
 After derivation, the seed is cached in memory for the lifetime of the client object. The prompt does not appear again unless the client is recreated.
 
-To control exactly when the prompt fires, use the `deferMasterSeedSignature` option in `getUmbraClientFromSigner`. See [Creating a Client - Master Seed Derivation](/sdk/creating-a-client#master-seed-derivation).
+To control exactly when the prompt fires, use the `deferMasterSeedSignature` option in `getUmbraClient`. See [Creating a Client - Master Seed Derivation](/sdk/creating-a-client#master-seed-derivation).
 
 ## Persisting the Master Seed
 
 By default, the master seed lives only in memory. If you want to avoid re-deriving it on every page load, you can persist it using the `masterSeedStorage` dependency override:
 
 ```typescript
-import { getUmbraClientFromSigner } from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClientFromSigner(
+const client = await getUmbraClient(
   { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
   {
     masterSeedStorage: {

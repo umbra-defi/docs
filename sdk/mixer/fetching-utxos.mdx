@@ -12,44 +12,44 @@ After tokens are deposited into the mixer, the depositor publishes an encrypted 
 3. Successfully decrypted ciphertexts are their claimable UTXOs
 4. Fetch the Merkle proof for each claimable UTXO
 
-`getFetchClaimableUtxosFunction` handles all of these steps automatically.
+`getClaimableUtxoScannerFunction` handles all of these steps automatically.
 
 <Warning>
-This function requires the indexer. Ensure `indexerApiEndpoint` is set when creating the client, or the function will throw.
+This function requires the indexer. Ensure `indexerApiEndpoint` is set when creating the client with `getUmbraClient`, or the function will throw.
 </Warning>
 
 ## Usage
 
 ```typescript
-import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
 
-const fetch = getFetchClaimableUtxosFunction({ client });
+const scan = getClaimableUtxoScannerFunction({ client });
 
-const result = await fetch(
-  treeIndex,           // which Merkle tree to scan
-  startInsertionIndex, // start scanning from this leaf position
-  endInsertionIndex?,  // optional upper bound
+const result = await scan(
+  treeIndex,           // which Merkle tree to scan (U32)
+  startInsertionIndex, // start scanning from this leaf position (U32)
+  endInsertionIndex?,  // optional upper bound (U32)
 );
 ```
 
 ## Parameters
 
-<ParamField path="treeIndex" type="number" required>
-  The zero-based index of the Merkle tree to scan. Start with `0` for the first tree. If the current tree is filling up, increment to check the next one.
+<ParamField path="treeIndex" type="U32" required>
+  The zero-based index of the Merkle tree to scan. Start with `0` for the first tree. If the current tree is filling up, increment to check the next one. This is a branded `U32` type, not a plain `number`.
 </ParamField>
 
-<ParamField path="startInsertionIndex" type="number" required>
-  The leaf position to start scanning from (inclusive). Pass `0` to scan from the beginning. To resume from where you left off, pass the insertion index of the last UTXO you have already seen.
+<ParamField path="startInsertionIndex" type="U32" required>
+  The leaf position to start scanning from (inclusive). Pass `0` to scan from the beginning. To resume from where you left off, pass the insertion index of the last UTXO you have already seen. This is a branded `U32` type, not a plain `number`.
 </ParamField>
 
-<ParamField path="endInsertionIndex" type="number">
-  The leaf position to stop at (inclusive). If omitted, scans to the end of the current tree. Use this to limit the scan range when you know the approximate insertion window of your UTXOs.
+<ParamField path="endInsertionIndex" type="U32">
+  The leaf position to stop at (inclusive). If omitted, scans to the end of the current tree. Use this to limit the scan range when you know the approximate insertion window of your UTXOs. This is a branded `U32` type, not a plain `number`.
 </ParamField>
 
 ## Return Value
 
 ```typescript
-type ClaimableUtxoResult = {
+type ScannedUtxoResult = {
   selfBurnable: ClaimableUtxoData[];       // UTXOs you created yourself (from encrypted balance)
   received: ClaimableUtxoData[];           // UTXOs sent to you by others (from encrypted balance)
   publicSelfBurnable: ClaimableUtxoData[]; // UTXOs you created yourself (from public balance)
@@ -63,11 +63,11 @@ Each `ClaimableUtxoData` is a flat structure containing both the UTXO data and i
 ## Example: Fetch All UTXOs for Tree 0
 
 ```typescript
-import { getFetchClaimableUtxosFunction } from "@umbra-privacy/sdk";
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
 
-const fetch = getFetchClaimableUtxosFunction({ client });
+const scan = getClaimableUtxoScannerFunction({ client });
 
-const result = await fetch(0, 0); // scan all of tree 0
+const result = await scan(0, 0); // scan all of tree 0
 
 console.log("Self-burnable UTXOs:", result.selfBurnable.length);
 console.log("Received UTXOs:", result.received.length);
@@ -86,14 +86,14 @@ For large trees, scan in chunks to avoid timeouts:
 ```typescript
 const CHUNK_SIZE = 10_000;
 
-async function fetchAllUtxos(treeIndex: number) {
-  const fetch = getFetchClaimableUtxosFunction({ client });
+async function fetchAllUtxos(treeIndex: U32) {
+  const scan = getClaimableUtxoScannerFunction({ client });
   const allSelfBurnable = [];
   const allReceived = [];
 
   let cursor = 0;
   while (true) {
-    const result = await fetch(treeIndex, cursor, cursor + CHUNK_SIZE - 1);
+    const result = await scan(treeIndex, cursor, cursor + CHUNK_SIZE - 1);
     allSelfBurnable.push(...result.selfBurnable);
     allReceived.push(...result.received);
 
@@ -135,7 +135,7 @@ try {
     switch (err.stage) {
       case "initialization":
         // Factory construction failed - indexerApiEndpoint was not configured.
-        // Ensure indexerApiEndpoint is set when calling getUmbraClientFromSigner.
+        // Ensure indexerApiEndpoint is set when calling getUmbraClient.
         console.error("Indexer not configured:", err.message);
         break;
 

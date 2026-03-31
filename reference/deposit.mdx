@@ -3,26 +3,26 @@ title: "Deposit"
 description: "Direct deposit into encrypted balances and UTXO creation into the mixer - from encrypted or public balances."
 ---
 
-## getDirectDepositIntoEncryptedBalanceFunction
+## getPublicBalanceToEncryptedBalanceDirectDepositorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getDirectDepositIntoEncryptedBalanceFunction(
-  args: GetDepositIntoEncryptedBalanceFunctionArgs,
-  deps?: GetDepositIntoEncryptedBalanceFunctionDeps,
-): DepositIntoEncryptedBalanceFunction
+function getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
+  args: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs,
+  deps?: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps,
+): PublicBalanceToEncryptedBalanceDirectDepositorFunction
 ```
 
-Transfers tokens from a public associated token account (ATA) into a destination address's encrypted balance. The destination must be registered on Umbra. This is the primary deposit path - no ZK proof required.
+Transfers tokens from a public associated token account (ATA) into a destination address's encrypted balance. The destination must be registered on Umbra. This is the primary deposit path - no ZK proof required. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
 ---
 
-### GetDepositIntoEncryptedBalanceFunctionArgs
+### GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetDepositIntoEncryptedBalanceFunctionDeps
+### GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `getLatestBlockhash?: GetLatestBlockhash`
@@ -31,15 +31,15 @@ Transfers tokens from a public associated token account (ATA) into a destination
 
 ### Returns
 
-`DepositIntoEncryptedBalanceFunction`
+`PublicBalanceToEncryptedBalanceDirectDepositorFunction`
 
 ```typescript
-type DepositIntoEncryptedBalanceFunction = (
+type PublicBalanceToEncryptedBalanceDirectDepositorFunction = (
   destinationAddress: Address,
   mint: Address,
   transferAmount: U64,
   options?: DepositIntoEncryptedBalanceOptions,
-) => Promise<TransactionSignature>
+) => Promise<DepositResult>
 ```
 
 - `destinationAddress: Address` - The Umbra-registered recipient.
@@ -51,6 +51,29 @@ type DepositIntoEncryptedBalanceFunction = (
 - `priorityFees?: U64` - Compute unit price in micro-lamports. Default: `0n`.
 - `purpose?: number` - Caller-defined purpose tag stored on-chain. Default: `0`.
 - `optionalData?: OptionalData32` - 32-byte caller metadata. Default: 32 zero bytes.
+- `awaitCallback?: boolean` - Whether to wait for the MPC callback. Default: `true`.
+- `skipPreflight?: boolean` - Skip Solana preflight simulation. Default: `false`.
+- `maxRetries?: number` - Max RPC retry attempts for transaction sending.
+- `accountInfoCommitment?: Commitment` - Per-call commitment for RPC account reads. Default: `"confirmed"`.
+- `epochInfoCommitment?: Commitment` - Per-call commitment for epoch info fetches. Default: `"confirmed"`.
+
+### DepositResult
+
+```typescript
+interface DepositResult {
+  queueSignature: TransactionSignature;
+  callbackSignature?: TransactionSignature;
+  callbackElapsedMs?: number;
+  rentClaimSignature?: TransactionSignature;
+  rentClaimError?: Error;
+}
+```
+
+- `queueSignature` - Signature of the handler (queue computation) transaction.
+- `callbackSignature` - Signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackElapsedMs` - Milliseconds spent waiting for the callback.
+- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimError` - Error from rent reclaim attempt, if any. The deposit itself still succeeded.
 
 ### Errors
 
@@ -59,26 +82,27 @@ Throws `EncryptedDepositError`. See [Errors](./errors#encrypteddepositerror).
 ### Example
 
 ```typescript
-import { getDirectDepositIntoEncryptedBalanceFunction } from "@umbra-privacy/sdk";
+import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
-const deposit = getDirectDepositIntoEncryptedBalanceFunction({ client });
-const signature = await deposit(recipientAddress, mintAddress, 1_000_000n);
+const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const result = await deposit(recipientAddress, mintAddress, 1_000_000n);
+console.log("Queue signature:", result.queueSignature);
 ```
 
 ---
 
-## getCreateSelfClaimableUtxoFromEncryptedBalanceFunction
+## getEncryptedBalanceToSelfClaimableUtxoCreatorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getCreateSelfClaimableUtxoFromEncryptedBalanceFunction(
+function getEncryptedBalanceToSelfClaimableUtxoCreatorFunction(
   args: GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionArgs,
   deps: GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionDeps,
 ): CreateSelfClaimableUtxoFromEncryptedBalanceFunction
 ```
 
-Creates a self-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance → Mixer). The created UTXO can only be claimed by the creator. Requires a ZK proof - `deps.zkProver` is **required**.
+Creates a self-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance -> Mixer). The created UTXO can only be claimed by the creator. Requires a ZK proof - `deps.zkProver` is **required**.
 
 ---
 
@@ -88,7 +112,7 @@ Creates a self-claimable UTXO in the mixer funded from the caller's encrypted ba
 
 ### GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionDeps
 
-- `zkProver: IZkProverForSelfClaimableUtxo` - **Required.** ZK proof generator for UTXO commitments. Use `getCreateSelfClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers). This operation submits two transactions: a proof account creation followed by the UTXO instruction.
+- `zkProver: IZkProverForSelfClaimableUtxo` - **Required.** ZK proof generator for UTXO commitments. Use `getCreateSelfClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers). This operation submits two transactions: a proof account creation followed by the UTXO instruction.
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -127,18 +151,18 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ---
 
-## getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction
+## getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getCreateReceiverClaimableUtxoFromEncryptedBalanceFunction(
+function getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction(
   args: GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionArgs,
   deps: GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionDeps,
 ): CreateReceiverClaimableUtxoFromEncryptedBalanceFunction
 ```
 
-Creates a receiver-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance → Mixer). The UTXO is encrypted for the recipient's X25519 key - only the recipient can claim it. Requires `deps.zkProver` (**required**).
+Creates a receiver-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance -> Mixer). The UTXO is encrypted for the recipient's X25519 key - only the recipient can claim it. Requires `deps.zkProver` (**required**).
 
 ---
 
@@ -148,7 +172,7 @@ Creates a receiver-claimable UTXO in the mixer funded from the caller's encrypte
 
 ### GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionDeps
 
-- `zkProver: IZkProverForReceiverClaimableUtxo` - **Required.** Use `getCreateReceiverClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: IZkProverForReceiverClaimableUtxo` - **Required.** Use `getCreateReceiverClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -174,18 +198,18 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ---
 
-## getCreateSelfClaimableUtxoFromPublicBalanceFunction
+## getPublicBalanceToSelfClaimableUtxoCreatorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getCreateSelfClaimableUtxoFromPublicBalanceFunction(
+function getPublicBalanceToSelfClaimableUtxoCreatorFunction(
   args: GetCreateSelfClaimableUtxoFromPublicBalanceFunctionArgs,
   deps: GetCreateSelfClaimableUtxoFromPublicBalanceFunctionDeps,
 ): CreateSelfClaimableUtxoFromPublicBalanceFunction
 ```
 
-Creates a self-claimable UTXO in the mixer funded from a public ATA (ATA → Mixer). No MPC required - the ZK proof is generated client-side. `deps.zkProver` is **required**.
+Creates a self-claimable UTXO in the mixer funded from a public ATA (ATA -> Mixer). No MPC required - the ZK proof is generated client-side. `deps.zkProver` is **required**.
 
 ---
 
@@ -195,7 +219,7 @@ Creates a self-claimable UTXO in the mixer funded from a public ATA (ATA → Mix
 
 ### GetCreateSelfClaimableUtxoFromPublicBalanceFunctionDeps
 
-- `zkProver: ZkProverForSelfClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateSelfClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: ZkProverForSelfClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateSelfClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -243,18 +267,18 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ---
 
-## getCreateReceiverClaimableUtxoFromPublicBalanceFunction
+## getPublicBalanceToReceiverClaimableUtxoCreatorFunction
 
 **Import:** `@umbra-privacy/sdk`
 
 ```typescript
-function getCreateReceiverClaimableUtxoFromPublicBalanceFunction(
+function getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
   args: GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionArgs,
   deps: GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionDeps,
 ): CreateReceiverClaimableUtxoFromPublicBalanceFunction
 ```
 
-Creates a receiver-claimable UTXO funded from a public ATA (ATA → Mixer). The UTXO is encrypted for the recipient - only they can claim it. `deps.zkProver` is **required**.
+Creates a receiver-claimable UTXO funded from a public ATA (ATA -> Mixer). The UTXO is encrypted for the recipient - only they can claim it. `deps.zkProver` is **required**.
 
 ---
 
@@ -264,7 +288,7 @@ Creates a receiver-claimable UTXO funded from a public ATA (ATA → Mixer). The 
 
 ### GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionDeps
 
-- `zkProver: ZkProverForReceiverClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateReceiverClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
+- `zkProver: ZkProverForReceiverClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateReceiverClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
 - `blockhashProvider?: GetLatestBlockhash`
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `transactionForwarder?: TransactionForwarder`
@@ -296,7 +320,7 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ## EncryptedDepositError
 
-Thrown by `getDirectDepositIntoEncryptedBalanceFunction`.
+Thrown by `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`.
 
 Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"fee-calculation"` | `"pda-derivation"` | `"account-fetch"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
 

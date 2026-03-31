@@ -53,9 +53,9 @@ See [Mixer Pool Viewing Keys](/sdk/compliance-viewing-keys) for full derivation 
 X25519 compliance grants use on-chain PDAs to authorize Arcium MPC to re-encrypt your encrypted token account ciphertexts under a grantee's X25519 key. You create the grant voluntarily, choose the receiver and a unique nonce, and can revoke it at any time by deleting the PDA.
 
 ```typescript
-import { getCreateUserGrantedComplianceGrantFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
 
-const createGrant = getCreateUserGrantedComplianceGrantFunction({ client });
+const createGrant = getComplianceGrantIssuerFunction({ client });
 
 // Create a grant allowing `receiver` to re-encrypt your shared ciphertexts
 const signature = await createGrant(
