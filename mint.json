@@ -47,9 +47,11 @@
       "url": "relayer"
     }
   ],
-  "openapi": "openapi-read-service.yaml",
+  "openapi": [
+    "openapi-read-service.yaml",
+    "openapi-relayer.yaml"
+  ],
   "api": {
-    "baseUrl": "https://indexer.api.umbraprivacy.com",
     "playground": {
       "mode": "hide"
     }

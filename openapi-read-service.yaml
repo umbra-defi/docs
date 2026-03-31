@@ -52,8 +52,8 @@ info:
     name: Umbra Protocol
 
 servers:
-  - url: http://localhost:3001
-    description: Local development (default port)
+  - url: https://indexer.api.umbraprivacy.com
+    description: Mainnet
 
 tags:
   - name: health

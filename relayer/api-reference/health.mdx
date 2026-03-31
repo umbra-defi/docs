@@ -1,24 +1,7 @@
 ---
 title: "Relayer Health"
+openapi: "openapi-relayer.yaml GET /v1/health"
 description: "Check if the relayer service is operational."
 ---
 
-## Endpoint
-
-`GET /v1/health`
-
-Returns a simple health status. Used by load balancers and monitoring systems.
-
-## Authentication
-
-None.
-
-## Response
-
-**200 OK** — JSON object:
-
-```json
-{
-  "status": "ok"
-}
-```
+Used by load balancers and monitoring systems to verify the relayer is running.
