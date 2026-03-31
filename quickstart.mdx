@@ -92,8 +92,8 @@ import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbr
 
 const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 
-const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
-const amount = 1_000_000n; // 1 token (6 decimals)
+const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const amount = 1_000_000n; // 1 USDC (6 decimals)
 
 const result = await deposit(
   client.signer.address, // deposit into your own encrypted account
@@ -230,7 +230,7 @@ async function main() {
   const register = getUserRegistrationFunction({ client });
   await register({ confidential: true, anonymous: true });
 
-  const MINT = "C6KsXC5aFhffHVnaHn6LxQzM3SJGmdW6mB6FWNbwJ2Kr";
+  const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
   // 4. Deposit into encrypted balance
   const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });

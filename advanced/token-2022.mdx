@@ -68,7 +68,7 @@ Where `feeBasisPoints` and `maximumFee` are read from the epoch-appropriate fee 
 You do not need to do anything special to use Token-2022 mints. Simply pass the Token-2022 mint address as you would any other mint:
 
 ```typescript
-const TOKEN22_MINT = "TokenMintAddressHere...";
+const TOKEN22_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
 
 const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
 const result = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
