@@ -22,7 +22,6 @@ const signer = await createInMemorySigner();
 console.log(signer.address); // base58 public key
 ```
 
-**Alias:** `generateKeyPairSigner()` is re-exported as a convenience alias for `createInMemorySigner()`.
 
 ---
 
@@ -47,7 +46,6 @@ const keyFile = JSON.parse(readFileSync("/path/to/id.json", "utf8"));
 const signer = await createSignerFromPrivateKeyBytes(new Uint8Array(keyFile));
 ```
 
-**Alias:** `getUmbraSignerFromKeypairBytes()` is available as an alternative name for `createSignerFromPrivateKeyBytes()`.
 
 ---
 
@@ -82,7 +80,7 @@ const signer = createSignerFromKeyPair(kps);
 
 ```typescript
 import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
-import type { Wallet, WalletAccount } from "@wallet-standard/core";
+import type { Wallet, WalletAccount } from "@wallet-standard/base";
 
 function createSignerFromWalletAccount(wallet: Wallet, account: WalletAccount): IUmbraSigner
 ```
@@ -111,7 +109,6 @@ const { accounts } = await wallet.features[StandardConnect].connect();
 const signer = createSignerFromWalletAccount(wallet, accounts[0]);
 ```
 
-**Alias:** `getUmbraSignerFromWalletStandardWallet()` is available as an alternative name for `createSignerFromWalletAccount()`.
 
 **Transaction signing flow:**
 1. Serializes `@solana/kit` `Transaction` to wire bytes via `getTransactionEncoder()`

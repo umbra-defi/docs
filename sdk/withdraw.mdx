@@ -78,9 +78,10 @@ const result = await withdraw(
 Returns a `Promise<WithdrawResult>`. The `WithdrawResult` object contains:
 
 - `queueSignature` - The transaction signature of the handler (queue computation) transaction.
-- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `awaitCallback` is `true` (the default).
+- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true` (the default).
+- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `callbackStatus` is `"finalized"`.
 - `callbackElapsedMs` - Wall-clock milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Transaction signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimSignature` - Transaction signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
 - `rentClaimError` - Error encountered during rent reclaim, if any. The withdrawal itself still succeeded.
 
 ## Example

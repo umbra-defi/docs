@@ -93,9 +93,10 @@ const result = await deposit(
 Returns a `Promise<DepositResult>`. The `DepositResult` object contains:
 
 - `queueSignature` - The transaction signature of the handler (queue computation) transaction.
-- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `awaitCallback` is `true` (the default).
+- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true` (the default).
+- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `callbackStatus` is `"finalized"`.
 - `callbackElapsedMs` - Wall-clock milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Transaction signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimSignature` - Transaction signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
 - `rentClaimError` - Error encountered during rent reclaim, if any. The deposit itself still succeeded.
 
 Deposits follow the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium to complete the MPC computation, then waits for the callback transaction to confirm.

@@ -17,7 +17,7 @@ async function getUmbraClient(
 Factory function that constructs an `IUmbraClient`. All Umbra SDK service functions accept a client and use it as their shared context.
 
 <Note>
-In v2.0.x, there is no client-level `commitment` parameter. Instead, each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment` and `epochInfoCommitment`). Both default to `"confirmed"`.
+There is no client-level `commitment` parameter. Instead, each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment` and `epochInfoCommitment`). Both default to `"confirmed"`.
 </Note>
 
 ### `GetUmbraClientArgs`
@@ -42,8 +42,8 @@ In v2.0.x, there is no client-level `commitment` parameter. Instead, each SDK fu
   Umbra indexer base URL. Required for all mixer operations. Omit for deposit/withdraw-only usage.
 </ParamField>
 
-<ParamField path="deferMasterSeedSignature" type="boolean" default="true">
-  When `true` (default): master seed derivation is lazy - the wallet prompt fires on first use. When `false`: master seed is eagerly derived at construction time, before the returned `Promise` resolves.
+<ParamField path="deferMasterSeedSignature" type="boolean" default="false">
+  When `false` (default): master seed is eagerly derived at construction time — the wallet prompt fires before the returned `Promise` resolves. When `true`: master seed derivation is lazy — the wallet prompt fires on first use.
 </ParamField>
 
 <ParamField path="offsets" type="object">

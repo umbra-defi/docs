@@ -84,9 +84,10 @@ Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instru
 Returns `Promise<WithdrawResult>`:
 
 - `queueSignature` - Transaction signature of the handler (queue computation) transaction.
-- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
+- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
 - `callbackElapsedMs` - Milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
 - `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
 
 ---

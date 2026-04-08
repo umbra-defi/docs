@@ -39,28 +39,16 @@ Returns an array of transaction signatures - one per step that was executed. An 
   Register the Poseidon user commitment and master viewing key for mixer / anonymous transfer support. Requires `confidential: true`.
 </ParamField>
 
-<ParamField path="callbacks.onBeforeAccountInit" type="() => Promise<void>">
-  Called before the base account initialization transaction is sent.
+<ParamField path="callbacks.userAccountInitialisation" type="TransactionCallbacks">
+  `pre(tx)` is called before the account init transaction is sent. `post(tx, sig)` is called after it confirms.
 </ParamField>
 
-<ParamField path="callbacks.onAfterAccountInit" type="(sig: TransactionSignature) => Promise<void>">
-  Called after the base account initialization confirms.
+<ParamField path="callbacks.registerX25519PublicKey" type="TransactionCallbacks">
+  `pre(tx)` is called before the X25519 key registration transaction is sent. `post(tx, sig)` is called after it confirms.
 </ParamField>
 
-<ParamField path="callbacks.onBeforeX25519Registration" type="() => Promise<void>">
-  Called before the X25519 key registration transaction is sent.
-</ParamField>
-
-<ParamField path="callbacks.onAfterX25519Registration" type="(sig: TransactionSignature) => Promise<void>">
-  Called after the X25519 key registration confirms.
-</ParamField>
-
-<ParamField path="callbacks.onBeforeCommitmentRegistration" type="() => Promise<void>">
-  Called before the user commitment registration transaction is sent.
-</ParamField>
-
-<ParamField path="callbacks.onAfterCommitmentRegistration" type="(sig: TransactionSignature) => Promise<void>">
-  Called after the user commitment registration confirms.
+<ParamField path="callbacks.registerUserForAnonymousUsage" type="TransactionCallbacks">
+  `pre(tx)` is called before the user commitment registration transaction is sent. `post(tx, sig)` is called after it confirms.
 </ParamField>
 
 ---

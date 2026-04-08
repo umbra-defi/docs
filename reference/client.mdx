@@ -19,7 +19,7 @@ The primary SDK entry point. Call this once per session with a connected wallet 
 By default this immediately prompts the wallet to sign the master seed derivation message. Pass `deferMasterSeedSignature: true` to skip that prompt at construction time - it will be requested on the first operation that requires key material.
 
 <Note>
-In v2.0.x, there is no client-level `commitment` parameter. Each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment`, `epochInfoCommitment`, or `commitment`). Both default to `"confirmed"`.
+There is no client-level `commitment` parameter. Each SDK function accepts per-call commitment overrides via its `options` argument (e.g., `accountInfoCommitment`, `epochInfoCommitment`, or `commitment`). Both default to `"confirmed"`.
 </Note>
 
 ---

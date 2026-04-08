@@ -202,7 +202,7 @@ await claim([received[0]]);
 - BPS Divisor: 16,384 (2^14)
 - Indexer (Mainnet): `https://indexer.api.umbraprivacy.com`
 - Relayer (Mainnet): `https://relayer.api.umbraprivacy.com`
-- NPM Package: `@umbra-privacy/sdk` (v2.0.3)
+- NPM Package: `@umbra-privacy/sdk` (v3.0.0)
 - ZK Prover Package: `@umbra-privacy/web-zk-prover` (v2.0.1)
 
 ## Optional

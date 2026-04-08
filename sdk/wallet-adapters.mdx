@@ -63,7 +63,7 @@ pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
 ```typescript
 import { getWallets } from "@wallet-standard/app";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
-import { StandardConnect } from "@wallet-standard/features";
+import { StandardConnect, StandardDisconnect } from "@wallet-standard/features";
 import {
   createSignerFromWalletAccount,
   getUmbraClient,
@@ -95,6 +95,7 @@ const client = await getUmbraClient({
   rpcUrl: "https://api.mainnet-beta.solana.com",
   rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
   indexerApiEndpoint: "https://indexer.api.umbraprivacy.com",
+  deferMasterSeedSignature: true, // prompt fires on first operation, not at connect time
 });
 ```
 

@@ -67,17 +67,19 @@ type EncryptedBalanceToPublicBalanceDirectWithdrawerFunction = (
 ```typescript
 interface WithdrawResult {
   queueSignature: TransactionSignature;
+  callbackStatus?: "finalized" | "pruned" | "timed-out";
   callbackSignature?: TransactionSignature;
   callbackElapsedMs?: number;
   rentClaimSignature?: TransactionSignature;
-  rentClaimError?: Error;
+  rentClaimError?: string;
 }
 ```
 
 - `queueSignature` - Signature of the handler (queue computation) transaction.
-- `callbackSignature` - Signature of the Arcium MPC callback. Present when `awaitCallback` is `true`.
+- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
+- `callbackSignature` - Signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
 - `callbackElapsedMs` - Milliseconds spent waiting for the callback.
-- `rentClaimSignature` - Signature for reclaiming rent from ephemeral accounts, if applicable.
+- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
 - `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
 
 ---
