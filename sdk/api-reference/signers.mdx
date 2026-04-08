@@ -100,11 +100,15 @@ Adapts a [Wallet Standard](https://github.com/wallet-standard/wallet-standard) `
 Throws immediately if the wallet does not support `"solana:signTransaction"` or `"solana:signMessage"`.
 
 ```typescript
-import { useWallet } from "@solana/react";
+import { getWallets } from "@wallet-standard/app";
+import { StandardConnect } from "@wallet-standard/features";
 import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
 
-const { wallet, account } = useWallet();
-const signer = createSignerFromWalletAccount(wallet, account);
+// Discover and connect
+const { get } = getWallets();
+const wallet = get().find((w) => w.name === "Phantom");
+const { accounts } = await wallet.features[StandardConnect].connect();
+const signer = createSignerFromWalletAccount(wallet, accounts[0]);
 ```
 
 **Alias:** `getUmbraSignerFromWalletStandardWallet()` is available as an alternative name for `createSignerFromWalletAccount()`.
@@ -117,7 +121,11 @@ const signer = createSignerFromWalletAccount(wallet, account);
 
 ---
 
-### `createWalletAdapterSigner`
+### `createWalletAdapterSigner` (Deprecated)
+
+<Warning>
+This function is deprecated. Use `createSignerFromWalletAccount` with the Wallet Standard API instead. All modern Solana wallets (Phantom, Solflare, Backpack) implement the Wallet Standard directly.
+</Warning>
 
 ```typescript
 import { createWalletAdapterSigner } from "@umbra-privacy/sdk";
@@ -126,24 +134,15 @@ import type { WalletAdapterShape } from "@umbra-privacy/sdk";
 function createWalletAdapterSigner(adapter: WalletAdapterShape): IUmbraSigner
 ```
 
-Adapts a `@solana/wallet-adapter-base`-style `StandardWalletAdapter` to `IUmbraSigner`. Use when your app already integrates `@solana/wallet-adapter-react`.
+Adapts a `@solana/wallet-adapter-base`-style `StandardWalletAdapter` to `IUmbraSigner`. Only use this if your app is locked to the legacy `@solana/wallet-adapter-react` ecosystem and cannot migrate to Wallet Standard.
 
 <ParamField path="adapter" type="WalletAdapterShape" required>
-  The raw adapter object. Obtain via `useWallet().wallet.adapter`. The adapter must expose a `wallet` property (the underlying Wallet Standard object) - this is present on `StandardWalletAdapter` but not on legacy adapters.
+  The raw adapter object from `@solana/wallet-adapter-react`'s `useWallet().wallet.adapter`. The adapter must expose a `wallet` property (the underlying Wallet Standard object).
 </ParamField>
-
-```typescript
-import { useWallet } from "@solana/wallet-adapter-react";
-import { createWalletAdapterSigner } from "@umbra-privacy/sdk";
-import type { WalletAdapterShape } from "@umbra-privacy/sdk";
-
-const { wallet: walletInfo } = useWallet();
-const signer = createWalletAdapterSigner(walletInfo.adapter as WalletAdapterShape);
-```
 
 ---
 
-## `WalletAdapterShape` Interface
+## `WalletAdapterShape` Interface (Deprecated)
 
 ```typescript
 import type { WalletAdapterShape } from "@umbra-privacy/sdk";
@@ -157,4 +156,4 @@ interface WalletAdapterShape {
 }
 ```
 
-`StandardWalletShape.wallet` is the raw Wallet Standard `Wallet` object. If this property is present and the wallet supports `solana:signTransaction`, the SDK uses the wire-format signing path. If absent, it falls back to the adapter's `signTransaction` method (legacy path).
+If `wallet` is present and supports `solana:signTransaction`, the SDK uses the wire-format signing path. If absent, it falls back to the adapter's `signTransaction` method (legacy path).
