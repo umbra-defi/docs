@@ -198,7 +198,7 @@ await claim([received[0]]);
 ## Protocol Constants
 
 - Program ID (Mainnet): `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh`
-- Program ID (Devnet): `342qFp62fzTt4zowrVPhrDdcRLGapPCMe8w5kFSoJ4f4`
+- Program ID (Devnet): `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`
 - BPS Divisor: 16,384 (2^14)
 - Indexer (Mainnet): `https://utxo-indexer.api.umbraprivacy.com`
 - Indexer (Devnet): `https://utxo-indexer.api-devnet.umbraprivacy.com`
