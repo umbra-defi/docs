@@ -23,8 +23,8 @@ Initialize with `cursor = tree_index x 1,048,576`. Each response includes a `nex
 
 ```bash
 # First page of tree 0
-curl "https://indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=0&limit=1000"
+curl "https://utxo-indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=0&limit=1000"
 
 # Next page (using next_cursor from previous response)
-curl "https://indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=1000&limit=1000"
+curl "https://utxo-indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=1000&limit=1000"
 ```

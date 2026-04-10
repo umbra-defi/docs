@@ -32,6 +32,8 @@ info:
 servers:
   - url: https://relayer.api.umbraprivacy.com
     description: Mainnet
+  - url: https://relayer.api-devnet.umbraprivacy.com
+    description: Devnet
 
 tags:
   - name: relayer

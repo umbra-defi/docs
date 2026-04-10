@@ -52,8 +52,10 @@ info:
     name: Umbra Protocol
 
 servers:
-  - url: https://indexer.api.umbraprivacy.com
+  - url: https://utxo-indexer.api.umbraprivacy.com
     description: Mainnet
+  - url: https://utxo-indexer.api-devnet.umbraprivacy.com
+    description: Devnet
 
 tags:
   - name: health
