@@ -4,10 +4,10 @@ openapi: "GET /v1/trees/{tree_index}/proof/{insertion_index}"
 description: "Generate a Merkle inclusion proof for a specific leaf in a Merkle tree."
 ---
 
-Returns an authentication path of **20 sibling hashes** -- one per level -- ordered from the leaf level (index 0) up to the root level (index 19). All hash values are little-endian 64-character hex strings (32 bytes each).
+Returns an authentication path of **20 sibling hashes** — one per level — ordered from the leaf level (index 0) up to the root level (index 19). All hash values are little-endian 64-character hex strings (32 bytes each).
 
 <Warning>
-Merkle proofs become **stale** when new leaves are inserted into the tree (because the root changes). Always fetch a fresh proof immediately before submitting a claim. Never cache proofs across user sessions.
+Merkle proofs become **stale** when new leaves are inserted into the tree (because the root changes). The burner factories fetch a per-batch proof immediately before submitting the burn, so simply re-run the burner on a stale-root failure — it refetches the proof. Never cache proofs across operations.
 </Warning>
 
 ## Verifying a Proof
@@ -16,9 +16,7 @@ Hash the target leaf with each sibling in order and compare the final result to 
 
 ## Usage in the SDK
 
-The Umbra SDK calls this endpoint automatically via `getClaimableUtxoScannerFunction`. The proof is passed directly to the claim functions -- you do not need to call this endpoint manually when using the SDK.
-
-If you are building a custom claim flow or integrating with the protocol directly, use this endpoint to fetch fresh proofs immediately before submitting a claim transaction.
+The Umbra SDK does **not** use this single-proof endpoint when burning. Burner factories use the [batch endpoint](/indexer/api-reference/batch-proofs) so all proofs in a burn batch share the same root. The single-proof endpoint exists for analytics, debugging, and custom integrations.
 
 ## Performance
 

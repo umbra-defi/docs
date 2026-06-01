@@ -59,9 +59,9 @@ Master Seed  (64 bytes)
 │   │       ├── Monthly Viewing Key  { Mar }
 │   │       └── ...  { Apr – Dec }
 │   ├── MVK Encrypting X25519 Keypair  · Curve25519 · compliance grant auth
-│   ├── Mint X25519 Keypair  · Curve25519 · UTXO ciphertext (per mint)
+│   ├── Mint X25519 Keypair  · Curve25519 · Stealth Pool Note ciphertext (per mint)
 │   └── Rescue Blinding Factor  · BN254 · commitment blinding in ZK
-├── Poseidon Private Key  · BN254 · UTXO nullifiers · user commitment
+├── Poseidon Private Key  · BN254 · Stealth Pool Note nullifiers · user commitment
 ├── User Account X25519 Keypair  · Curve25519 · token account decryption
 └── Random Commitment Factor  · Curve25519 scalar · polynomial commitment
 ```
@@ -91,7 +91,7 @@ const client = await getUmbraClient({
 ```
 
 <Warning>
-Rotating an offset produces a different public key or nullifier. If you have already registered an X25519 key on-chain or created UTXOs, rotating the relevant offset will mean your existing on-chain state uses the old key and the new client uses the new key. Always rotate carefully and re-register if needed.
+Rotating an offset produces a different public key or nullifier. If you have already registered an X25519 key on-chain or written Stealth Pool Notes, rotating the relevant offset will mean your existing on-chain state uses the old key and the new client uses the new key. Always rotate carefully and re-register if needed.
 </Warning>
 
 ## BN254 Field Element Sampling
@@ -104,7 +104,7 @@ For the Master Viewing Key specifically, the output is additionally masked to 25
 
 ## Ephemeral Seeds
 
-UTXO creation operations use **ephemeral master seeds** - one-time seeds derived from the persistent master seed combined with a monotonic counter:
+Stealth Pool Note creation operations use **ephemeral master seeds** — one-time seeds derived from the persistent master seed combined with a monotonic counter:
 
 ```
 domain = "Ephemeral Seed - {offset}"   // offset as decimal string
@@ -117,7 +117,7 @@ ephemeral_seed = KMAC256(
 )
 ```
 
-The ephemeral seed is used to generate the per-UTXO X25519 keypair and blinding factor, ensuring each UTXO is cryptographically independent. The offset comes from the user's generation index, which is incremented on-chain with each operation.
+The ephemeral seed is used to generate the per-note X25519 keypair and blinding factor, ensuring each Stealth Pool Note is cryptographically independent. The offset comes from the user's generation index, which is incremented on-chain with each operation.
 
 ## Security Properties
 
@@ -125,6 +125,6 @@ The ephemeral seed is used to generate the per-UTXO X25519 keypair and blinding 
 
 **Domain separation**: Different key types use different KMAC256 domain separators, preventing cross-key attacks.
 
-**Forward secrecy**: Ephemeral seeds for UTXOs are keyed on the generation index. Compromising the master seed does not allow deriving future ephemeral seeds without also knowing future generation index values.
+**Forward secrecy**: ephemeral seeds for Stealth Pool Notes are keyed on the generation index. Compromising the master seed does not allow deriving future ephemeral seeds without also knowing future generation index values.
 
 **Key isolation**: The personalization string encodes the full version context. Upgrading any version component produces a completely different key space.

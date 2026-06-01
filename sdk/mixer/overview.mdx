@@ -1,102 +1,125 @@
 ---
-title: "Mixer Overview"
-description: "Mixer overview: 4 UTXO creation variants (encrypted/public x self/receiver), 3 claim variants (to encrypted, to public, to public direct). Self-claimable vs receiver-claimable flows."
+title: "Stealth Pool Overview"
+description: "Stealth Pool overview: 4 note-creation variants (ATA/ETA × self/receiver-burnable), 3 shipped burn variants (receiver→ETA, self→ETA, self→ATA). Self-burnable vs receiver-burnable flows."
 ---
 
 ## The Most Powerful Shielded Pool on Solana
 
-Umbra's mixer is the most powerful shielded pool on Solana today - and it is built to fit into any flow.
+Umbra's Stealth Pool is the most powerful shielded pool on Solana today — and it is built to fit into any flow.
 
-Tokens can enter from a public wallet or an encrypted balance, exit to a fresh address or stay private inside another encrypted balance, and be sent to yourself or to any registered recipient. Every combination is a first-class path, not an afterthought.
+Tokens can enter from a public ATA or an EncryptedTokenAccount, exit to a fresh address or stay private inside another ETA, and be unlocked by you or by any registered recipient. Every combination is a first-class path.
 
 <Note>
-The mixer requires full [registration](/sdk/registration) with `anonymous: true`. Both your X25519 key and user commitment must be registered before creating UTXOs.
+The pool requires [registration](/sdk/registration) with `anonymous: true` **on the recipient side** for receiver-burnable notes. Self-burnable notes require no recipient registration — the sender is the unlocker.
 </Note>
 
-## UTXO Structure
+## Note structure
 
-The mixer operates on UTXOs - commitments inserted into an on-chain Indexed Merkle Tree that represent locked tokens in the shielded pool. Every UTXO encodes three distinct roles:
+The pool operates on **Stealth Pool Notes** — commitments inserted into an on-chain Indexed Merkle Tree that represent locked tokens. Every note encodes three distinct roles:
 
-- **Sender** - the address that funded the UTXO, locked the tokens into the shielded pool, and fixed the recipient at creation time
-- **Unlocker** - the address authorized to burn the UTXO's nullifier on-chain and release the tokens, choosing whether they exit to a public ATA or into an encrypted balance
-- **Recipient** - the final destination address, set by the sender and not modifiable by the unlocker
+- **Sender** — the address that funded the note, locked the tokens into the pool, and fixed the recipient at creation time.
+- **Unlocker** — the address authorised to burn the note's nullifier on-chain and release the tokens, choosing whether they exit to an ATA or an ETA.
+- **Recipient** — the final destination address, set by the sender and not modifiable by the unlocker.
 
-The sender controls who receives. The unlocker controls when and how the tokens exit. Separating these two roles is what makes deep mixing possible - the sender's involvement ends at creation time.
+The sender controls who receives. The unlocker controls when and how the tokens exit. Separating these two roles is what makes deep mixing possible — the sender's involvement ends at note-write time.
 
-## UTXO Variants
+## Note variants
 
 <CardGroup cols={2}>
-  <Card title="Self-claimable" icon="user">
-    You are both the sender and the unlocker. Burn the UTXO on your own schedule and choose whether tokens exit to your public ATA or stay in an encrypted balance.
+  <Card title="Self-burnable" icon="user">
+    You are both the sender and the unlocker. Burn the note on your own schedule and choose whether tokens exit to an ATA or stay in an ETA. **Recipient needs zero on-chain state.**
   </Card>
-  <Card title="Receiver-claimable" icon="users">
-    The recipient is the unlocker. They burn the UTXO themselves and decide the exit - public or shielded. The exit happens entirely on their timeline, with no further action from the sender.
+  <Card title="Receiver-burnable" icon="users">
+    The recipient is the unlocker. They burn the note themselves and decide the exit. **Recipient must be fully registered** (all three sub-step flags) — the unlocker is encrypted against their `userCommitment`.
   </Card>
 </CardGroup>
 
-Receiver-claimable UTXOs produce stronger anonymity sets. Because the sender's actions and the exit are fully decoupled, timing correlation between deposit and withdrawal becomes significantly harder.
+Receiver-burnable notes produce stronger anonymity sets. Because the sender's actions and the exit are fully decoupled, timing correlation between write and burn becomes significantly harder.
 
-## Source Options
+## Source options
 
 Each variant can be funded from two sources:
 
-- **From encrypted balance** - tokens are drawn from your existing encrypted balance before entering the shielded pool
-- **From public balance** - tokens are transferred directly from your public ATA
+- **From an ATA** — tokens are transferred directly from your public ATA. Single tx, no MPC.
+- **From an ETA** — tokens are drawn from your existing EncryptedTokenAccount before entering the pool. Two-tx pipeline (proof account → note write), MPC under the hood.
 
-This gives four factory functions in total:
+This gives four creator factories — all under `@umbra-privacy/sdk/deposit`:
 
-- `getEncryptedBalanceToSelfClaimableUtxoCreatorFunction` - source: encrypted balance, unlocker: you
-- `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` - source: encrypted balance, unlocker: recipient
-- `getPublicBalanceToSelfClaimableUtxoCreatorFunction` - source: ATA, unlocker: you
-- `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` - source: ATA, unlocker: recipient
+- `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ATA source, you unlock.
+- `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ATA source, recipient unlocks.
+- `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ETA source (MPC), you unlock.
+- `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ETA source (MPC), recipient unlocks.
 
-See [Creating UTXOs](/sdk/mixer/creating-utxos) for full API details.
+See [Writing notes](/sdk/mixer/creating-utxos) for full API details and the recipient pre-check rubric.
 
-## The Mixer Flow
+## Burn variants
+
+Three burn factories are shipped, under `@umbra-privacy/sdk/burn`:
+
+- `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` — receiver-burnable → ETA. Natively batches: groups notes by `destinationAddress`, chunks ≤4 per proof.
+- `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` — self-burnable → ETA. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`; SDK loops internally.
+- `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → ATA. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`.
+
+(Receiver-burnable → ATA is supported on-chain but is not yet shipped in the SDK — open issue.)
+
+## The Stealth Pool flow
 
 <Steps>
-  <Step title="Create a UTXO">
-    Choose a factory function, specify the source, recipient, and amount, and submit. The SDK locks tokens in the shielded pool, inserts a commitment into the Merkle tree, and publishes an encrypted ciphertext on-chain so the recipient can discover it.
+  <Step title="Write a note">
+    Choose a creator factory, supply the recipient pre-check / fallback (for receiver-burnable creates), and submit. The SDK locks tokens in the pool, inserts a commitment into the Merkle tree, and publishes the X25519-AES ciphertext on-chain so the unlocker can discover it.
 
-    See [Creating UTXOs](/sdk/mixer/creating-utxos).
+    See [Writing notes](/sdk/mixer/creating-utxos).
   </Step>
   <Step title="Wait for the anonymity set to grow">
-    The more other users deposit into the same tree, the stronger your privacy guarantee. There is no enforced waiting period - this is a trade-off you manage in your application.
+    The more other users write notes into the same tree, the stronger your privacy guarantee. There is no enforced waiting period — this is a trade-off you manage in your application.
   </Step>
-  <Step title="Fetch claimable UTXOs">
-    The SDK queries the indexer for all ciphertexts addressed to the caller's X25519 key, decrypts them locally, and fetches the current Merkle inclusion proofs.
+  <Step title="Scan for burnable notes">
+    Run `getBurnableStealthPoolNoteScannerFunction({ client })()`. The zero-arg scanner walks every active tree, decrypts every ciphertext addressable by your viewing keys, persists progress in `client.utxoDataStore`, and returns the notes grouped by `(kind, source)`.
 
-    See [Fetching UTXOs](/sdk/mixer/fetching-utxos).
+    See [Scanning](/sdk/mixer/fetching-utxos).
   </Step>
-  <Step title="Claim the UTXO">
-    Submit a Groth16 ZK proof on-chain proving knowledge of the secret inputs. The nullifier is burned on-chain to prevent double-spending, and the tokens are released to the chosen destination - a public ATA or an encrypted balance.
+  <Step title="Burn">
+    Pass the notes to the matching burner factory. The burner fetches a per-batch Merkle proof, generates a Groth16 ZK proof, submits to the relayer, and polls until the on-chain burn lands. The nullifier is burned to prevent double-spending; tokens are released to the chosen destination.
 
-    See [Claiming UTXOs](/sdk/mixer/claiming-utxos).
+    See [Burning](/sdk/mixer/claiming-utxos).
   </Step>
 </Steps>
 
-## Indexer Requirement
+## Infrastructure requirements
 
-UTXO discovery requires the Umbra indexer. Pass `indexerApiEndpoint` when constructing the client:
+- **Indexer** — required for note discovery and Merkle proof fetching. Pass `indexerApiEndpoint` to `getUmbraClient`.
+- **Relayer** — required for burning. Construct it separately with `getUmbraRelayer({ apiEndpoint })` and pass it to the burner factory's `relayer` dep. It is not a `getUmbraClient` argument.
+- **Store adapters** — strongly recommended on the browser. Without `utxoDataStore` / `nullifierStore`, every `scan()` re-scans every active tree from genesis.
 
 ```typescript
+import { getUmbraClient } from "@umbra-privacy/sdk";
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
+
+const storageBackend = createBrowserStorageBackend({ dbName: "umbra" });
+const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
+const nullifierStore = createShardedNullifierStore({ storageBackend });
+
 const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl: "...",
   rpcSubscriptionsUrl: "...",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
+  utxoDataStore,
+  nullifierStore,
 });
 ```
 
-Without it, `getClaimableUtxoScannerFunction` will fail. The indexer is not required for creating UTXOs - only for discovering and claiming them.
-
 ## Privacy Considerations
 
-**Claim into an encrypted balance by default.** When a UTXO is burned into an encrypted balance, the claimed amount is hidden, the destination is not revealed, and no observable exit event is produced on-chain. At burn time, the sender is completely unlinkable - there is no visible amount, no destination address, and no signal that can tie the burn back to any specific deposit. Public ATA claims should be the opt-out, not the default.
+**Burn into an ETA by default.** When a note is burnt into an ETA, the burned amount is hidden, the destination is not revealed, and no observable exit event is produced on-chain. At burn time, the sender is completely unlinkable — there is no visible amount, no destination address, and no signal that can tie the burn back to any specific note write. ATA burns should be the opt-out, not the default.
 
-**Use round, pool-common amounts when claiming publicly.** If a claim must exit to a public ATA, the amount becomes visible on-chain. Unusual or fragmented amounts let an observer eliminate most of the tree and narrow in on the matching commitment. Standardise on amounts that are common in the pool (e.g. exactly 100 USDC) to stay indistinguishable within the largest possible set.
+**Use round, pool-common amounts when burning publicly.** If a burn must exit to an ATA, the amount becomes visible on-chain. Unusual or fragmented amounts let an observer eliminate most of the tree and narrow in on the matching commitment. Standardise on amounts that are common in the pool (e.g. exactly 100 USDC) to stay indistinguishable within the largest possible set.
 
-**Claim to a fresh address when going public.** Claiming into an address with existing on-chain history re-establishes a link. Use an address that has never appeared on-chain before.
+**Burn to a fresh address when going public.** Burning into an address with existing on-chain history re-establishes a link. Use an address that has never appeared on-chain before.
 
-For a complete breakdown of all eight source and destination combinations - including what is visible, what is hidden, timing risk, and recommended use cases - see [Privacy Analysis](/sdk/mixer/privacy-analysis).
+For a complete breakdown of all source × destination combinations — visible vs hidden state, timing risk, recommended use cases — see [Privacy Analysis](/sdk/mixer/privacy-analysis).

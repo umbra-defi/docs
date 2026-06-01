@@ -1,96 +1,103 @@
 ---
 title: "Registration"
-description: "getUserRegistrationFunction: 3-step idempotent flow that creates on-chain user account, registers X25519 encryption key (confidential), and stores user commitment (anonymous)."
+description: "getUserRegistrationFunction: idempotent flow that creates the EncryptedUserAccount, registers the X25519 encryption key (confidential), and stores the user commitment via MPC + ZK (anonymous)."
 ---
 
 ## Overview
 
-Before a user can deposit tokens or interact with the mixer, they need an on-chain **Umbra user account**. Registration creates this account and optionally registers the cryptographic keys needed for encrypted balances and anonymous transfers.
+Before a user can deposit into an EncryptedTokenAccount or interact with the Stealth Pool, they need an on-chain **Umbra user account**. Registration creates this account and optionally registers the cryptographic keys needed for ETAs and anonymous transfers.
 
-Registration is idempotent - it checks on-chain state before each step and skips any steps already completed, including handling key rotation when keys have changed. That said, each call may submit on-chain transactions with SOL costs, so in practice you should [check whether the account is already registered](./account-state) before calling it.
+Registration is idempotent — it checks on-chain state before each step and skips any sub-steps already completed (handling key rotation when keys have changed). Each call may submit on-chain transactions with SOL costs, so in practice you should [check whether the account is already registered](./account-state) before calling it.
 
 ## Usage
 
 ```typescript
-import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
 
 const register = getUserRegistrationFunction({ client });
 
 const signatures = await register({
-  confidential: true, // enable encrypted balances (Shared mode)
-  anonymous: true,    // enable mixer / anonymous transfers
+  confidential: true, // register the X25519 key (Shared ETAs + receiver-burnable notes)
+  anonymous: true,    // register the user commitment (Stealth Pool transfers as the recipient)
 });
 
 console.log(`Completed ${signatures.length} registration transaction(s)`);
-// 0 if already fully registered
-// 1–3 depending on which steps were needed
+// 0 if already fully registered.
+// 1–2 depending on which sub-steps were needed (the SDK splits into two independent on-chain instructions).
 ```
 
 ## Options
 
 <ParamField path="confidential" type="boolean" default="true">
-  Register the X25519 key for Shared encryption mode. Without this, deposits use MXE-only mode and you cannot query your balance locally.
+  Register the X25519 token-encryption pubkey for Shared-mode ETAs. Without this, deposits stay in MXE-only mode and you cannot query your balance locally.
 </ParamField>
 
 <ParamField path="anonymous" type="boolean" default="true">
-  Register the user commitment for mixer / anonymous transfer support. Can be used independently of `confidential`.
+  Register the on-chain user commitment via MPC + ZK. Required to receive **receiver-burnable** Stealth Pool Notes. Can be used independently of `confidential`.
 </ParamField>
 
-<ParamField path="accountInfoCommitment" type='"processed" | "confirmed" | "finalized"' default="confirmed">
-  Override the commitment level used for on-chain account reads during registration. Defaults to `"confirmed"`.
-</ParamField>
-
-<ParamField path="epochInfoCommitment" type='"processed" | "confirmed" | "finalized"' default="confirmed">
-  Override the commitment level used for epoch info reads (relevant for Token-2022 transfer fee calculations). Defaults to `"confirmed"`.
-</ParamField>
-
-<ParamField path="callbacks" type="object">
-  Optional lifecycle hooks called before and after each step. `pre` receives the signed transaction before it is sent; `post` receives the transaction and its confirmed signature. Skipped steps do not invoke callbacks.
+<ParamField path="hooks" type="RegistrationHooks">
+  Per-step lifecycle hooks plus top-level phase hooks. Skippable step slots take `{ onPreSend, onPostSend, onSkipped }`.
 
   ```typescript
   await register({
     confidential: true,
     anonymous: true,
-    callbacks: {
-      userAccountInitialisation: {
-        pre: async (tx) => { console.log("Creating account..."); },
-        post: async (tx, sig) => { console.log("Account created:", sig); },
+    hooks: {
+      // Top-level phase hooks
+      onValidationStart:    async () => console.log("Validating..."),
+      onAccountFetchComplete: async ({ userAccountExists, hasX25519Key, isAnonymous }) =>
+        console.log("Account state:", { userAccountExists, hasX25519Key, isAnonymous }),
+      onKeyDerivationComplete: async ({ elapsedMs }) => console.log("Keys ready in", elapsedMs, "ms"),
+
+      // Per-step hooks (skippable; onSkipped fires when state is already correct)
+      initUserAccount: {
+        onSkipped: async ({ reason }) => console.log("Account already exists:", reason),
+        onPreSend: async ({ signedTransaction }) => console.log("Creating account..."),
+        onPostSend: async ({ signature }) => console.log("Account created:", signature),
       },
       registerX25519PublicKey: {
-        pre: async (tx) => { console.log("Registering encryption key..."); },
-        post: async (tx, sig) => { console.log("Key registered:", sig); },
+        onSkipped: async ({ reason }) => console.log("X25519 key already registered:", reason),
+        onPreSend: async () => console.log("Registering X25519 key..."),
+        onPostSend: async ({ signature }) => console.log("X25519 registered:", signature),
       },
-      registerUserForAnonymousUsage: {
-        pre: async (tx) => { console.log("Registering commitment..."); },
-        post: async (tx, sig) => { console.log("Commitment registered:", sig); },
+      registerAnonymousUsage: {
+        onSkipped: async ({ reason }) => console.log("Anonymous usage already enabled:", reason),
+        onPreSend: async () => console.log("Registering user commitment..."),
+        onPostSend: async ({ signature }) => console.log("Commitment registered:", signature),
       },
+
+      // Terminal
+      onComplete: async (result) => console.log("Registration complete:", result),
+      onError:    async ({ phase, error }) => console.error("Failed in phase", phase, ":", error),
     },
   });
   ```
 </ParamField>
 
-## The Three Registration Steps
+<Note>
+The hook slot names are **`initUserAccount`**, **`registerX25519PublicKey`**, **`registerAnonymousUsage`**. Each is `SkippableDirectTransactionStepHooks` or `SkippableMpcTransactionStepHooks` — slots: `{ onPreSend, onPostSend, onSkipped }`.
+</Note>
 
-Registration performs up to three on-chain transactions, in order:
+## The registration flow
+
+Registration is split into **two independent on-chain instructions**. Both `init_if_needed` the `EncryptedUserAccount` PDA, so either can run first.
 
 <Steps>
-  <Step title="Account Initialization">
-    Creates the `EncryptedUserAccount` PDA - a [program-derived address](https://solana.com/docs/core/pda) that serves as the root of your Umbra identity. This is always the first step.
-  </Step>
-  <Step title="X25519 Key Registration">
-    Derives your [X25519](https://www.rfc-editor.org/rfc/rfc7748) public key from your master seed and stores it on-chain. This key enables **Shared encryption mode** - deposits will be encrypted under both the Arcium MPC key and your key, allowing you to decrypt your own balance locally.
+  <Step title="register_user_for_confidential_usage">
+    Synchronous. Initialises the `EncryptedUserAccount` PDA (if needed) and stores the X25519 token-encryption pubkey derived from your master seed. Enables **Shared encryption mode** — deposits get encrypted under both the Arcium MPC key and your key, so you can decrypt your own balance locally.
 
-    Required if `confidential: true`.
+    Run when `confidential: true`.
   </Step>
-  <Step title="User Commitment Registration">
-    Registers your [Poseidon](https://eprint.iacr.org/2019/458.pdf) user commitment and encrypts your master viewing key on-chain via a [Groth16](https://eprint.iacr.org/2016/260.pdf) ZK proof. This is the step that enables the **mixer / anonymous transfer** flow.
+  <Step title="register_user_for_anonymous_usage_v17">
+    MPC + ZK. Initialises the user account (if needed), stages master-viewing-key material, runs Fiat-Shamir + [Groth16](https://eprint.iacr.org/2016/260.pdf), queues the Arcium MPC computation, and on callback stores the on-chain user commitment. Enables you to **receive** receiver-burnable Stealth Pool Notes.
 
-    Required if `anonymous: true`.
+    Run when `anonymous: true`.
   </Step>
 </Steps>
 
 <Note>
-All three steps require the master seed to be derived (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). The wallet signing prompt will appear on step 1 if the seed has not been derived yet in this session.
+Both sub-steps require the master seed to be derived (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). The wallet signing prompt fires the first time the seed is needed if it has not been derived yet in this session.
 </Note>
 
 ## On-Chain Account
@@ -154,6 +161,6 @@ try {
 }
 ```
 
-**Partial completion**: Registration submits up to three separate transactions. If the second or third transaction fails or is cancelled, the first is already confirmed on-chain. Call `register()` again - it checks on-chain state and skips the steps that already completed.
+**Partial completion**: Registration submits up to two separate transactions. If the second transaction fails or is cancelled, the first is already confirmed on-chain. Call `register()` again — it checks on-chain state and skips the sub-step that already completed.
 
 See [Error Handling](/reference/errors) for a full reference of all error types.

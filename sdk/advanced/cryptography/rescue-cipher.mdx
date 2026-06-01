@@ -27,7 +27,7 @@ Umbra ships an **in-house implementation of the Rescue cipher** that is:
 - **Independently optimised** - written from the ground up for performance, not adapted from a reference implementation
 - **The only non-delegated primitive** - all other SDK cryptography is built on `@noble/curves` and `@noble/hashes`; Rescue is owned entirely in-house, reflecting the central role it plays across the protocol
 
-For performance-critical environments - particularly React Native - a highly optimised open source C++ implementation is available as a [Nitro Module](https://nitro.margelo.com). It achieves up to **13× the throughput of the JS implementation** by offloading field arithmetic to native code and exploiting parallel cores, making real-time decryption of large encrypted balance histories and UTXO sets practical on mobile without blocking the JS thread.
+For performance-critical environments — particularly React Native — a highly optimised open-source C++ implementation is available as a [Nitro Module](https://nitro.margelo.com). It achieves up to **13× the throughput of the JS implementation** by offloading field arithmetic to native code and exploiting parallel cores, making real-time decryption of large encrypted-balance histories and Stealth Pool Note sets practical on mobile without blocking the JS thread.
 
 ## References
 

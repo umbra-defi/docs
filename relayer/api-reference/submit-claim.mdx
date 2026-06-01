@@ -1,27 +1,36 @@
 ---
-title: "Submit Claim"
+title: "Submit Burn"
 openapi: "openapi-relayer.yaml POST /v1/claims"
-description: "Submit a UTXO claim request to the relayer for processing."
+description: "Submit a Stealth Pool Note burn request to the relayer for processing. The wire path is /v1/claims (legacy)."
 ---
 
 <Warning>
-This endpoint is designed to be called by the SDK's claim functions, not directly.
+This endpoint is designed to be called by the SDK's burner factories, not directly.
 The request body contains cryptographic proof data that must be generated correctly
-by the ZK prover. Use `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction` or
-one of the other claim factory functions instead.
+by the ZK prover. Use `getSelfBurnableStealthPoolNoteIntoETABurnerFunction`,
+`getReceiverBurnableStealthPoolNoteIntoETABurnerFunction`, or
+`getSelfBurnableStealthPoolNoteIntoATABurnerFunction`
+from `@umbra-privacy/sdk/burn` instead.
 </Warning>
 
-The relayer validates the request, builds the on-chain transactions, and submits them
-asynchronously. Poll `GET /v1/claims/{request_id}` with the returned UUID to track progress.
+The relayer validates the request, builds the on-chain transactions, and submits them asynchronously. Poll `GET /v1/claims/{request_id}` with the returned UUID to track progress.
 
-## Claim Variants
+<Note>
+The wire path retains the legacy `/v1/claims` segment. In SDK code you call it via the relayer client's `submitClaim` method (or its `submitBurn` alias when plugged into a burner factory's `relayer` dep).
+</Note>
 
-- `encrypted_balance` — Claim into an Encrypted Token Account (ETA). Requires additional Rescue-encrypted fee fields in `proof_account_data`. Each UTXO slot has 6 linker encryptions and 6 key commitments.
-- `public_balance` — Claim into a public Associated Token Account (ATA). Requires `fee_proof_data` with Merkle proofs for fee schedules. Each UTXO slot has 5 linker encryptions and 5 key commitments.
+## Burn variants
 
-## Validation Rules
+- `encrypted_balance` — burn into an `EncryptedTokenAccount`. Requires additional Rescue-encrypted fee fields in `proof_account_data`. Each note slot has 6 linker encryptions and 6 key commitments.
+- `public_balance` — burn into a `AssociatedTokenAccount`. Requires `fee_proof_data` with the client's expected basis-points rates (`protocol_fee_basis_points`, `relayer_fee_basis_points`) and allowed-address PDA slots — the relayer verifies these against the on-chain `FeeSchedule` / `RelayerFeeSchedule` PDAs before submission, catching stale client config without wasting a transaction. Each note slot has 5 linker encryptions and 5 key commitments.
 
-- All base58 pubkeys must decode to exactly 32 bytes
-- All nullifiers within a request must be unique (duplicates return `409 DUPLICATE_OFFSET`)
-- `max_utxo_capacity` must be greater than 0
-- `fee_proof_data` is required for `public_balance` variant only
+## Validation rules
+
+- All base58 pubkeys must decode to exactly 32 bytes.
+- All nullifiers within a request must be unique (duplicates return `409 DUPLICATE_OFFSET`).
+- `max_utxo_capacity` must be greater than 0.
+- `fee_proof_data` is required for `public_balance` variant only.
+
+## Idempotency / `DUPLICATE_OFFSET`
+
+If a burn callback drops and you re-submit with the same `request_id` while the nullifier is still reserved upstream, the relayer returns **HTTP 409 with code `DUPLICATE_OFFSET`**. Wait, re-check on-chain that the nullifier has not landed, and retry only if still unspent. The SDK's burner factories handle this internally.

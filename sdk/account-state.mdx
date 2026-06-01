@@ -1,27 +1,27 @@
 ---
 title: "Account State"
-description: "getUserAccountQuerierFunction: read EncryptedUserAccount fields (X25519 key, user commitment, generation index, registration steps) for any address without submitting transactions."
+description: "getUserAccountQuerierFunction: read EncryptedUserAccount fields (X25519 key, user commitment, generation index, registration sub-step flags) for any address without submitting transactions."
 ---
 
 ## Checking Registration Status
 
-Use `getUserAccountQuerierFunction` to inspect an account's current registration state without triggering any transactions:
+Use `getUserAccountQuerierFunction` from `@umbra-privacy/sdk/query` to inspect an account's current registration state without triggering any transactions:
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const query = getUserAccountQuerierFunction({ client });
 
 const result = await query(client.signer.address);
 
 if (result.state === "non_existent") {
-  console.log("Not registered - call register() first");
+  console.log("Not registered — call register() first");
 } else {
   const { data } = result;
-  console.log("Account initialized:", data.isInitialised);
-  console.log("X25519 key registered:", data.isUserAccountX25519KeyRegistered);
-  console.log("Commitment registered:", data.isUserCommitmentRegistered);
-  console.log("Anonymous usage active:", data.isActiveForAnonymousUsage);
+  console.log("Account initialised:",        data.isInitialised);
+  console.log("X25519 key registered:",       data.isUserAccountX25519KeyRegistered);
+  console.log("User commitment registered:",  data.isUserCommitmentRegistered);
+  console.log("Anonymous usage active:",      data.isActiveForAnonymousUsage);
 }
 ```
 
@@ -30,11 +30,15 @@ if (result.state === "non_existent") {
 Register once, at account setup time. Check state before calling `register()` so you avoid unnecessary transaction prompts for users who are already fully set up:
 
 ```typescript
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+
 const query = getUserAccountQuerierFunction({ client });
 const result = await query(client.signer.address);
 
 const isFullyRegistered =
   result.state === "exists" &&
+  result.data.isInitialised &&
   result.data.isUserAccountX25519KeyRegistered &&
   result.data.isUserCommitmentRegistered;
 
@@ -44,18 +48,35 @@ if (!isFullyRegistered) {
 }
 ```
 
-## Registration State Fields
+## Pre-check the **recipient** before a receiver-burnable create
+
+This is the most common integration footgun. A receiver-burnable Stealth Pool Note encrypts the unlocker against the recipient's `userCommitment`, so the **recipient** must have all three flags (`isInitialised`, `isUserAccountX25519KeyRegistered`, `isUserCommitmentRegistered`) set before you write the note. Pre-check at the API boundary and either error with a clear message or fall back to a self-burnable create:
+
+```typescript
+const r = await query(recipientAddress);
+const ready = r.state === "exists"
+  && r.data?.isInitialised
+  && r.data?.isUserAccountX25519KeyRegistered
+  && r.data?.isUserCommitmentRegistered;
+
+if (!ready) {
+  // Either ask the recipient to register, or use the self-burnable creator
+  // (sender keeps the unlocker; recipient needs zero on-chain state).
+}
+```
+
+## Registration state fields
 
 The `data` object returned when `result.state === "exists"`:
 
-- `isInitialised` - the base `EncryptedUserAccount` PDA has been created (Step 1 complete).
-- `isUserAccountX25519KeyRegistered` - the X25519 public key has been stored on-chain (Step 2 complete). Required for confidential deposits.
-- `isUserCommitmentRegistered` - the Poseidon user commitment has been stored (Step 3 complete). Required for the mixer.
-- `isActiveForAnonymousUsage` - the account is active and cleared for anonymous usage (both Step 2 and Step 3 complete and valid).
-- `x25519PublicKey` - the registered X25519 public key bytes, if Step 2 is complete.
-- `userCommitment` - the registered Poseidon commitment, if Step 3 is complete.
-- `generationIndex` - monotonic counter used for nonce derivation.
-- `randomGenerationSeed` - entropy bytes mixed into nonces.
+- `isInitialised` — the base `EncryptedUserAccount` PDA has been created.
+- `isUserAccountX25519KeyRegistered` — the X25519 token-encryption pubkey has been stored on-chain (Confidential-usage sub-step complete). Required for Shared-mode ETAs.
+- `isUserCommitmentRegistered` — the Poseidon user commitment has been stored (Anonymous-usage sub-step complete). Required to receive receiver-burnable notes.
+- `isActiveForAnonymousUsage` — the account is active and cleared for anonymous usage (both sub-steps complete and valid).
+- `x25519PublicKey` — the registered X25519 public key bytes, if the confidential sub-step is complete.
+- `userCommitment` — the registered Poseidon commitment, if the anonymous sub-step is complete.
+- `generationIndex` — monotonic counter used for nonce derivation. **Use this to derive the next note nonce** — never invent your own.
+- `randomGenerationSeed` — entropy bytes mixed into nonces.
 
 <Note>
 For the full type reference see [Query](/reference/query).

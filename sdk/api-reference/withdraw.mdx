@@ -3,20 +3,20 @@ title: "Withdraw API Reference"
 description: "Complete reference for direct withdrawal from encrypted balance."
 ---
 
-## `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`
+## `getETAIntoATAWithdrawerFunction`
 
 ```typescript
-import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
-function getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction(
-  args: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs,
-  deps?: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps,
-): EncryptedBalanceToPublicBalanceDirectWithdrawerFunction
+function getETAIntoATAWithdrawerFunction(
+  args: GetETAIntoATAWithdrawerFunctionArgs,
+  deps?: GetETAIntoATAWithdrawerFunctionDeps,
+): ETAIntoATAWithdrawerFunction
 ```
 
 Factory function that returns a callable withdrawal function.
 
-### `GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs`
+### `GetETAIntoATAWithdrawerFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -33,7 +33,7 @@ async function withdraw(
 ): Promise<WithdrawResult>
 ```
 
-Moves tokens from the signer's encrypted balance back to the destination's public ATA.
+Moves tokens from the signer's ETA back to the destination's ATA.
 
 Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - waits for both the handler transaction and the Arcium MPC callback transaction to confirm before resolving. Total wall-clock time is typically a few seconds.
 
@@ -44,57 +44,68 @@ Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instru
 </ParamField>
 
 <ParamField path="mint" type="Address" required>
-  SPL or Token-2022 mint address. Must match a mint for which the signer has an existing encrypted balance.
+  SPL or Token-2022 mint address. Must match a mint for which the signer has an existing ETA.
 </ParamField>
 
 <ParamField path="amount" type="bigint" required>
-  Amount to withdraw in native token units. Must not exceed the current encrypted balance.
+  Amount to withdraw in native token units. Must not exceed the current ETA balance.
 </ParamField>
 
-<ParamField path="options.priorityFees" type="bigint" default="0n">
-  Additional compute unit price in microlamports.
-</ParamField>
-
-<ParamField path="options.optionalData" type="Uint8Array">
-  32 bytes of optional metadata stored with the withdrawal. Defaults to zero bytes.
-</ParamField>
-
-<ParamField path="options.awaitCallback" type="boolean" default="true">
-  Whether to wait for the Arcium MPC callback transaction to confirm before resolving.
-</ParamField>
-
-<ParamField path="options.skipPreflight" type="boolean" default="false">
-  Skip Solana transaction preflight simulation.
-</ParamField>
-
-<ParamField path="options.maxRetries" type="number">
-  Maximum number of times the RPC node should retry sending the transaction.
+<ParamField path="options.optionalData" type="OptionalData32">
+  32 bytes of opaque caller metadata. **Pre-hashed only.** Default 32 zero bytes.
 </ParamField>
 
 <ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level for RPC account reads. Per-call override.
+  Commitment level for RPC account reads.
 </ParamField>
 
-<ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level for epoch info fetches (Token-2022 fee schedule). Per-call override.
+<ParamField path="options.computationOffset" type="U64">
+  Optional Arcium computation-account PDA offset. Defaults to a fresh random `U64` per call.
 </ParamField>
+
+<ParamField path="options.mpcCallbackDataOffset" type="U128">
+  Optional MpcCallbackData PDA offset. Defaults to a fresh random `U128` per call.
+</ParamField>
+
+<ParamField path="options.feeVaultOffset" type="U128" default="0n">
+  Fee-vault PDA offset. The fee-vault path is currently unused for public-ATA withdrawals — leave at `0n` (sentinel: no fee-vault interaction).
+</ParamField>
+
+<ParamField path="options.destinationProgram" type="Address">
+  Observer-CPI destination program. Default: System Program (sentinel: no observer CPI).
+</ParamField>
+
+<ParamField path="options.hooks" type="WithdrawalHooks">
+  Per-phase lifecycle hooks. See [Transaction Callbacks](/sdk/understanding-the-sdk/callbacks).
+</ParamField>
+
+<Note>
+V4 fields `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, `epochInfoCommitment` do not exist on the V5 withdrawer.
+</Note>
 
 ### Return Value
 
 Returns `Promise<WithdrawResult>`:
 
-- `queueSignature` - Transaction signature of the handler (queue computation) transaction.
-- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
-- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
-- `callbackElapsedMs` - Milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
-- `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
+```typescript
+interface WithdrawResult {
+  readonly signatures: readonly TransactionSignature[];
+  readonly queueSignature: TransactionSignature;
+  readonly callback?:
+    | { readonly status: "finalized"; readonly signature?: TransactionSignature; readonly elapsedMs: number }
+    | { readonly status: "pruned";    readonly elapsedMs: number }
+    | { readonly status: "timed-out"; readonly elapsedMs: number };
+  readonly rentClaim?:
+    | { readonly claimed: true;  readonly signature: TransactionSignature }
+    | { readonly claimed: false; readonly reason: string };
+}
+```
 
 ---
 
 ## Withdrawal Destination
 
-Tokens are sent to the ATA associated with `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail. To send to a different address anonymously, use the [mixer flow](/sdk/mixer/overview).
+Tokens are sent to the ATA associated with `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail. To send to a different address anonymously, use the [Stealth Pool flow](/sdk/mixer/overview).
 
 ---
 

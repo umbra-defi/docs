@@ -10,20 +10,20 @@ All cryptographic keys are derived from the master seed via [KMAC256](/sdk/advan
 ### Master Viewing Key Generators
 
 ```typescript
-type MasterViewingKeyGeneratorFunction = () => Promise<MasterViewingKey>;
-type MasterViewingKeyBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+type MasterViewingKeyDeriverFunction = () => Promise<MasterViewingKey>;
+type MasterViewingKeyBlindingFactorDeriverFunction = () => Promise<Bn254FieldElement>;
 ```
 
-Used by: registration, UTXO creation (self-claimable and receiver-claimable), UTXO claiming.
+Used by: registration, Stealth Pool Note creation (self-burnable and receiver-burnable), burning.
 
 ### Poseidon Private Key Generators
 
 ```typescript
-type PoseidonPrivateKeyGeneratorFunction = () => Promise<Bn254FieldElement>;
-type PoseidonBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+type PoseidonPrivateKeyDeriverFunction = () => Promise<Bn254FieldElement>;
+type PoseidonBlindingFactorDeriverFunction = () => Promise<Bn254FieldElement>;
 ```
 
-Used by: registration, UTXO creation, UTXO claiming.
+Used by: registration, Stealth Pool Note creation, burning.
 
 ### X25519 / Curve25519 Keypair Generators
 
@@ -31,16 +31,16 @@ Used by: registration, UTXO creation, UTXO claiming.
 // User account X25519 key - used for token account encryption
 type Curve25519KeypairGeneratorFunction = () => Promise<Curve25519KeypairResult>;
 
-// Per-mint X25519 key - used for UTXO ciphertext addressing
-type MintX25519KeypairGeneratorFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
+// Per-mint X25519 key - used for Stealth Pool Note ciphertext addressing
+type MintX25519KeypairDeriverFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
 ```
 
-Used by: registration, UTXO creation. Also exposed via `getMintEncryptionKeyRotatorFunction` deps.
+Used by: registration, Stealth Pool Note creation. Also exposed via `getMintEncryptionKeyRotatorFunction` deps (in `@umbra-privacy/sdk/account`).
 
 ### Viewing Key Generators (Poseidon sub-hierarchy)
 
 ```typescript
-type MintViewingKeyGeneratorFunction = (
+type MintViewingKeyDeriverFunction = (
   mint: Address,
   options?: ViewingKeyGeneratorOptions,
 ) => Promise<MintViewingKey>;
@@ -78,30 +78,33 @@ type SecondViewingKeyGeneratorFunction = (
 ) => Promise<SecondViewingKey>;
 ```
 
-Used by: UTXO creation (the second viewing key scopes the UTXO ciphertext).
+Used by: Stealth Pool Note creation (the second viewing key scopes the note ciphertext).
 
 ### Commitment Factor Generators
 
 ```typescript
-type RescueEncryptionCommitmentBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
-type RandomFactorForPolynomialCommitmentGeneratorFunction = () => Promise<Curve25519FieldElement>;
-type PoseidonKeystreamBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+type RescueCommitmentBlindingFactorDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type PolynomialCommitmentFactorDeriverFunction = (offset: U256) => Promise<Curve25519FieldElement>;
+type PoseidonKeystreamBlindingFactorDeriverFunction = (
+  keystream: Bn254FieldElement,
+  offset: U256,
+) => Promise<Bn254FieldElement>;
 ```
 
-### Ephemeral UTXO Key Generators
+### Ephemeral Stealth Pool Note key generators
 
-Each UTXO operation uses per-UTXO ephemeral keys parameterized by the on-chain generation index. All are injectable:
+Each note operation uses per-note ephemeral keys parameterised by the on-chain generation index. All are injectable. The TypeScript names use the wire-protocol prefix `EphemeralUtxo*`; the burn-side interfaces re-export them under aliases:
 
 ```typescript
-type EphemeralUtxoMasterViewingKeyGeneratorFunction = (offset: U256) => Promise<MasterViewingKey>;
-type EphemeralUtxoMasterViewingKeyBlindingFactorGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
-type EphemeralUtxoPoseidonPrivateKeyGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
-type EphemeralUtxoPoseidonPrivateKeyBlindingFactorGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
-type EphemeralUtxoNullifierGeneratorFunction = (offset: U256) => Promise<Bn254FieldElement>;
-type EphemeralUtxoH2RandomSecretGeneratorFunction = (offset: U256) => Promise<Curve25519FieldElement>;
+type EphemeralUtxoMasterViewingKeyDeriverFunction = (offset: U256) => Promise<MasterViewingKey>;
+type EphemeralUtxoMasterViewingKeyBlindingFactorDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoPoseidonPrivateKeyDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoPoseidonPrivateKeyBlindingFactorDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoNullifierDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
+type EphemeralUtxoH2RandomSecretDeriverFunction = (offset: U256) => Promise<Curve25519FieldElement>;
 ```
 
-Used by: all UTXO creation and UTXO claiming functions.
+Used by: all Stealth Pool Note creation and burner factories.
 
 ---
 
@@ -111,35 +114,35 @@ Beyond key generation, the low-level cryptographic operations themselves are inj
 
 ### Rescue Cipher (RC) - Encryption and Decryption
 
-The [Rescue cipher](/sdk/advanced/cryptography/rescue-cipher) is used to encrypt UTXO payloads and encrypted token account balances.
+The [Rescue cipher](/sdk/advanced/cryptography/rescue-cipher) is used to encrypt Stealth Pool Note payloads and EncryptedTokenAccount balances.
 
 ```typescript
-type RcEncryptorFunction = (
-  plaintext: readonly RcPlaintext[],
-) => Promise<{ ciphertexts: RcCiphertext[]; nonce: RcEncryptionNonce }>;
+type RescueCipherEncryptorFunction = (
+  plaintext: readonly RescueCipherPlaintext[],
+) => Promise<{ ciphertexts: RescueCipherCiphertext[]; nonce: RescueCipherEncryptionNonce }>;
 
-type RcEncryptorWithNonceFunction = (
-  plaintext: readonly RcPlaintext[],
-  nonce: RcEncryptionNonce,
-) => Promise<RcCiphertext[]>;
+type RescueCipherEncryptorWithNonceFunction = (
+  plaintext: readonly RescueCipherPlaintext[],
+  nonce: RescueCipherEncryptionNonce,
+) => Promise<RescueCipherCiphertext[]>;
 
-type RcDecryptorFunction = (
-  ciphertext: readonly RcCiphertext[],
-  nonce: RcEncryptionNonce,
-) => Promise<RcPlaintext[]>;
+type RescueCipherDecryptorFunction = (
+  ciphertext: readonly RescueCipherCiphertext[],
+  nonce: RescueCipherEncryptionNonce,
+) => Promise<RescueCipherPlaintext[]>;
 
-type RcKeyGeneratorFunction = (
-  counters: readonly RcCounter[],
-  nonce: RcEncryptionNonce,
-) => Promise<RcKey[]>;
+type RescueCipherKeyGeneratorFunction = (
+  counters: readonly RescueCipherCounter[],
+  nonce: RescueCipherEncryptionNonce,
+) => Promise<ReadonlyMap<RescueCipherCounter, RescueCipherKey>>;
 ```
 
-- `getRcEncryptor` and `getRcKeyGenerator` appear in: registration, UTXO creation deps
-- `rcDecryptor` appears in: `getEncryptedBalanceQuerierFunction` deps - override to provide a custom decryption backend
+- `rescueEncryptor` and `rescueKeyGenerator` appear in: registration, Stealth Pool Note creation deps.
+- `rescueCipherDecryptor` appears in: `getEncryptedBalanceQuerierFunction` deps — override to provide a custom decryption backend.
 
 ### AES Encryption
 
-[AES-GCM](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) is used for symmetric encryption of UTXO commitment payloads within the mixer.
+[AES-GCM](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf) is used for symmetric encryption of Stealth Pool Note commitment payloads.
 
 ```typescript
 type AesEncryptorFunction = (
@@ -153,7 +156,7 @@ type AesDecryptorFunction = (
 ) => Promise<AesPlaintext>;
 ```
 
-Used by: UTXO creation functions.
+Used by: Stealth Pool Note creator factories.
 
 ### Poseidon Hash, Encryption, and Keystream
 
@@ -184,7 +187,7 @@ type KeystreamCommitmentFunction = (
 ) => Promise<Bn254FieldElement>;
 ```
 
-Used by: registration, UTXO creation, UTXO claiming.
+Used by: registration, Stealth Pool Note creation, burning.
 
 ### Fiat-Shamir Challenge and Polynomial Evaluation
 
@@ -204,7 +207,7 @@ type PolynomialEvaluatorFunction = (
 ) => Curve25519FieldElement;
 ```
 
-Used by: registration, UTXO creation. Override to run evaluation in a [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) or swap in a WASM implementation.
+Used by: registration, Stealth Pool Note creation. Override to run evaluation in a [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) or swap in a WASM implementation.
 
 ### User Commitment Generator
 
@@ -217,4 +220,4 @@ type UserCommitmentGeneratorFunction = (
 ) => Promise<Bn254FieldElement>;
 ```
 
-Used by: registration, UTXO creation.
+Used by: registration, Stealth Pool Note creation.

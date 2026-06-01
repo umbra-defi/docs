@@ -5,54 +5,66 @@ description: "API reference: getNetworkEncryptionToSharedEncryptionConverterFunc
 
 ## getNetworkEncryptionToSharedEncryptionConverterFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/conversion`
 
 ```typescript
 function getNetworkEncryptionToSharedEncryptionConverterFunction(
-  args: GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs,
-  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
-): NetworkEncryptionToSharedEncryptionConverterFunction
+  args: GetConvertToSharedEncryptionFunctionArgs,
+  deps?: GetConvertToSharedEncryptionFunctionDeps,
+): ConvertToSharedEncryptionFunction
 ```
 
 Converts one or more encrypted token accounts from MXE-mode (network-decryptable only) to shared-mode (user-decryptable). Conversion is per-mint and involves an on-chain Arcium MPC computation. Mints that are already in shared mode, uninitialized, or non-existent are skipped rather than erroring.
 
 ---
 
-### GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs
+### GetConvertToSharedEncryptionFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps
+### GetConvertToSharedEncryptionFunctionDeps
 
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
+```typescript
+interface GetConvertToSharedEncryptionFunctionDeps {
+  readonly rpc?: {
+    readonly accountInfoProvider?: AccountInfoProviderFunction;
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+  };
+}
+```
 
 ### Returns
 
-`NetworkEncryptionToSharedEncryptionConverterFunction`
+`ConvertToSharedEncryptionFunction`
 
 ```typescript
-type NetworkEncryptionToSharedEncryptionConverterFunction = (
+type ConvertToSharedEncryptionFunction = (
   mints: readonly Address[],
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
-) => Promise<ConvertToSharedEncryptionResult>
+  hooks?: ConvertToSharedHooks,
+  microLamportsPerAcu?: MicroLamportsPerAcu,
+) => Promise<ConvertToSharedEncryptionResult>;
 ```
 
-- `mints: readonly Address[]` - Token mints to convert. Processed sequentially - each successful conversion is independent.
+- `mints: readonly Address[]` — token mints to convert. Processed in parallel (eligible only).
+- `optionalData?: OptionalData32` — 32-byte caller metadata. Pre-hashed only.
+- `hooks?: ConvertToSharedHooks` — overall batch lifecycle hooks; per-mint MPC-step hooks (`onPreSend`, `onPostSend`, `onMonitorStarted`, `onFinalized`) live in the `perMintTransaction` member.
+- `microLamportsPerAcu?: MicroLamportsPerAcu` — optional priority fee in micro-lamports per Arcium compute unit.
 
 ### ConvertToSharedEncryptionResult
 
 ```typescript
 interface ConvertToSharedEncryptionResult {
-  converted: Map<Address, TransactionSignature>;
-  skipped: Map<Address, ConvertToSharedEncryptionSkipReason>;
+  readonly signatures: readonly TransactionSignature[];   // from OperationOutcome
+  readonly converted: Map<Address, TransactionSignature>;
+  readonly skipped:   Map<Address, ConvertToSharedEncryptionSkipReason>;
 }
 ```
 
-- `converted` - Mints successfully converted. Value is the transaction signature.
-- `skipped` - Mints not converted. Value is the reason.
+- `signatures` — every transaction signature submitted across all per-mint conversions.
+- `converted` — mints successfully converted, with their handler-tx signature.
+- `skipped` — mints not converted, with the reason.
 
 ### ConvertToSharedEncryptionSkipReason
 
@@ -70,7 +82,7 @@ Throws `ConversionError` if any non-skippable error occurs. See [Errors](./error
 ### Example
 
 ```typescript
-import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk/conversion";
 
 const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
 const result = await convert([usdcMint, solMint]);
@@ -87,43 +99,57 @@ for (const [mint, reason] of result.skipped) {
 
 ## getMintEncryptionKeyRotatorFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/account`
 
 ```typescript
 function getMintEncryptionKeyRotatorFunction(
-  args: GetMintEncryptionKeyRotatorFunctionArgs,
-  deps?: GetMintEncryptionKeyRotatorFunctionDeps,
-): MintEncryptionKeyRotatorFunction
+  args: GetRotateMintX25519EncryptionKeyFunctionArgs,
+  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
+): RotateMintX25519EncryptionKeyFunction
 ```
 
 Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
 
 ---
 
-### GetMintEncryptionKeyRotatorFunctionArgs
+### GetRotateMintX25519EncryptionKeyFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetMintEncryptionKeyRotatorFunctionDeps
+### GetRotateMintX25519EncryptionKeyFunctionDeps
 
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction` - Override the per-mint X25519 keypair derivation.
+```typescript
+interface GetRotateMintX25519EncryptionKeyFunctionDeps {
+  readonly rpc?: {
+    readonly accountInfoProvider?: AccountInfoProviderFunction;
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+  };
+  readonly keys?: {
+    readonly mintX25519KeypairDeriver?: MintX25519KeypairDeriverFunction;
+  };
+}
+```
 
 ### Returns
 
-`MintEncryptionKeyRotatorFunction`
+`RotateMintX25519EncryptionKeyFunction`
 
 ```typescript
-type MintEncryptionKeyRotatorFunction = (
+type RotateMintX25519EncryptionKeyFunction = (
   mint: Address,
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: RotateMintKeyHooks,
+  microLamportsPerAcu?: MicroLamportsPerAcu,
+  options?: RotateMintKeyOptions,
 ) => Promise<TransactionSignature>
 ```
 
 - `mint: Address` - The token mint whose X25519 key to rotate.
+- `optionalData?: OptionalData32` - 32-byte caller metadata. Pre-hashed only.
+- `hooks?: RotateMintKeyHooks` - per-phase lifecycle hooks for the MPC re-encryption.
+- `microLamportsPerAcu?: MicroLamportsPerAcu` - optional priority fee per Arcium compute unit.
+- `options?: RotateMintKeyOptions` - per-call options (e.g. skip the pre-flight key-consistency assertion).
 
 ---
 
@@ -134,7 +160,7 @@ Throws `ConversionError`. See [Errors](./errors#conversionerror).
 ### Example
 
 ```typescript
-import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk/account";
 
 const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
 const signature = await rotateMintKey(usdcMint);

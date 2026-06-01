@@ -15,21 +15,17 @@ Both are read-only and do not require a wallet signing prompt.
 ## Query User Account
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const query = getUserAccountQuerierFunction({ client });
 
-const result = await query(userAddress, options?);
+const result = await query(userAddress);
 ```
 
 ### Parameters
 
 <ParamField path="userAddress" type="Address" required>
-  The wallet address to query registration status for.
-</ParamField>
-
-<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
-  Commitment level used for the RPC account read. Overrides the default on a per-call basis.
+  The wallet address to query registration status for. An optional second argument, `options?: { accountInfoCommitment?: "processed" | "confirmed" | "finalized" }`, overrides the commitment level used for account reads (defaults to `"confirmed"`).
 </ParamField>
 
 ### Return Value
@@ -49,23 +45,27 @@ When `state === "exists"`, `data` contains:
 </ResponseField>
 
 <ResponseField name="isUserAccountX25519KeyRegistered" type="boolean">
-  Whether the X25519 public key has been registered. Required for Shared-mode encrypted balances and for receiving mixer UTXOs.
+  Whether the X25519 public key has been registered. Required for Shared-mode ETAs and for receiving Stealth Pool Notes addressed to this account.
 </ResponseField>
 
 <ResponseField name="isUserCommitmentRegistered" type="boolean">
-  Whether the user commitment (Poseidon hash) has been registered. Required for mixer / anonymous transfers.
+  Whether the user commitment (Poseidon hash) has been registered. Required to receive **receiver-burnable** Stealth Pool Notes.
 </ResponseField>
 
 <ResponseField name="isActiveForAnonymousUsage" type="boolean">
-  Whether both X25519 and commitment registration are complete and the account is ready for all features.
+  Whether anonymous (mixer/UTXO) usage has been activated. This is an independent flag set by the `activate_for_anonymous_usage` instruction — it is not derived from the X25519 or commitment registration flags.
 </ResponseField>
 
 <ResponseField name="x25519PublicKey" type="Uint8Array">
-  The user's registered X25519 public key (32 bytes). Used by other users to encrypt UTXOs addressed to this account.
+  The user's registered X25519 public key (32 bytes). Used by other users to encrypt Stealth Pool Notes addressed to this account.
 </ResponseField>
 
-<ResponseField name="generationIndex" type="bigint">
-  Monotonic counter incremented on each deposit/withdrawal. Used internally for nonce derivation.
+<ResponseField name="randomGenerationSeed" type="Uint8Array">
+  Entropy bytes mixed into nonce derivation. Combined with `generationIndex` to derive the next note's `generationIndex` — never invent your own.
+</ResponseField>
+
+<ResponseField name="generationIndex" type="U128">
+  Monotonic counter incremented when a new token account is created or an ETA is converted from MXE to Shared mode (not on every deposit/withdrawal). Used internally for nonce derivation.
 </ResponseField>
 
 ### Example: Check Registration Status
@@ -99,12 +99,12 @@ if (data.isActiveForAnonymousUsage) {
 ## Query Encrypted Balance
 
 ```typescript
-import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const query = getEncryptedBalanceQuerierFunction({ client });
 
 // Query your encrypted balances for one or more mints
-const balances = await query([USDC_MINT, USDT_MINT], options?);
+const balances = await query([USDC_MINT, USDT_MINT]);
 // Returns Map<Address, QueryEncryptedBalanceResult>
 ```
 
@@ -113,11 +113,7 @@ The function queries the calling user's own encrypted balances. Pass an array of
 ### Parameters
 
 <ParamField path="mints" type="Address[]" required>
-  An array of SPL or Token-2022 mint addresses to query. The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
-</ParamField>
-
-<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
-  Commitment level used for the RPC account reads. Overrides the default on a per-call basis.
+  An array of SPL or Token-2022 mint addresses to query. An optional second argument, `options?: { accountInfoCommitment?: "processed" | "confirmed" | "finalized" }`, overrides the commitment level used for account reads (defaults to `"confirmed"`). The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
 </ParamField>
 
 ### Return Value
@@ -127,25 +123,25 @@ type QueryEncryptedBalanceResult =
   | { readonly state: "non_existent" }
   | { readonly state: "uninitialized" }
   | { readonly state: "mxe" }
-  | { readonly state: "shared"; readonly balance: MathU64 };
+  | { readonly state: "shared"; readonly balance: U64 };
 ```
 
 The four states represent:
 
-- `"non_existent"` - No encrypted token account exists for this mint. The user needs to deposit first.
-- `"uninitialized"` - The account PDA exists on-chain but the Arcium balance has not been initialized yet.
-- `"mxe"` - The account is in MXE-only mode. The balance is encrypted under the network key and cannot be decrypted client-side.
-- `"shared"` - The account is in Shared mode. The SDK automatically decrypts the balance using the user's X25519 private key and returns the plaintext `balance` as a `MathU64`.
+- `"non_existent"` — No ETA exists for this mint. The user needs to deposit first.
+- `"uninitialized"` — The ETA PDA exists on-chain but the Arcium balance has not been initialised yet.
+- `"mxe"` — The ETA is in MXE-only mode. The balance is encrypted under the network key and cannot be decrypted client-side.
+- `"shared"` — The ETA is in Shared mode. The SDK automatically decrypts the balance using the user's X25519 private key and returns the plaintext `balance` as a `U64`.
 
 ### Example
 
 ```typescript
-import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
-const query = getEncryptedBalanceQuerierFunction({ client });
+const query    = getEncryptedBalanceQuerierFunction({ client });
 const balances = await query([USDC, USDT]);
 
 for (const [mint, result] of balances) {
@@ -157,10 +153,10 @@ for (const [mint, result] of balances) {
       console.log(`Mint ${mint}: MXE mode (cannot decrypt client-side)`);
       break;
     case "uninitialized":
-      console.log(`Mint ${mint}: account exists but balance not initialized`);
+      console.log(`Mint ${mint}: ETA exists but balance not initialised`);
       break;
     case "non_existent":
-      console.log(`No encrypted balance for mint ${mint} - deposit first`);
+      console.log(`No ETA for mint ${mint} — deposit first`);
       break;
   }
 }

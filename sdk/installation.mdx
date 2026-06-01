@@ -1,31 +1,37 @@
 ---
 title: "Installation"
-description: "Install @umbra-privacy/sdk. Sub-path imports: /types (branded primitives), /interfaces (function types), /utils (PDA helpers), /constants (network configs), /errors (error classes)."
+description: "Install @umbra-privacy/sdk@5.0.0-rc.3. Ships everything in one package — operations are imported from named subpaths (/registration, /deposit, /burn, /query, …); the ZK prover lives at /zk-prover."
 ---
 
 ## Package
 
+The SDK is a single package — `@umbra-privacy/sdk`. The ZK prover, indexer client, relayer client, store adapters, and Solana primitives are all subpaths of the same package.
+
 <CodeGroup>
 ```bash pnpm
-pnpm add @umbra-privacy/sdk
+pnpm add @umbra-privacy/sdk@5.0.0-rc.3
 ```
 
 ```bash npm
-npm install @umbra-privacy/sdk
+npm install @umbra-privacy/sdk@5.0.0-rc.3
 ```
 
 ```bash yarn
-yarn add @umbra-privacy/sdk
+yarn add @umbra-privacy/sdk@5.0.0-rc.3
 ```
 </CodeGroup>
 
+<Warning>
+Pin the SDK to an exact version (no `^`, no `~`). The ZK assets are versioned in lockstep with the package; a floating version can resolve a manifest that points at a different circuit hash than the one your wallet's master seed was set up for.
+</Warning>
+
 ## TypeScript
 
-The SDK is written in TypeScript and ships with full type declarations. No additional `@types` packages are needed.
+The SDK is written in TypeScript and ships full type declarations. No additional `@types` packages are needed.
 
 Minimum TypeScript version: **5.0**.
 
-Add the following to your `tsconfig.json` if you are targeting Node.js:
+For Node.js:
 
 ```json
 {
@@ -38,36 +44,84 @@ Add the following to your `tsconfig.json` if you are targeting Node.js:
 }
 ```
 
-## Import Paths
+## Subpath imports
 
-The SDK exposes several sub-path imports to keep bundles lean:
+The main `@umbra-privacy/sdk` barrel only re-exports:
 
-- `@umbra-privacy/sdk` - All implementation modules: client, services, Solana providers, cryptography
-- `@umbra-privacy/sdk/types` - Branded type definitions and type assertions only
-- `@umbra-privacy/sdk/interfaces` - Function type signatures (useful for typing your own wrappers)
-- `@umbra-privacy/sdk/utils` - Unit converters and encoding utilities
-- `@umbra-privacy/sdk/constants` - Protocol constants (program ID, seeds, max tree depth, etc.)
-- `@umbra-privacy/sdk/errors` - Error classes and type guard functions
+- `getUmbraClient`, the four signer factories (`createInMemorySigner`, `createSignerFromPrivateKeyBytes`, `createSignerFromKeyPair`, `createSignerFromWalletAccount`).
+- The full error hierarchy and the `Result<T, E>` helpers.
+- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, RPC providers, transaction forwarders.
 
-Most applications only need the main `@umbra-privacy/sdk` import.
+**Every operation factory lives behind a named subpath.** This keeps the main barrel small and helps bundlers tree-shake aggressively. The subpath map:
+
+- `@umbra-privacy/sdk/client` — `IUmbraClient`, `IUmbraSigner` interfaces.
+- `@umbra-privacy/sdk/shared` — protocol-wide constants. **`UMBRA_MESSAGE_TO_SIGN` and `BPS_DIVISOR` live here**, not on the main barrel.
+- `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction` + executors.
+- `@umbra-privacy/sdk/deposit` — direct depositor + the four Stealth Pool Note creators.
+- `@umbra-privacy/sdk/withdrawal` — ETA → ATA withdrawer.
+- `@umbra-privacy/sdk/burn` — note scanner + three burner factories + `enrichWithMerkleProof`.
+- `@umbra-privacy/sdk/query` — encrypted-balance + user-account queriers.
+- `@umbra-privacy/sdk/conversion` — MXE-only → Shared converter.
+- `@umbra-privacy/sdk/compliance` — grant issue / revoke / re-encrypt / query.
+- `@umbra-privacy/sdk/account` — staged-token recoverers, key rotation, maintenance.
+- `@umbra-privacy/sdk/zk-prover` — Groth16 provers (one factory per circuit) + `getCdnZkAssetProvider`.
+- `@umbra-privacy/sdk/zk-prover/cdn` — direct access to the CDN asset provider.
+- `@umbra-privacy/sdk/store-adapters` — `createBrowserStorageBackend`, `createShardedUtxoDataStore`, `createShardedNullifierStore`.
+- `@umbra-privacy/sdk/store` — base store interfaces (for custom storage backends).
+- `@umbra-privacy/sdk/indexer`, `@umbra-privacy/sdk/indexer/utxo`, `@umbra-privacy/sdk/indexer/nullifier` — typed indexer clients.
+- `@umbra-privacy/sdk/relayer` — typed relayer client (re-exported from main barrel).
+- `@umbra-privacy/sdk/solana`, `@umbra-privacy/sdk/pda`, `@umbra-privacy/sdk/token` — Solana primitives.
+- `@umbra-privacy/sdk/arcium` — Arcium MPC types + helpers.
+- `@umbra-privacy/sdk/constants` — mint lists, domain separators, network configs, etc.
+- `@umbra-privacy/sdk/types` — branded primitives (`U64`, `Address`, …).
+- `@umbra-privacy/sdk/crypto`, `…/crypto/poseidon`, `…/crypto/rescue`, `…/crypto/aes`, `…/crypto/key-derivation`, `…/crypto/challenges`, `…/crypto/commitment` — cryptographic primitives.
+- `@umbra-privacy/sdk/errors` — error classes + `is*` type guards.
+- `@umbra-privacy/sdk/converters`, `@umbra-privacy/sdk/temporal`, `@umbra-privacy/sdk/validation`, `@umbra-privacy/sdk/hooks`, `@umbra-privacy/sdk/pipeline`, `@umbra-privacy/sdk/fee-provider`, `@umbra-privacy/sdk/math` — utilities.
+
+A typical app import block:
 
 ```typescript
-// Everything you need for standard usage
+// Main barrel — client + signer + infrastructure
 import {
   getUmbraClient,
-  getUserRegistrationFunction,
-  getPublicBalanceToEncryptedBalanceDirectDepositorFunction,
-  getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction,
+  createSignerFromWalletAccount,
+  getUmbraRelayer,
 } from "@umbra-privacy/sdk";
 
-// Error handling
+// Operation subpaths
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
+import {
+  getBurnableStealthPoolNoteScannerFunction,
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+
+// ZK prover (same package, named subpath)
+import {
+  getATAIntoStealthPoolNoteCreatorProver,
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
+} from "@umbra-privacy/sdk/zk-prover";
+
+// Browser store adapters (recommended for any scanning workload)
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
+
+// Error classification
 import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
 ```
 
+<Note>
+**Prover naming pattern:** creator-side factories use the form `get{ETA,ATA}IntoStealthPoolNoteCreatorProver`. Burner-side factories use the form `getClaim{Self,Receiver}ClaimableUtxoInto{EncryptedBalance,PublicBalance}Prover` — these spellings come from the wire protocol, which uses `claim` / `utxo` instead of `burn` / `note`.
+</Note>
+
 ## Runtime Requirements
 
-The SDK works in both Node.js (18+) and modern browser environments. It has no native dependencies - all cryptography is pure TypeScript/WebAssembly.
+The SDK works in both Node.js (18+) and modern browser environments. It has no native dependencies — all cryptography is pure TypeScript / WebAssembly.
 
 <Note>
-If you are using a bundler (Vite, webpack, Next.js), no special configuration is needed. The SDK uses standard ES module syntax.
+If you are using a bundler (Vite, webpack, Next.js), no special configuration is needed for the SDK itself. For Next.js, add `@umbra-privacy/sdk` to `transpilePackages` in `next.config.ts` if you hit ESM/CJS interop issues.
 </Note>

@@ -133,11 +133,27 @@ The client object returned by `getUmbraClient`. All fields are read-only.
 </ResponseField>
 
 <ResponseField name="fetchMerkleProof" type="MerkleProofFetcherFunction | undefined">
-  Indexer-based Merkle proof fetcher. `undefined` if `indexerApiEndpoint` was not provided.
+  Indexer-based single-leaf Merkle proof fetcher. `undefined` if `indexerApiEndpoint` was not provided.
+</ResponseField>
+
+<ResponseField name="fetchBatchMerkleProof" type="BatchMerkleProofFetcherFunction | undefined">
+  Indexer-based per-batch Merkle proof fetcher. Pass to burner factories via `deps.fetchBatchMerkleProof`. `undefined` if `indexerApiEndpoint` was not provided.
 </ResponseField>
 
 <ResponseField name="fetchUtxoData" type="UtxoDataFetcherFunction | undefined">
-  Indexer-based UTXO data fetcher. `undefined` if `indexerApiEndpoint` was not provided.
+  Indexer-based Stealth Pool Note data fetcher used internally by the scanner. Legacy field name — scanner override is `deps.fetchStealthPoolNoteData`. `undefined` if `indexerApiEndpoint` was not provided.
+</ResponseField>
+
+<ResponseField name="fetchTreeSummary" type="TreeSummaryFetcherFunction | undefined">
+  Indexer-based tree summary fetcher used by the scanner to discover active trees. `undefined` if `indexerApiEndpoint` was not provided.
+</ResponseField>
+
+<ResponseField name="utxoDataStore" type="IUtxoDataStore | undefined">
+  Persistent scan-progress + note store. Same instance supplied at construction; `undefined` if not provided.
+</ResponseField>
+
+<ResponseField name="nullifierStore" type="INullifierStore | undefined">
+  Persistent nullifier store. `undefined` if not provided.
 </ResponseField>
 
 ### Master Seed

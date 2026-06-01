@@ -1,44 +1,41 @@
 ---
 title: "Token-2022 Support"
-description: "Token-2022 transfer fee handling: epoch-based fee schedule detection, fee deduction before protocol fees, epochInfoCommitment override. Affects deposit and public UTXO creation."
+description: "Token-2022 transfer fee handling: epoch-based fee schedule detection, fee deduction before protocol fees, epochInfoCommitment override. Affects ATA-source operations only."
 ---
 
 ## Overview
 
-[Token-2022](https://spl.solana.com/token-2022) is Solana's next-generation token program. It supports extensions that add new behaviors to tokens - including a **transfer fee** extension that automatically deducts a percentage of each transfer.
+[Token-2022](https://spl.solana.com/token-2022) is Solana's next-generation token program. It supports extensions that add new behaviours to tokens — including a **transfer fee** extension that automatically deducts a percentage of each transfer.
 
 The Umbra SDK fully supports Token-2022 mints, including those with transfer fee extensions.
 
 ## Transfer Fees
 
-When you deposit a Token-2022 token that has a transfer fee configured, the fee is deducted by the Token-2022 program before tokens reach the shielded pool. The SDK accounts for this by:
+When you deposit a Token-2022 token that has a transfer fee configured, the fee is deducted by the Token-2022 program before tokens reach the pool custody account. The SDK accounts for this by:
 
-1. Fetching the mint account to detect the `TransferFeeConfig` extension
-2. Calling the epoch info provider to determine the current epoch
-3. Selecting the applicable fee schedule (Token-2022 supports epoch-based fee changes)
-4. Computing `actualReceived = amount - transferFee`
-5. Applying Umbra protocol fees on top of `actualReceived`
+1. Fetching the mint account to detect the `TransferFeeConfig` extension.
+2. Calling the epoch info provider to determine the current epoch.
+3. Selecting the applicable fee schedule (Token-2022 supports epoch-based fee changes).
+4. Computing `actualReceived = amount - transferFee`.
+5. Applying Umbra protocol fees on top of `actualReceived`.
 
-The amount credited to your encrypted balance is `actualReceived - protocolFees`.
+The amount credited to your ETA is `actualReceived - protocolFees`.
 
 ## Epoch Info Provider
 
-Transfer fee schedule selection requires knowing the current Solana epoch. This is why `epochInfoProvider` is part of the `IUmbraClient` interface - it is fetched once per deposit operation for Token-2022 mints.
+Transfer fee schedule selection requires knowing the current Solana epoch. This is why `epochInfoProvider` is part of the `IUmbraClient` interface — it is fetched once per deposit operation for Token-2022 mints.
 
 For standard SPL tokens (Token program), the epoch info provider is not called.
 
 The provider defaults to an RPC-based implementation constructed from `rpcUrl`. You can override it if needed:
 
 ```typescript
-import {
-  getUmbraClient,
-  getRpcBasedEpochInfoProvider,
-} from "@umbra-privacy/sdk";
+import { getUmbraClient } from "@umbra-privacy/sdk";
 
 const client = await getUmbraClient(
   { signer, network, rpcUrl, rpcSubscriptionsUrl },
   {
-    // Custom epoch info provider (e.g., for testing with a fixed epoch)
+    // Custom epoch info provider (e.g., for testing with a fixed epoch).
     epochInfoProvider: async () => ({
       epoch: 500n,
       slotIndex: 0n,
@@ -46,7 +43,7 @@ const client = await getUmbraClient(
       absoluteSlot: 216000000n,
       blockHeight: 210000000n,
     }),
-  }
+  },
 );
 ```
 
@@ -63,27 +60,33 @@ transferFee = min(
 
 Where `feeBasisPoints` and `maximumFee` are read from the epoch-appropriate fee schedule in the mint's `TransferFeeConfig` extension.
 
+Note that **Token-2022's BPS divisor is 10,000**, while **Umbra's protocol-fee BPS divisor is 16,384** (2^14). Don't confuse the two.
+
 ## No Special Configuration Required
 
 You do not need to do anything special to use Token-2022 mints. Simply pass the Token-2022 mint address as you would any other mint:
 
 ```typescript
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+
 const TOKEN22_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
 
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
-const result = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
+const deposit = getATAIntoETADirectDepositorFunction({ client });
+const result  = await deposit(client.signer.address, TOKEN22_MINT, 1_000_000n);
 ```
 
 The SDK detects that the mint is a Token-2022 program account, checks for a transfer fee extension, and handles the fee deduction automatically.
 
 ## Affected Operations
 
-Transfer fee handling applies to these operations:
+Transfer fee handling applies to these ATA-source operations:
 
-- `getPublicBalanceToEncryptedBalanceDirectDepositorFunction` - fetches epoch info only when a Token-2022 transfer fee is detected
-- `getPublicBalanceToSelfClaimableUtxoCreatorFunction` - same
-- `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` - same
+- `getATAIntoETADirectDepositorFunction` — fetches epoch info only when a Token-2022 transfer fee is detected.
+- `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — same.
+- `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — same.
+- `getETAIntoATAWithdrawerFunction` — same (the transfer back into an ATA also crosses the Token-2022 boundary).
+- `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — same.
 
-Operations that draw from an encrypted balance rather than a public ATA are not affected by Token-2022 transfer fees, because the transfer happens within the Umbra program and does not cross the Token-2022 transfer fee boundary.
+Operations that route entirely between an ETA and the on-chain Stealth Pool (e.g. self-burnable → ETA, receiver-burnable → ETA) are not affected by Token-2022 transfer fees, because the transfer happens within the Umbra program and does not cross the Token-2022 transfer fee boundary.
 
-Each of these functions accepts an `epochInfoCommitment` option (defaults to `"confirmed"`) to control the commitment level used when fetching the current epoch for fee schedule selection.
+Each of the affected factories accepts an `epochInfoCommitment` option (defaults to `"confirmed"`) to control the commitment level used when fetching the current epoch for fee schedule selection.

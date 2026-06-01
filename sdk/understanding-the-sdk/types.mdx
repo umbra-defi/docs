@@ -1,43 +1,65 @@
 ---
 title: "Types & Interfaces"
-description: "SDK type system: branded types U64/U128/U256, Bn254FieldElement, X25519PublicKey. Integration with @solana/kit Address and TransactionSignature. Function types via /interfaces subpath."
+description: "SDK type system: branded types U64/U128/U256, Bn254FieldElement, X25519PublicKey. Integration with @solana/kit Address and TransactionSignature. Function types via the named subpath of each operation family."
 ---
 
 ## Anza Solana Kit Types
 
-The SDK is built on top of `@solana/kit` and shares its core types directly. You do not need to import `@solana/kit` yourself - these types flow through the SDK's own types naturally - but it helps to know where they come from:
+The SDK is built on top of `@solana/kit` and shares its core types directly. You do not need to import `@solana/kit` yourself — these types flow through the SDK's own types naturally — but it helps to know where they come from:
 
-- [`Address`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/addresses/src/address.ts) - a base58-encoded public key string. Every `mint`, `destinationAddress`, and `userAddress` parameter in the SDK is an `Address`.
-- [`TransactionSignature`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/transaction-messages/src/transaction-message.ts) - a base58-encoded signature string. Returned by every operation that submits a transaction.
-- `SignableTransaction` / `SignedTransaction` - the versioned transaction types passed to `IUmbraSigner.signTransaction`.
-- `GetLatestBlockhash`, `GetEpochInfo` - RPC function types used in the `deps` of most factory functions.
+- [`Address`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/addresses/src/address.ts) — a base58-encoded public key string. Every `mint`, `destinationAddress`, and user-address parameter in the SDK is an `Address`.
+- [`TransactionSignature`](https://github.com/anza-xyz/solana-web3.js/blob/main/packages/transaction-messages/src/transaction-message.ts) — a base58-encoded signature string. Returned by every operation that submits a transaction.
+- `SignableTransaction` / `SignedTransaction` — the versioned transaction types passed to `IUmbraSigner.signTransaction`.
+- `GetLatestBlockhash`, `GetEpochInfo` — RPC function types used in the `deps` of most factory functions.
 
 If you are writing unit tests or building a custom RPC layer, the [`@solana/kit` documentation](https://github.com/anza-xyz/solana-web3.js) is the primary reference for these types.
 
 ## Function Types
 
-Every returned function has a named type exported from `@umbra-privacy/sdk/interfaces`. Store functions in state, type React context values, or annotate variables without re-running the factory:
+Every returned function has a named type exported from the **same subpath** as its factory. There is no separate `@umbra-privacy/sdk/interfaces` re-export — types ship alongside their factories.
 
 ```typescript
 import type {
-  PublicBalanceToEncryptedBalanceDirectDepositorFunction,
-  UserRegistrationFunction,
-  ClaimableUtxoScannerFunction,
-  SelfClaimableUtxoToEncryptedBalanceClaimerFunction,
-} from "@umbra-privacy/sdk/interfaces";
+  // Deposit family
+  ATAIntoETADirectDepositorFunction,
+  ATAIntoReceiverBurnableStealthPoolNoteCreatorFunction,
+} from "@umbra-privacy/sdk/deposit";
+
+import type {
+  // Withdrawal family
+  ETAIntoATAWithdrawerFunction,
+} from "@umbra-privacy/sdk/withdrawal";
+
+import type {
+  // Burn family
+  BurnableStealthPoolNoteScannerFunction,
+  ReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+  SelfBurnableStealthPoolNoteIntoETABurnerFunction,
+  SelfBurnableStealthPoolNoteIntoATABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+
+import type { UserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+import type {
+  QueryUserAccountFunction,
+  QueryEncryptedBalanceFunction,
+} from "@umbra-privacy/sdk/query";
 ```
 
 This is useful when you build a factory function once and store it in React state or a context:
 
 ```typescript
+import { useState, useEffect } from "react";
+import type { ATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+
 const [deposit, setDeposit] =
-  useState<PublicBalanceToEncryptedBalanceDirectDepositorFunction | null>(null);
+  useState<ATAIntoETADirectDepositorFunction | null>(null);
 
 useEffect(() => {
   if (client) {
-    setDeposit(() => getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client }));
+    setDeposit(() => getATAIntoETADirectDepositorFunction({ client }));
   }
 }, [client]);
 ```
 
-The full list of exported function types mirrors the factory functions - one type per returned function. See the [Reference](/reference/overview) for the complete inventory.
+The full inventory of factory + function types mirrors the operation families above. See the [Reference](/reference/overview) for the complete list.

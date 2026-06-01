@@ -1,18 +1,39 @@
 ---
 title: "SDK Reference"
-description: "Complete SDK reference index: all factory functions from @umbra-privacy/sdk, import paths (/types, /interfaces, /utils, /constants, /errors), naming conventions."
+description: "Complete SDK reference index: all factory functions and the subpath each lives under (registration, deposit, withdrawal, burn, query, conversion, compliance, account, zk-prover, store-adapters)."
 ---
 
-This reference covers the full public API surface of `@umbra-privacy/sdk`. Pages are organized by feature area - each section documents factory functions alongside their parameter types, result types, and associated errors.
+This reference covers the full public API surface of `@umbra-privacy/sdk@5.x`. Pages are organised by feature area — each section documents factory functions alongside their parameter types, result types, and associated errors.
 
-## Import Paths
+## Main barrel + subpaths
 
-- `@umbra-privacy/sdk` - `getUmbraClient`, all service factory functions, cryptographic primitives
-- `@umbra-privacy/sdk/errors` - All error classes, type guards, and stage union types
-- `@umbra-privacy/sdk/types` - Branded primitive types and assertion functions
-- `@umbra-privacy/sdk/interfaces` - TypeScript function type definitions
-- `@umbra-privacy/sdk/utils` - Converter utilities, PDA derivation helpers, address utilities
-- `@umbra-privacy/sdk/constants` - Network configs, program constants, domain separators
+The main `@umbra-privacy/sdk` barrel re-exports a small, stable surface — `getUmbraClient`, the four signer factories, the full error hierarchy, the `Result<T,E>` helpers, and everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}`. **Operation factories require named subpath imports.**
+
+- `@umbra-privacy/sdk` — `getUmbraClient`, signers, errors, `Result<T,E>`, indexer + relayer + zk-prover + solana + arcium infra
+- `@umbra-privacy/sdk/client` — `IUmbraClient`, `IUmbraSigner` interfaces
+- `@umbra-privacy/sdk/shared` — `UMBRA_MESSAGE_TO_SIGN`, `BPS_DIVISOR`, and protocol-wide constants
+- `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction`, executors, build helpers
+- `@umbra-privacy/sdk/deposit` — Direct ATA→ETA deposit + 4 Stealth Pool Note creators (ATA/ETA × self/receiver)
+- `@umbra-privacy/sdk/withdrawal` — ETA→ATA withdrawer
+- `@umbra-privacy/sdk/transfer` — `getTransferorFunction` — ETA-to-ETA direct transfer, 8 variants
+- `@umbra-privacy/sdk/burn` — Note scanner + 3 burner factories + `enrichWithMerkleProof`
+- `@umbra-privacy/sdk/query` — Encrypted-balance + user-account queriers
+- `@umbra-privacy/sdk/conversion` — MXE-only → Shared converter
+- `@umbra-privacy/sdk/compliance` — Grant issuer / revoker / 3 reencryptors / 3 queriers
+- `@umbra-privacy/sdk/account` — Staged-token recoverers, key rotators, maintenance
+- `@umbra-privacy/sdk/zk-prover` — One factory per Groth16 circuit
+- `@umbra-privacy/sdk/zk-prover/cdn` — `getCdnZkAssetProvider`
+- `@umbra-privacy/sdk/store-adapters` — `createBrowserStorageBackend`, `createFileStorageBackend`, sharded + in-memory UTXO + nullifier stores
+- `@umbra-privacy/sdk/store` — Base store interfaces
+- `@umbra-privacy/sdk/indexer`, `…/indexer/utxo`, `…/indexer/nullifier` — Typed indexer clients
+- `@umbra-privacy/sdk/errors` — Error classes + `is*` type guards
+- `@umbra-privacy/sdk/types` — Branded primitives (U64, Address, …) + `create*` helpers
+- `@umbra-privacy/sdk/constants` — mint lists, domain separators, network configs
+- `@umbra-privacy/sdk/crypto`, `…/crypto/poseidon`, `…/crypto/rescue`, `…/crypto/aes`, `…/crypto/key-derivation`, `…/crypto/challenges`, `…/crypto/commitment` — Cryptographic primitives
+- `@umbra-privacy/sdk/converters` — Encoding / byte-conversion utilities
+- `@umbra-privacy/sdk/arcium` — Arcium MPC types + helpers + `generateRandomNonce` (also re-exported from main barrel)
+- `@umbra-privacy/sdk/temporal`, `…/validation`, `…/hooks`, `…/pipeline`, `…/fee-provider`, `…/math` — Utilities
+- `@umbra-privacy/sdk/pda`, `…/solana`, `…/token` — Solana / PDA / token helpers
 
 ---
 
@@ -21,14 +42,14 @@ This reference covers the full public API surface of `@umbra-privacy/sdk`. Pages
 Every SDK operation follows the same two-step pattern:
 
 ```typescript
-// Step 1 - build the function once (at setup time)
+// 1. Build once (at setup time).
 const operation = getOperationFunction({ client }, deps?);
 
-// Step 2 - call it at runtime
+// 2. Call per-operation at runtime.
 const result = await operation(/* runtime arguments */);
 ```
 
-The factory (`getOperationFunction`) captures configuration and optional dependency overrides. The returned function is what you call per-operation. The optional `deps` argument accepts injectable overrides for RPC providers, key generators, and ZK provers - useful for unit testing or custom infrastructure (e.g. Jito bundles, hardware key storage).
+The factory (`getOperationFunction`) captures configuration and optional dependency overrides. The optional `deps` argument accepts injectable overrides for RPC providers, key generators, ZK provers, and (for burners) relayer adapters — useful for unit testing or custom infrastructure (e.g. Jito bundles, hardware key storage).
 
 ---
 
@@ -36,29 +57,30 @@ The factory (`getOperationFunction`) captures configuration and optional depende
 
 Types referenced across all pages:
 
-- `Address` - Base58-encoded Solana public key string (`string` branded).
-- `TransactionSignature` - Base58-encoded transaction signature string.
-- `U64` - Branded `bigint` constrained to unsigned 64-bit range.
-- `U128` - Branded `bigint` for unsigned 128-bit values.
-- `U256` - Branded `bigint` for unsigned 256-bit values.
-- `U512` - Branded `bigint` for unsigned 512-bit values.
-- `X25519PublicKey` - 32-byte `Uint8Array` Diffie-Hellman public key.
-- `RcEncryptionNonce` - Rescue cipher encryption nonce (branded `Uint8Array`).
-- `OptionalData32` - 32-byte `Uint8Array` for caller-defined metadata attached to on-chain instructions. Defaults to 32 zero bytes when omitted.
-- `TransactionCallbacks` - `{ pre?: (tx: CompiledTransaction) => Promise<void>; post?: (tx: CompiledTransaction, sig: TransactionSignature) => Promise<void> }`. Hooks invoked before signing and after confirmation.
-- `IUmbraClient` - The client configuration object produced by `getUmbraClient`. Passed to every factory function as `args.client`.
-- `Network` - `"mainnet" | "devnet" | "localnet"`.
+- `Address` — Base58-encoded Solana public key string (`string`-branded).
+- `TransactionSignature` — Base58-encoded transaction signature string.
+- `U64` — Branded `bigint` constrained to the unsigned 64-bit range.
+- `U128` — Branded `bigint` for unsigned 128-bit values.
+- `U256` — Branded `bigint` for unsigned 256-bit values.
+- `U512` — Branded `bigint` for unsigned 512-bit values.
+- `X25519PublicKey` — 32-byte `Uint8Array` Diffie-Hellman public key.
+- `RescueCipherEncryptionNonce` — Rescue cipher encryption nonce (branded `Uint8Array`).
+- `OptionalData32` — 32-byte `Uint8Array` for caller-defined metadata attached to on-chain instructions. Defaults to 32 zero bytes when omitted. **Must be pre-hashed or pre-encrypted — never store plaintext identifiers.**
+- `IUmbraClient` — The client configuration object produced by `getUmbraClient`. Passed to every factory as `args.client`.
+- `Network` — `"mainnet" | "devnet" | "localnet"`.
+- `DecryptedStealthPoolNoteData` — A decrypted note returned by the scanner. Passed directly to a burner factory.
+- `ScannedStealthPoolNoteResult` — The scanner's return value; four buckets of notes by `(kind, source)` plus `scannedTrees` progress.
 
 ---
 
-## Pages in This Reference
+## Pages in this reference
 
-- [Client](/reference/client) - `getUmbraClient`, `IUmbraClient`, `IUmbraSigner`
-- [Registration](/reference/registration) - User registration, key rotation, seed updates, staged fund recovery
-- [Deposit](/reference/deposit) - Direct deposit, self-claimable and receiver-claimable UTXO creation
-- [Withdrawal](/reference/withdraw) - Direct withdrawal from encrypted balance to public balance
-- [Query](/reference/query) - User account and encrypted balance queries
-- [Conversion](/reference/conversion) - Convert to shared encryption, rotate per-mint X25519 key
-- [Mixer](/reference/mixer) - Fetch claimable UTXOs, claim into encrypted or public balance
-- [Compliance](/reference/compliance) - Compliance grants, re-encryption operations
-- [Errors](/reference/errors) - All error classes, stage enums, type guards, and the error hierarchy
+- [Client](/reference/client) — `getUmbraClient`, `IUmbraClient`, `IUmbraSigner`.
+- [Registration](/reference/registration) — `getUserRegistrationFunction`, sub-step executors.
+- [Deposit](/reference/deposit) — Direct ATA→ETA deposit + 4 Stealth Pool Note creators.
+- [Withdrawal](/reference/withdraw) — Direct ETA→ATA withdrawal.
+- [Query](/reference/query) — User-account and encrypted-balance queriers.
+- [Conversion](/reference/conversion) — MXE-only → Shared converter.
+- [Stealth Pool (Mixer)](/reference/mixer) — Note scanner + 3 burner factories.
+- [Compliance](/reference/compliance) — Grants, re-encryption, viewing-key derivers.
+- [Errors](/reference/errors) — All error classes, stage enums, type guards, and the error hierarchy.

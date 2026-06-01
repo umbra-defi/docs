@@ -1,6 +1,6 @@
 ---
 title: "Pricing"
-description: "Fee structure: protocol fees (BPS_DIVISOR=16384), relayer fees on claims, mixer SOL fee for UTXO creation. Covers fee calculation formulas and Token-2022 transfer fee interaction."
+description: "Fee structure: protocol fees (BPS_DIVISOR=16384), relayer fees on burns, Stealth Pool SOL fee paid when writing a note. Covers fee calculation formulas and Token-2022 transfer fee interaction."
 ---
 
 ## Overview
@@ -8,8 +8,8 @@ description: "Fee structure: protocol fees (BPS_DIVISOR=16384), relayer fees on 
 Umbra charges three distinct fees depending on the operation:
 
 - **Protocol fee** — a percentage of the SPL token amount, collected by the protocol on most operations.
-- **Relayer fee** — a percentage of the SPL token amount, collected by the relayer on claim operations. Currently 0.
-- **Mixer SOL fee** — a fixed SOL amount paid at UTXO creation time to pre-fund the eventual claim.
+- **Relayer fee** — a percentage of the SPL token amount, collected by the relayer on burn operations. Currently 0.
+- **Stealth Pool SOL fee** — a fixed SOL amount paid when writing a Stealth Pool Note, used to pre-fund the eventual burn so neither the recipient nor the relayer pays SOL out of pocket at burn time.
 
 ---
 
@@ -29,7 +29,7 @@ Umbra uses a power-of-two BPS divisor (`2^14 = 16,384`) rather than the traditio
 protocol_fee = floor(amount × 35 / 16_384)
 ```
 
-### Example — 1,000 USDC withdrawal
+### Example — 1,000 USDC ETA → ATA withdrawal
 
 ```
 1,000 USDC = 1,000,000,000 µUSDC
@@ -42,7 +42,7 @@ net received = 1,000,000,000 - 2,136,230 = 997,863,770 µUSDC ≈ 997.86 USDC
 ### Estimating programmatically
 
 ```typescript
-import { BPS_DIVISOR } from "@umbra-privacy/sdk";
+import { BPS_DIVISOR } from "@umbra-privacy/sdk/shared";
 
 const bps = 35n;
 
@@ -58,9 +58,9 @@ const fee = estimateProtocolFee(1_000_000n); // 1 USDC (6 decimals)
 
 ## Relayer Fee
 
-The relayer submits claim transactions on your behalf so your wallet never appears on-chain as the fee payer. In exchange, relayers can charge a base SPL fee plus a BPS rate on the claimed amount.
+The relayer submits burn transactions on your behalf so your wallet never appears on-chain as the fee payer. In exchange, relayers can charge a base SPL fee plus a BPS rate on the burned amount.
 
-**Current rates:** both are set to 0. Claiming a UTXO incurs no SPL relayer fee today.
+**Current rates:** both are set to 0. Burning a Stealth Pool Note incurs no SPL relayer fee today.
 
 When relayer fees are non-zero, they are applied on top of the protocol fee and deducted from the same token amount:
 
@@ -71,35 +71,35 @@ net = amount - protocol_fee - relayer_fee
 
 ---
 
-## Mixer SOL Fee
+## Stealth Pool SOL Fee
 
-When you create a UTXO and insert it into the mixer, you pay a one-time SOL fee upfront. This pre-funds the eventual claim so neither you nor the relayer pays SOL out of pocket at claim time.
+When you write a Stealth Pool Note into the mixer tree, you pay a one-time SOL fee upfront. This pre-funds the eventual burn so neither the recipient nor the relayer pays SOL out of pocket at burn time.
 
 The SOL fee covers two costs:
 
-- **Treap node rent** — Solana requires a minimum SOL balance to keep the nullifier account (a `TreapNode`) rent-exempt on-chain. This is approximately the minimum rent for a 48-byte account at current Solana rent rates.
-- **Costliest claim path** — the fee includes enough SOL to cover the on-chain compute and transaction costs of the most expensive possible claim route out of the mixer.
+- **Treap node rent** — Solana requires a minimum SOL balance to keep the nullifier account (a `TreapNode`) rent-exempt on-chain. Roughly the minimum rent for a 48-byte account at current Solana rates.
+- **Costliest burn path** — enough SOL to cover the on-chain compute and transaction costs of the most expensive possible burn route out of the pool.
 
-The fee is dynamically calculated at UTXO creation time from the current Solana rent schedule. It is non-refundable — once inserted, the commitment is in the tree and the SOL is committed.
+The fee is dynamically calculated at note-write time from the current Solana rent schedule. It is non-refundable — once inserted, the commitment is in the tree and the SOL is committed.
 
 <Note>
-The mixer SOL fee is denominated in SOL (lamports), not in the token being transferred. It is separate from and in addition to the protocol fee and relayer fee, which are denominated in the transferred token.
+The Stealth Pool SOL fee is denominated in SOL (lamports), not in the token being transferred. It is separate from and in addition to the protocol fee and relayer fee, which are denominated in the transferred token.
 </Note>
 
 ---
 
 ## Which Operations Carry Which Fees
 
-**Encrypted balance operations:**
-- Self-deposit (public ATA → encrypted balance): 0 protocol fee for standard self-shielding
-- Withdrawal (encrypted balance → public ATA): protocol fee applies
-- Cross-account confidential transfer: protocol fee applies
+**EncryptedTokenAccount operations:**
+- Self-deposit (ATA → own ETA): 0 protocol fee for standard self-shielding.
+- Withdrawal (ETA → ATA): protocol fee applies.
+- Conversion (MXE-only → Shared): protocol fee applies on the converted balance.
 
-**Mixer operations:**
-- UTXO creation (encrypted balance → mixer): protocol fee on SPL amount + mixer SOL fee
-- UTXO creation (public ATA → mixer): protocol fee on SPL amount + mixer SOL fee
-- Claiming a UTXO (mixer → encrypted balance): protocol fee applies, relayer fee applies (currently 0)
-- Claiming a UTXO (mixer → public ATA): protocol fee applies, relayer fee applies (currently 0)
+**Stealth Pool operations:**
+- Note creation (ETA → Stealth Pool Note): protocol fee on SPL amount + Stealth Pool SOL fee.
+- Note creation (ATA → Stealth Pool Note): protocol fee on SPL amount + Stealth Pool SOL fee.
+- Burn (note → ETA): protocol fee applies, relayer fee applies (currently 0).
+- Burn (note → ATA): protocol fee applies, relayer fee applies (currently 0). (Only the self-burnable → ATA variant is shipped; receiver-burnable → ATA is on-chain but not yet exposed in the SDK.)
 
 ---
 
@@ -112,7 +112,7 @@ User sends:              transfer_amount
 T22 deducts:             token_transfer_fee    (set on the mint, outside Umbra's control)
 Pool receives:           actual_received = transfer_amount - token_transfer_fee
 Umbra deducts:           protocol_fee = floor(actual_received × 35 / 16,384)
-Encrypted balance gets:  actual_received - protocol_fee
+EncryptedTokenAccount:   actual_received - protocol_fee
 ```
 
 ---

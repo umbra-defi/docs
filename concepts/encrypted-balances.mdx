@@ -1,42 +1,45 @@
 ---
 title: "Encrypted Balances"
-description: "Encrypted Token Accounts (ETAs): MXE-only mode (Arcium network decryptable) vs Shared mode (user X25519 decryptable). Covers nonces, ciphertext structure, and encryption upgrades."
+description: "EncryptedTokenAccounts (ETAs): MXE-only mode (Arcium network decryptable) vs Shared mode (user X25519 decryptable). Covers nonces, ciphertext structure, and encryption upgrades."
 ---
 
-## Public vs. Encrypted Token Accounts
+## ATA vs. ETA
 
-Solana uses **Associated Token Accounts (ATAs)** to hold SPL and Token-2022 tokens. These are fully public - anyone can query your balance.
+Solana uses **AssociatedTokenAccounts (ATAs)** to hold SPL and Token-2022 tokens. These are fully public; anyone can query the balance.
 
-Umbra introduces **Encrypted Token Accounts (ETAs)** - on-chain accounts that hold your token balance in encrypted form.
+Umbra introduces **EncryptedTokenAccounts (ETAs)** — on-chain PDA accounts that hold your token balance in encrypted form.
 
-**ATA (standard public account)**
-- Balance visible on-chain
-- Supports standard SPL transfers
-- No registration required
-- Works with any SPL token
+**ATA (standard public ATA)**
+- Balance visible on-chain.
+- Supports standard SPL transfers.
+- No registration required.
+- Works with any SPL or Token-2022 token.
 
 **ETA (Umbra encrypted account)**
-- Balance hidden on-chain
-- Use Umbra deposit/withdraw instead of standard transfers
-- One-time registration required
-- Works with any SPL token
+- Balance hidden on-chain.
+- Use Umbra deposit / withdraw / convert / burn instead of standard SPL transfers.
+- One-time user registration required.
+- Works with any [supported](/supported-tokens) mint.
 
 ## Depositing: ATA → ETA
 
-When you call `deposit`, your tokens move from your ATA into the shielded pool. The program records an encrypted version of your balance in an ETA tied to your `(wallet address, mint)` pair.
+When you call the depositor
+`getATAIntoETADirectDepositorFunction`,
+your tokens move from your ATA into the on-chain pool custody account. The
+program records the encrypted balance in the ETA PDA for your `(wallet, mint)` pair.
 
 ```
-Your ATA  ──deposit──►  Shielded Pool (on-chain SPL)
+Your ATA  ──deposit──►  Pool custody (on-chain SPL)
                               │
                               ▼
                          Your ETA  (encrypted balance stored here)
 ```
 
-The shielded pool holds the real tokens. The ETA holds the cryptographic proof of how much of those tokens belong to you.
+The pool custody account holds the real tokens. The ETA stores the cryptographic proof of how much of those tokens belong to you.
 
 ## Withdrawing: ETA → ATA
 
-When you withdraw, the process reverses. Arcium MPC verifies that your encrypted balance is sufficient and authorizes the transfer from the shielded pool back to your ATA.
+`getETAIntoATAWithdrawerFunction` reverses the deposit. Arcium MPC verifies that your encrypted balance is sufficient and authorises the transfer from the pool custody account back to your ATA.
 
 ## The Two Encryption Modes
 
@@ -44,75 +47,127 @@ When you withdraw, the process reverses. Arcium MPC verifies that your encrypted
 
 In MXE-only mode, your balance is encrypted under the **Arcium MXE (Multi-party Exchange) public key**. Only the Arcium network can decrypt it.
 
-- Withdrawals require Arcium to perform the decryption computation
-- You cannot query your own balance client-side without Arcium
-- This is the default mode for users who have not registered an [X25519](https://www.rfc-editor.org/rfc/rfc7748) key
+- Withdrawals require Arcium to perform the decryption computation.
+- You cannot query your own balance client-side without Arcium.
+- This is the default mode for users who have not registered an [X25519](https://www.rfc-editor.org/rfc/rfc7748) key.
 
 ### Shared Mode
 
 In Shared mode, your balance is encrypted under **two keys simultaneously**: the Arcium MXE key and your personal **X25519 public key**.
 
-- You can decrypt and read your own balance locally, without a network call
-- Withdrawals still use Arcium's MPC for the on-chain operation
-- Available after completing X25519 key registration (part of the standard registration flow)
+- You can decrypt and read your own balance locally, without a network call.
+- Withdrawals still use Arcium's MPC for the on-chain operation.
+- Available after completing the X25519 key registration sub-step (part of the standard `register({ confidential: true })` flow).
+
+To upgrade an existing MXE-only ETA to Shared mode, use the **converter**:
+
+```typescript
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk/conversion";
+
+const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
+await convert([USDC_MINT]);
+```
 
 <Note>
-If you register with `confidential: true` (the default), your deposits will automatically use Shared mode. This is strongly recommended - it lets you call `queryEncryptedBalance` to read your balance without waiting for Arcium.
+If you register with `confidential: true` (the default), your deposits will automatically use Shared mode. This is strongly recommended — it lets you call the encrypted-balance querier locally instead of round-tripping through Arcium.
 </Note>
 
 ## Account Lifecycle
 
-An ETA is created on first deposit and exists for the lifetime of the wallet/mint pair. Subsequent deposits update the encrypted balance in place.
+An ETA is created on first deposit and exists for the lifetime of the `(wallet, mint)` pair. Subsequent deposits update the encrypted balance in place.
 
 ```typescript
-// First deposit for a given mint → creates the ETA
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+
+const deposit = getATAIntoETADirectDepositorFunction({ client });
+
+// First deposit for a given mint → creates the ETA.
 await deposit(signer.address, USDC_MINT, 1_000_000n);
 
-// Second deposit → adds to the existing ETA balance
+// Second deposit → adds to the existing ETA balance.
 await deposit(signer.address, USDC_MINT, 500_000n);
 ```
 
 ## Nonces and Replay Protection
 
-Each encrypted token account has a **nonce** - a monotonically increasing counter used to prevent replay attacks. The nonce is derived from the account's `generationIndex` field combined with entropy stored on-chain. You don't manage nonces directly; the SDK handles them.
+Each ETA has a **nonce** — a monotonically increasing counter used to prevent replay attacks. The nonce is derived from the account's `generationIndex` field combined with on-chain entropy. You don't manage nonces directly; the SDK handles them.
 
 ## Viewing Your Balance
 
 If you are registered in Shared mode, you can query your current encrypted balance:
 
 ```typescript
-import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const query = getEncryptedBalanceQuerierFunction({ client });
 
 const balances = await query([USDC_MINT]);
-const result = balances.get(USDC_MINT);
+const result   = balances.get(USDC_MINT);
 
 switch (result?.state) {
   case "shared":
-    console.log("Balance:", result.balance); // decrypted MathU64
+    console.log("Balance:", result.balance); // decrypted U64
     break;
   case "mxe":
-    console.log("Account is in MXE mode, cannot decrypt balance client-side");
+    console.log("Account is in MXE mode — convert to Shared to decrypt locally.");
     break;
   case "uninitialized":
-    console.log("Account exists but balance not initialized");
+    console.log("Account exists but balance not initialised.");
     break;
   case "non_existent":
-    console.log("No encrypted token account for this mint");
+    console.log("No ETA for this mint.");
     break;
 }
 ```
 
 <Warning>
-Only Shared-mode accounts can be decrypted client-side. MXE-mode accounts return `{ state: "mxe" }` without a balance. Convert to Shared mode to enable local balance queries.
+Only Shared-mode ETAs can be decrypted client-side. MXE-mode ETAs return `{ state: "mxe" }` without a balance. Use the [converter](/sdk/conversion) (`getNetworkEncryptionToSharedEncryptionConverterFunction`) to move to Shared mode.
 </Warning>
 
 ## Protocol Fees
 
-Deposits subtract a small protocol fee from your balance. The fee has two components:
+Deposits and withdrawals subtract a small protocol fee from your balance. The fee has two components:
 
-- **Base fee** - a fixed amount in the token's native units
-- **Commission** - a percentage of the deposit amount
+- **Base fee** — a fixed amount in the token's native units.
+- **Commission** — a percentage of the amount in basis points (current rate: 35 bps with a 16,384 divisor — see [Pricing](/pricing)).
 
-Fees are deducted automatically. The amount credited to your ETA is the deposit amount minus fees. For Token-2022 mints with a transfer fee extension, the transfer fee is also subtracted before protocol fees are applied - see [Token-2022 Support](/advanced/token-2022).
+Fees are deducted automatically. For Token-2022 mints with a transfer fee extension, the Token-2022 transfer fee is subtracted *before* protocol fees are applied — see [Token-2022 Support](/advanced/token-2022).
+
+## Lottery Points (Umbra Confidential SPL)
+
+**Umbra Confidential SPL** adds a loyalty/lottery-point tracking layer to every `EncryptedTokenAccount`. It is live on-chain and in active SDK integration.
+
+### What changes in the ETA state
+
+Each `EncryptedTokenAccount` now carries two additional Rescue-cipher ciphertext fields alongside the encrypted balance:
+
+- `points_short_epoch` — encrypted point accumulator for the current short epoch
+- `points_long_epoch` — encrypted point accumulator for the current long epoch
+
+A boolean flag `is_points_initialised` indicates whether these fields contain valid encrypted-zero ciphertexts (true) or just zero-byte placeholders (false — pre-migration accounts).
+
+### How points accumulate
+
+Every time a Stealth Pool Note is burned **into** an ETA, the Arcium MPC computes a lottery-ticket delta and adds it to the ETA's running totals. The relayer includes this delta in the burn-batch API response as a `rescue_encrypted_lottery_ticket_delta` field on each batch. The `BurnBatchResult` SDK type does not yet expose this field — it is currently accessible only at the raw relayer API layer.
+
+### Account migration
+
+ETAs deployed before Umbra Confidential SPL have zero-byte placeholders for the two new fields. To enable points accrual, each such account must go through a two-step migration:
+
+1. **`migrate_for_points`** — a pure on-chain account realloc (no MPC). Expands the account from the old layout to the new size and shifts existing data forward.
+2. **`initialise_points_for_network_balance_v17`** or **`initialise_points_for_shared_balance_v17`** — an Arcium MPC instruction that overwrites the placeholder bytes with valid encrypted-zero ciphertexts and sets `is_points_initialised = true`.
+
+<Warning>
+SDK TypeScript factory helpers for the migration steps are **not yet shipped**. To run the migration from code, use the Codama-generated client (`@umbra-privacy/umbra-codama`) directly until higher-level wrappers land in a future SDK release.
+</Warning>
+
+### SDK support status
+
+| Feature | Status |
+|---|---|
+| On-chain ETA points fields | Live |
+| On-chain migration + initialisation instructions | Live |
+| `rescue_encrypted_lottery_ticket_delta` in relayer API response | Live |
+| `BurnBatchResult.lotteryTicketDelta` SDK field | Planned |
+| SDK migration helper factories | Planned |
+| SDK points-balance query | Planned |

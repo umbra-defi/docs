@@ -1,232 +1,256 @@
 ---
-title: "Claiming UTXOs"
-description: "3 claim functions: getUtxoToEncryptedBalanceClaimerFunction, getUtxoToPublicBalanceClaimerFunction, getUtxoToPublicBalanceDirectClaimerFunction. Requires IZkProverSuite and relayer submission."
+title: "Burning Notes"
+description: "3 burner factory functions: receiver-burnable → ETA, self-burnable → ETA, self-burnable → ATA. Each needs a fetchBatchMerkleProof, a circuit-specific zkProver, and a relayer adapter ({submitBurn, pollBurnStatus, getRelayerAddress})."
 ---
 
 ## Overview
 
-Claiming a UTXO presents a ZK proof on-chain that you know the secret inputs behind a Merkle tree commitment, burns the nullifier to prevent double-spending, and releases the tokens.
+Burning a Stealth Pool Note presents a ZK proof on-chain that you know the secret inputs behind a Merkle tree commitment, burns the nullifier to prevent double-spending, and releases the tokens.
 
 You choose where the tokens go:
-- **Into an encrypted balance** - tokens remain private after claiming
-- **Into a public wallet** - tokens become visible in your ATA
+- **Into an EncryptedTokenAccount** — tokens remain private after burning. Default for receiver-burnable.
+- **Into an AssociatedTokenAccount** — tokens become visible in the destination ATA. Self-burnable only.
 
-## Claim Functions
+## burner factories
 
-Three factory functions cover the main claim patterns:
+All three live under `@umbra-privacy/sdk/burn`.
 
-### Claim Self-Claimable UTXO → Encrypted Balance
-
-```typescript
-import {
-  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
-
-const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
-
-const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
-  { client },
-  { zkProver, relayer },
-);
-
-const result = await claim(utxos); // pass array of ClaimableUtxoData
-```
-
-### Claim Self-Claimable UTXO → Public Balance
+### Receiver-burnable → ETA
 
 ```typescript
 import {
-  getSelfClaimableUtxoToPublicBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
 
-const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+const r        = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
 
-const claim = getSelfClaimableUtxoToPublicBalanceClaimerFunction(
+const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver, relayer },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        r.submitClaim,        // alias: BurnSubmitter ≡ ClaimSubmitter
+      pollBurnStatus:    r.pollClaimStatus,    // alias: BurnStatusPoller ≡ ClaimStatusPoller
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
 );
 
-const result = await claim(utxos); // pass array of ClaimableUtxoData
+const result = await burn(notes); // array of DecryptedStealthPoolNoteData
 ```
 
-### Claim Receiver-Claimable UTXO → Encrypted Balance
+### Self-burnable → ETA
 
 ```typescript
 import {
-  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getReceiverClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
+  getSelfBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import { getClaimSelfClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
 
-const zkProver = getReceiverClaimableUtxoToEncryptedBalanceClaimerProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
+const zkProver = getClaimSelfClaimableUtxoIntoEncryptedBalanceProver();
+const r        = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
 
-const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+const burn = getSelfBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver, relayer },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        r.submitClaim,
+      pollBurnStatus:    r.pollClaimStatus,
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
 );
 
-const result = await claim(utxos); // pass array of ClaimableUtxoData
+const result = await burn(notes);
 ```
 
-## Parameters
+### Self-burnable → ATA
 
-<ParamField path="utxos" type="ClaimableUtxoData[]" required>
-  An array of claimable UTXO data objects returned by `getClaimableUtxoScannerFunction`. Each object contains all the data needed for the claim - UTXO values, Merkle proof, and metadata. Pass them directly from the fetch result without destructuring.
+```typescript
+import {
+  getSelfBurnableStealthPoolNoteIntoATABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import { getClaimSelfClaimableUtxoIntoPublicBalanceProver } from "@umbra-privacy/sdk/zk-prover";
+
+const zkProver = getClaimSelfClaimableUtxoIntoPublicBalanceProver();
+const r        = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+
+const burn = getSelfBurnableStealthPoolNoteIntoATABurnerFunction(
+  { client },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        r.submitClaim,
+      pollBurnStatus:    r.pollClaimStatus,
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
+);
+
+const result = await burn(notes);
+```
+
+<Note>
+Receiver-burnable → ATA is supported on-chain (`claim_to_receiver` in the anchor program) but is not yet exposed in the SDK. Use receiver-burnable → ETA, then a regular withdrawal, until the SDK ships the direct path.
+</Note>
+
+## Function signature
+
+All three burners share the same call signature:
+
+```typescript
+type BurnerFn = (
+  stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "self-burnable" | "receiver-burnable" })[],
+  optionalData?: OptionalData32,
+  microLamportsPerAcu?: MicroLamportsPerAcu,
+) => Promise<BurnStealthPoolNoteIntoETAResult | BurnStealthPoolNoteIntoATAResult>;
+```
+
+### Parameters
+
+<ParamField path="stealthPoolNotes" type="readonly (DecryptedStealthPoolNoteData & { kind })[]" required>
+  Notes returned by the scanner — pick them out of `result.{etaToStealthPoolSelfBurnable, etaToStealthPoolReceiverBurnable, ataToStealthPoolSelfBurnable, ataToStealthPoolReceiverBurnable}`. The burner fetches per-batch Merkle proofs internally; do **not** pre-attach proofs.
 </ParamField>
 
-<ParamField path="optionalData" type="Uint8Array">
-  32 bytes of arbitrary metadata stored with the claim. Defaults to all zeros.
+<ParamField path="optionalData" type="OptionalData32">
+  32 bytes of opaque metadata stored with the burn. Defaults to all zeros. **Must be a pre-hashed or pre-encrypted 32-byte value.**
 </ParamField>
 
-<ParamField path="deps.zkProver" type="ZkProver" required>
-  ZK proof generation function. Use the claim-specific provers from `@umbra-privacy/web-zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers) for details.
+<ParamField path="microLamportsPerAcu" type="MicroLamportsPerAcu">
+  Optional priority fee in micro-lamports per Arcium computation unit, applied to the relayer-submitted transactions.
 </ParamField>
 
-<ParamField path="deps.relayer" type="IUmbraRelayer" required>
-  Relayer instance created via `getUmbraRelayer({ apiEndpoint })`. The relayer pays transaction fees for claim operations so the user's wallet never appears on-chain as the fee payer.
+### Deps
+
+<ParamField path="fetchBatchMerkleProof" type="BatchMerkleProofFetcherFunction" required>
+  Per-batch Merkle proof fetcher. Use `client.fetchBatchMerkleProof` (auto-built when `indexerApiEndpoint` is set on the client).
+</ParamField>
+
+<ParamField path="zkProver" type="ZkProver" required>
+  Circuit-specific Groth16 prover (one per burn variant). Provers ship at `@umbra-privacy/sdk/zk-prover`.
+</ParamField>
+
+<ParamField path="relayer" type="{ submitBurn; pollBurnStatus; getRelayerAddress }" required>
+  Relayer adapter. The three property names (`submitBurn`, `pollBurnStatus`, `getRelayerAddress`) are TypeScript aliases of the relayer client's claim methods (`BurnSubmitterFunction = ClaimSubmitterFunction`, etc.), so a relayer client built via `getUmbraRelayer({ apiEndpoint })` plugs in directly.
 </ParamField>
 
 ## Return Value
 
-Returns a result object with `signatures: Record<number, TransactionSignature[]>` - transaction signatures organized by batch index. Each batch can contain multiple UTXOs.
-
-## Full Example: Fetch and Claim
+Receiver-into-ETA and self-into-ETA both return `BurnStealthPoolNoteIntoETAResult`. Self-into-ATA returns `BurnStealthPoolNoteIntoATAResult`. Both shapes:
 
 ```typescript
-import {
-  getClaimableUtxoScannerFunction,
-  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
-
-// Step 1: Fetch claimable UTXOs
-const scan = getClaimableUtxoScannerFunction({ client });
-const result = await scan(0, 0); // scan tree 0 from the start
-
-if (result.selfBurnable.length === 0) {
-  console.log("No claimable UTXOs found");
-  return;
+interface BurnStealthPoolNoteIntoETAResult {
+  readonly signatures: readonly TransactionSignature[]; // from OperationOutcome — every tx submitted
+  readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
 }
 
-// Step 2: Claim the first self-burnable UTXO into encrypted balance
-const zkProver = getSelfClaimableUtxoToEncryptedBalanceClaimerProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
+interface BurnBatchResult {
+  readonly requestId: string;                                       // relayer-assigned tracking ID
+  readonly status: BurnStatus;
+  readonly txSignature?: string;                                    // on-chain burn tx (when landed)
+  readonly callbackSignature?: string;                              // MPC callback tx (when finalised)
+  readonly resolvedVariant?: string;                                // relayer-chosen variant, e.g. "claim_into_existing_shared_balance_v17"
+  readonly failureReason?: string | null;
+  readonly stealthPoolNoteIds?: readonly string[];                  // "treeIndex:leafIndex" pairs
+}
 
-const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
-  { client },
-  { zkProver, relayer },
-);
-
-const claimResult = await claim([result.selfBurnable[0]]);
-
-console.log("Claimed UTXO, signatures:", claimResult.signatures);
+type BurnStatus =
+  | "received" | "validating" | "offsets_reserved" | "building_tx" | "tx_built"
+  | "submitting" | "submitted" | "awaiting_callback" | "callback_received"
+  | "finalizing" | "completed" | "failed" | "timed_out" | "refunded";
 ```
 
-## Example: Claim All UTXOs to Public Balance
+`completed` / `callback_received` indicate success. The signature you want to surface to the user is `callbackSignature ?? txSignature`. `failureReason` containing `"NullifierAlreadyBurnt"` means the note was already burnt — the SDK treats this as idempotent success.
+
+<Note>
+**Umbra Confidential SPL lottery points:** When burning into an ETA, the Arcium MPC generates a `rescue_encrypted_lottery_ticket_delta` and adds it to your ETA's running point totals. This field is present in the raw relayer batch response but is not yet surfaced in `BurnBatchResult`. See [Lottery Points (Umbra Confidential SPL)](/concepts/encrypted-balances#lottery-points-umbra-confidential-spl) for the current SDK status.
+</Note>
+
+## Batching behaviour
+
+- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤4 per proof. Pass the whole array; do not reimplement chunking.
+- **Self-burnable → ETA / ATA** has `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array; the result has one batch per note.
+
+## Full example: scan + burn
 
 ```typescript
-import {
-  getClaimableUtxoScannerFunction,
-  getSelfClaimableUtxoToPublicBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoToPublicBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
+import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/burn";
+// ...the burner setup from above
 
-const zkProver = getSelfClaimableUtxoToPublicBalanceClaimerProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
+const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
+const result = await scan();
 
-const scan = getClaimableUtxoScannerFunction({ client });
-const claim = getSelfClaimableUtxoToPublicBalanceClaimerFunction(
-  { client },
-  { zkProver, relayer },
-);
-
-const result = await scan(0, 0);
-
-if (result.selfBurnable.length > 0) {
-  const claimResult = await claim(result.selfBurnable);
-  console.log("Claimed all self-burnable UTXOs:", claimResult.signatures);
+if (result.ataToStealthPoolReceiverBurnable.length > 0) {
+  const out = await burnReceiverIntoEta(result.ataToStealthPoolReceiverBurnable);
+  for (const [batchIndex, batch] of out.batches) {
+    console.log(
+      "Batch", batchIndex,
+      "status:", batch.status,
+      "sig:",    batch.callbackSignature ?? batch.txSignature,
+      "id:",     batch.requestId,
+    );
+  }
 }
 ```
 
 ## ZK Proof Generation
 
-Claim operations generate a **[Groth16](https://eprint.iacr.org/2016/260.pdf) ZK proof** that proves:
-- You know the secret inputs to one of the commitments in the Merkle tree
-- The nullifier for that commitment has not been burned before
+Burns generate a **[Groth16](https://eprint.iacr.org/2016/260.pdf) ZK proof** that proves:
+
+- You know the secret inputs to one of the commitments in the Merkle tree.
+- The corresponding nullifier has not been burnt before.
 
 The proof is verified on-chain by the Umbra program. Invalid proofs are rejected; valid proofs trigger the callback instruction that releases the tokens.
 
-Proof generation is CPU-intensive and may take 1–5 seconds. Consider showing a progress indicator while it runs.
+Proof generation is CPU-intensive. Plan for 2–8 seconds in the browser per batch. Run the prover in a Web Worker to avoid blocking the main thread (see [ZK Provers](/sdk/advanced/zk-provers)).
 
 ## Stale Merkle Proofs
 
-Merkle proofs become stale if the tree root changes between when you fetch the proof and when you submit the claim. This can happen if other UTXOs are inserted into the tree.
+Merkle proofs can become stale if the tree root changes between when the proof is fetched and when the burn is submitted. The burner fetches the proof **per batch, immediately before submission**, which keeps the window small. If a burn fails with a root mismatch, simply re-run it — the burner refetches the proof on each attempt.
 
-If your claim fails with a root mismatch error, re-fetch the proof using `getClaimableUtxoScannerFunction` and try again.
+<Note>
+Do **not** call `enrichWithMerkleProof` yourself in normal use. The burner handles it. The helper is exported from `@umbra-privacy/sdk/burn` only for callers building a fully custom burn pipeline that bypasses the orchestrator factories.
+</Note>
 
-<Warning>
-Do not cache Merkle proofs for extended periods. Always fetch a fresh proof immediately before submitting a claim. The indexer's `/v1/trees/{tree_index}/proof/{insertion_index}` endpoint always returns the latest valid proof.
-</Warning>
+## Dropped relayer callback
+
+The relayer's MPC callback can drop (network partition, compute-budget exhaustion, Arcium downtime). If you re-submit the same `request_id` while the nullifier is still reserved upstream, the relayer returns **HTTP 409 with code `DUPLICATE_OFFSET`** — wait, re-check on-chain that the nullifier has not landed, and retry.
+
+The burner factory handles this automatically: polling, detecting `NullifierAlreadyBurnt` as idempotent success, and surfacing a clean status. If you are building a custom burn pipeline, see [Errors — Idempotent burn retry](/reference/errors).
 
 ## Error Handling
-
-Claim operations share the same two ZK-specific failure modes as UTXO creation, plus an additional on-chain failure case: a stale Merkle proof. Use `isClaimUtxoError` from `@umbra-privacy/sdk/errors` and `switch` on `err.stage` to handle each one.
 
 ```typescript
 import { isClaimUtxoError } from "@umbra-privacy/sdk/errors";
 
 try {
-  const result = await claim(utxos);
+  const result = await burn(notes);
 } catch (err) {
   if (isClaimUtxoError(err)) {
     switch (err.stage) {
       case "zk-proof-generation":
-        // ZK proof generation failed.
-        // This may indicate an out-of-memory condition, or a zkProver mismatch.
         console.error("Proof generation failed:", err.message);
-        showNotification("Failed to generate proof. Please try again.");
         break;
-
-      case "transaction-sign":
-        // User rejected the transaction in their wallet.
-        showNotification("Claim cancelled.");
-        break;
-
       case "transaction-validate":
-        // Pre-flight simulation failed - often indicates a stale Merkle proof.
-        // Re-fetch the proof using getClaimableUtxoScannerFunction and try again.
-        console.warn("Claim pre-flight failed - Merkle proof may be stale:", err.message);
+        // Pre-flight failed — Merkle proof may be stale. Re-run the burner; it refetches.
+        console.warn("Pre-flight failed:", err.message);
         break;
-
       case "transaction-send":
-        // Transaction submitted but confirmation timed out.
-        // Always verify on-chain before retrying - the nullifier may already be burned.
+        // Submitted but confirmation timed out. Verify on-chain before retrying —
+        // the nullifier may already be burnt.
         console.warn("Confirmation timeout. Check on-chain before retrying.");
         break;
-
       default:
-        // Other stages: initialization, validation, key-derivation, pda-derivation,
-        // instruction-build, transaction-build, transaction-compile.
-        console.error("Claim failed at stage:", err.stage, err);
+        console.error("Burn failed at stage:", err.stage, err);
     }
   } else {
     throw err;
@@ -235,11 +259,11 @@ try {
 ```
 
 <Warning>
-If `err.stage === "transaction-send"`, always verify on-chain before retrying. A successful claim burns the nullifier - submitting a second claim for the same UTXO will be rejected on-chain and waste transaction fees.
+On `transaction-send`, do **not** immediately retry. The transaction may have landed; the burner factory checks on-chain before re-submission, but a fresh manual retry without that check can attempt to spend a nullifier that has already been burnt — wasting fees on a rejected tx.
 </Warning>
-
-See [Error Handling](/reference/errors) for a full reference of all error types.
 
 ## Nullifier Reuse
 
-Once a UTXO is claimed, its nullifier is burned on-chain. Any attempt to claim the same UTXO again will be rejected by the program. You do not need to track this client-side - the on-chain check is authoritative.
+Once a note is burnt, its nullifier is recorded in an on-chain treap. Any attempt to burn the same note again will be rejected by the program with `NullifierAlreadyBurnt`. You do not need to track this client-side — the on-chain check is authoritative, and the SDK's burner treats this status as idempotent success.
+
+See [Error Handling](/reference/errors) for the full error reference.

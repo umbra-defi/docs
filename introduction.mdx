@@ -1,36 +1,46 @@
 ---
 title: "Introduction"
-description: "Umbra privacy protocol for Solana: shield SPL/Token-2022 balances via Arcium MPC encrypted accounts, transfer anonymously through a UTXO mixer, and grant selective compliance access."
+description: "Umbra privacy protocol for Solana: shield SPL/Token-2022 balances via Arcium MPC EncryptedTokenAccounts, transfer anonymously through a Stealth Pool, and grant selective compliance access."
 ---
 
 ## What is Umbra?
 
 Umbra adds a privacy layer on top of standard Solana [SPL and Token-2022 tokens](https://spl.solana.com/token). It lets you:
 
-- **Shield balances** - move tokens from a public SPL or Token-2022 account into an encrypted account where the balance is hidden from everyone except authorized viewers
-- **Transfer anonymously** - move tokens in and out of a shared mixer pool with no on-chain linkage revealed between the entry and exit points
-- **Control who sees what** - grant selective viewing access to auditors or compliance systems without exposing your full history
+- **Shield balances** — move tokens from an Associated Token Account (ATA) into an **EncryptedTokenAccount (ETA)** where the balance is hidden from everyone except authorized viewers.
+- **Transfer anonymously** — write a **Stealth Pool Note** into a shared mixer tree, then **burn** it from any wallet with no on-chain linkage to the sender.
+- **Control who sees what** — grant selective viewing access to auditors or compliance systems without exposing your full history.
 
-Everything runs on Solana mainnet using a combination of on-chain programs and [Arcium](https://arcium.com) multi-party computation (MPC) for the confidential arithmetic.
+Everything runs on Solana using a combination of on-chain programs and [Arcium](https://arcium.com) multi-party computation (MPC) for the confidential arithmetic.
 
 <Note>
 You do **not** need to understand MPC or zero-knowledge proofs to use Umbra. The SDK handles all cryptographic operations for you.
 </Note>
 
+## Key Terms
+
+These are the nouns and verbs you will see throughout the SDK and the rest of these docs:
+
+- **ATA** — `AssociatedTokenAccount`. A standard SPL Associated Token Account holding plaintext tokens. Source/destination of deposits and withdrawals.
+- **ETA** — `EncryptedTokenAccount`. An Umbra-managed account whose balance is encrypted. Has two modes: **MXE-only** (only the Arcium MPC network can decrypt) and **Shared** (you can also decrypt locally with your viewing key).
+- **Stealth Pool Note** — an anonymous note stored as a commitment in the on-chain Indexed Merkle Tree. Senders create notes; either the original sender (self-burnable) or a designated recipient (receiver-burnable) burns them later to redeem the value.
+- **Burn** — the operation that redeems a Stealth Pool Note: it reveals the note's nullifier (preventing double-spend), discharges the value into either an ETA or an ATA, and emits no on-chain link back to the creator.
+
+
 ## Core Concepts at a Glance
 
 <CardGroup cols={2}>
   <Card title="Encrypted Balances" icon="shield" href="/concepts/encrypted-balances">
-    Shield any SPL or Token-2022 token balance in a confidential account. Only you - and anyone you explicitly grant access to - can see the amount.
+    Shield any SPL or Token-2022 token balance in an EncryptedTokenAccount. Only you — and anyone you explicitly grant access to — can see the amount.
   </Card>
-  <Card title="Mixer / UTXOs" icon="shuffle" href="/concepts/utxos-and-mixer">
-    Break the on-chain link between a deposit and a withdrawal using a shared Merkle tree and zero-knowledge proofs.
+  <Card title="Stealth Pool" icon="shuffle" href="/concepts/utxos-and-mixer">
+    Break the on-chain link between sender and recipient using a shared Merkle tree of Stealth Pool Notes and zero-knowledge burn proofs.
   </Card>
   <Card title="SDK" icon="code" href="/sdk/installation">
-    A TypeScript SDK that wraps all protocol operations into simple async functions. Works in Node.js and browser environments.
+    One TypeScript package, `@umbra-privacy/sdk`. The ZK prover, indexer client, and relayer client all ship as subpath modules of the same package.
   </Card>
   <Card title="Indexer API" icon="server" href="/indexer/overview">
-    A read-only REST API for querying UTXO records and Merkle proofs - used internally by the SDK and available for direct integration.
+    A read-only REST API for Stealth Pool Note records and Merkle proofs — used internally by the SDK and available for direct integration.
   </Card>
 </CardGroup>
 
@@ -42,9 +52,11 @@ Umbra is designed to slot into an existing Solana application. You bring your wa
 Your App
   └── Wallet (Phantom, Solflare, etc.)
         └── Umbra SDK (@umbra-privacy/sdk)
-              ├── Solana RPC    - sends and confirms transactions
-              ├── Arcium MPC    - performs confidential computation off-chain
-              └── Umbra Indexer - indexes UTXOs and generates Merkle proofs
+              ├── Solana RPC     — sends and confirms transactions
+              ├── Arcium MPC     — performs confidential computation off-chain
+              ├── Umbra Indexer  — indexes Stealth Pool Notes + Merkle proofs
+              ├── Umbra Relayer  — submits burn transactions for the user
+              └── ZK prover      — Groth16 (snarkjs), runs in a Web Worker
 ```
 
 ## Program IDs
@@ -58,15 +70,15 @@ The SDK resolves the correct program address automatically based on the `network
 
 ## Supported Networks
 
-- `mainnet` - Production
-- `devnet` - Development and integration testing
-- `localnet` - Local validator for unit tests
+- `mainnet` — Production. wSOL, USDC, USDT, UMBRA, CASH.
+- `devnet` — Development and integration testing. wSOL, dUSDC, dUSDT, STREAMFLOW. Get dUSDC / dUSDT test tokens at [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/).
+- `localnet` — Local validator (development).
 
 ## Next Steps
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Install the SDK and run your first deposit in under 5 minutes.
+    Install the SDK and run your first deposit + burn in under 5 minutes.
   </Card>
   <Card title="How Umbra Works" icon="book-open" href="/concepts/how-umbra-works">
     Understand the privacy model before you start building.

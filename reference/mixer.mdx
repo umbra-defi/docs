@@ -1,265 +1,221 @@
 ---
-title: "Mixer"
-description: "API reference: getClaimableUtxoScannerFunction (ScannedUtxoResult) + 3 claim variants into encrypted or public balance with relayer and ZK prover deps."
+title: "Stealth Pool (Mixer)"
+description: "API reference: getBurnableStealthPoolNoteScannerFunction (zero-arg) + 3 burner factories (receiver→ETA, self→ETA, self→ATA) with fetchBatchMerkleProof, ZK prover, and relayer deps."
 ---
 
-## getClaimableUtxoScannerFunction
+All Stealth Pool factories live under `@umbra-privacy/sdk/burn`.
 
-**Import:** `@umbra-privacy/sdk`
+---
+
+## getBurnableStealthPoolNoteScannerFunction
+
+**Import:** `@umbra-privacy/sdk/burn`
 
 ```typescript
-function getClaimableUtxoScannerFunction(
-  args: GetClaimableUtxoScannerFunctionArgs,
-  deps?: GetClaimableUtxoScannerFunctionDeps,
-): ClaimableUtxoScannerFunction
+function getBurnableStealthPoolNoteScannerFunction(
+  args: { client: IUmbraClient },
+  deps?: GetBurnableStealthPoolNoteScannerFunctionDeps,
+): BurnableStealthPoolNoteScannerFunction;
 ```
 
-Returns a function that discovers UTXOs claimable by the caller within a given insertion index range of a mixer tree. Queries the Umbra indexer to find UTXO ciphertexts, then attempts to decrypt them using the caller's X25519 private key and AES decryption. UTXOs that decrypt successfully are returned as claimable.
+Returns a **zero-arg** scanner. When called, it discovers every active Stealth Pool tree, loads scan progress from `client.utxoDataStore`, fetches missing ranges from the indexer, decrypts ciphertexts addressable by your viewing keys, persists progress, and returns the result grouped by `(kind, source)`.
 
 `client.indexerApiEndpoint` must be set (pass it to `getUmbraClient`).
 
----
+### Deps
 
-### GetClaimableUtxoScannerFunctionArgs
-
-- `client: IUmbraClient` - Must have `indexerApiEndpoint` configured.
-
-### GetClaimableUtxoScannerFunctionDeps
-
-- `fetchUtxoData?: FetchUtxoDataFunction` - Override the default indexer UTXO data fetcher.
-- `fetchMerkleProof?: FetchMerkleProofFunction` - Override the default indexer Merkle proof fetcher.
-- `aesDecryptor?: AesDecryptorFunction` - Override the AES-256-GCM decryptor used for receiver-claimable UTXOs.
-- `x25519GetSharedSecret?: (privateKey: X25519PrivateKey, publicKey: X25519PublicKey) => Uint8Array` - Override the X25519 shared secret derivation.
+- `fetchStealthPoolNoteData?: StealthPoolNoteDataFetcherFunction` — override the default indexer note-data fetcher.
+- `fetchMerkleProof?: MerkleProofFetcherFunction` — override the single-leaf Merkle proof fetcher used internally for sanity checks. The burner factory uses its own `fetchBatchMerkleProof` dep at submit time.
+- `aesDecryptor?: AesDecryptorFunction` — override the AES-GCM decryptor used to decode receiver-burnable note ciphertexts.
+- `x25519GetPublicKey?` / `x25519GetSharedSecret?` — override X25519 ECDH primitives.
+- `additionalX25519PrivateKeys?: readonly X25519PrivateKey[]` — multi-key wallets can scan against extra X25519 keys.
 
 ### Returns
 
-`ClaimableUtxoScannerFunction`
-
 ```typescript
-type ClaimableUtxoScannerFunction = (
-  treeIndex: U32,
-  startInsertionIndex: U32,
-  endInsertionIndex?: U32,
-) => Promise<ScannedUtxoResult>
+type BurnableStealthPoolNoteScannerFunction = () => Promise<ScannedStealthPoolNoteResult>;
 ```
 
-- `treeIndex: U32` - The mixer tree index to scan. Branded `U32` type.
-- `startInsertionIndex: U32` - Inclusive start of the UTXO insertion range to scan. Branded `U32` type.
-- `endInsertionIndex?: U32` - Exclusive end of the range. Defaults to the current tree size. Branded `U32` type.
-
-### ScannedUtxoResult
+### ScannedStealthPoolNoteResult
 
 ```typescript
-interface ScannedUtxoResult {
-  selfBurnable: ClaimableUtxoData[];
-  received: ClaimableUtxoData[];
-  publicSelfBurnable: ClaimableUtxoData[];
-  publicReceived: ClaimableUtxoData[];
+interface ScannedStealthPoolNoteResult {
+  readonly etaToStealthPoolSelfBurnable: readonly DecryptedStealthPoolNoteData[];
+  readonly etaToStealthPoolReceiverBurnable: readonly DecryptedStealthPoolNoteData[];
+  readonly ataToStealthPoolSelfBurnable: readonly DecryptedStealthPoolNoteData[];
+  readonly ataToStealthPoolReceiverBurnable: readonly DecryptedStealthPoolNoteData[];
+  readonly networkBalanceToStealthPoolSelfBurnableWithEncryptedAddress: readonly DecryptedStealthPoolNoteData[];
+  readonly networkBalanceToStealthPoolReceiverBurnableWithEncryptedAddress: readonly DecryptedStealthPoolNoteData[];
+  readonly scannedTrees: readonly ScannedTreeProgress[];
+}
+
+interface ScannedTreeProgress {
+  readonly treeIndex: U128;
+  readonly scannedRange: { start: U32; end: U32 } | null;
+  readonly totalLeaves: U32;
+  readonly fullyScanned: boolean;
 }
 ```
 
-- `selfBurnable` - UTXOs you created yourself (from encrypted balance). You can burn these.
-- `received` - UTXOs sent to you by others (from encrypted balance), addressed to the caller.
-- `publicSelfBurnable` - UTXOs you created yourself (from public balance). You can burn these.
-- `publicReceived` - UTXOs sent to you by others (from public balance), addressed to the caller.
-
-### ClaimableUtxoData
-
-Fields present on every claimable UTXO:
-
-- `merkleRoot: U256LeBytes` - The Merkle root at the time this UTXO's proof was fetched (little-endian bytes).
-- `merklePath: U256LeBytes[]` - Sibling hashes forming the Merkle inclusion proof (little-endian bytes).
-- `leafIndex: U128` - The UTXO's leaf index in the Indexed Merkle Tree.
-- `amount: U64` - Token amount in base units.
-- `destinationAddress: Address` - The Umbra-registered owner who can claim this UTXO.
-- `depositModifiedGenerationIndex: U128` - Generation index encoded in the deposit.
-- `version: U64` - Protocol version of the UTXO.
-- `commitmentIndex: U128` - Commitment index used in key derivation.
-- `senderAddressLow: U128` - Low 128 bits of the sender address (for the ZK circuit).
-- `senderAddressHigh: U128` - High 128 bits of the sender address.
-- `relayerFixedSolFees: U64` - Fixed SOL fees paid to relayer (in lamports).
-- `mintAddressLow: U128` - Low 128 bits of the mint address.
-- `mintAddressHigh: U128` - High 128 bits of the mint address.
-- `timestamp: TimestampComponents` - UTXO creation timestamp components for TVK derivation.
-- `purpose: number` - Caller-defined purpose tag.
-- `h1CircuitProvableOnChainDataHash: U256LeBytes` - H1 hash for the ZK circuit public inputs (little-endian bytes).
-- `h1SmartProgramProvableOnChainDataHash: U256LeBytes` - H1 hash for the on-chain verifier (little-endian bytes).
-
----
+Notes are **not** proof-bundled — proofs are fetched per batch at burn time.
 
 ### Errors
 
-Throws `FetchUtxosError`. See [Errors](./errors#fetchutxoserror).
+Throws `FetchUtxosError` (named with the legacy noun; class name retained for backwards compatibility — the error itself covers Stealth Pool Note scanning). See [Errors](./errors#fetchutxoserror).
 
 ### Example
 
 ```typescript
-import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
+import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/burn";
 
-const scanUtxos = getClaimableUtxoScannerFunction({ client });
+const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
+const result = await scan();
 
-// Scan tree 0 from insertion index 0 to 1000
-const result = await scanUtxos(0, 0, 1000);
-
-console.log("Self-burnable UTXOs:", result.selfBurnable.length);
-console.log("Received UTXOs:", result.received.length);
+console.log("Self-burnable from ETA:", result.etaToStealthPoolSelfBurnable.length);
 ```
 
 ---
 
-## getSelfClaimableUtxoToEncryptedBalanceClaimerFunction
+## getReceiverBurnableStealthPoolNoteIntoETABurnerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/burn`
 
 ```typescript
-function getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
-  args: GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionArgs,
-  deps: GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionDeps,
-): SelfClaimableUtxoToEncryptedBalanceClaimerFunction
+function getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
+  args: { client: IUmbraClient },
+  deps: {
+    fetchBatchMerkleProof: BatchMerkleProofFetcherFunction;
+    zkProver: IZkProverForBurnReceiverBurnableStealthPoolNoteIntoETA;
+    relayer: {
+      submitBurn: BurnSubmitterFunction;
+      pollBurnStatus: BurnStatusPollerFunction;
+      getRelayerAddress: () => Promise<Address>;
+    };
+    hooks?: BurnHooks;
+    awaitCompletion?: boolean;        // default true
+    pollingIntervalMs?: number;       // default 3000
+    timeoutMs?: number;               // default 120_000
+    /* additional optional crypto + RPC + key-derivation overrides */
+  },
+): ReceiverBurnableStealthPoolNoteIntoETABurnerFunction;
 ```
 
-Claims a self-burnable UTXO (one you created yourself) and deposits its value into the caller's encrypted balance. Requires a Groth16 ZK proof - `deps.zkProver` is **required**. The nullifier is burned on-chain after a successful claim to prevent double-spending.
+Burns receiver-burnable notes into the caller's ETA. **Natively batches**: groups by `destinationAddress`, chunks to ≤4 per proof.
 
----
+### Required deps
 
-### GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionArgs
-
-- `client: IUmbraClient`
-
-### GetSelfClaimableUtxoToEncryptedBalanceClaimerFunctionDeps
-
-- `zkProver: IZkProverForClaimSelfClaimableUtxo` - **Required.** Groth16 prover for the claim circuit.
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `blockhashProvider?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-- Additional cryptographic dependency overrides (key derivation, Poseidon, Rescue - all optional).
+- **`fetchBatchMerkleProof`** — typically `client.fetchBatchMerkleProof` (auto-wired when `indexerApiEndpoint` is set on the client).
+- **`zkProver`** — `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver()` from `@umbra-privacy/sdk/zk-prover`. (The interface type is aliased internally as `IZkProverForBurnReceiverBurnableStealthPoolNoteIntoETA` — the underlying type is identical.)
+- **`relayer`** — adapter built from `getUmbraRelayer({ apiEndpoint })`. `BurnSubmitterFunction` and `BurnStatusPollerFunction` are TypeScript aliases of `ClaimSubmitterFunction` and `ClaimStatusPollerFunction`, so the relayer client's `submitClaim` / `pollClaimStatus` plug in directly under the renamed property names.
 
 ### Returns
 
-`SelfClaimableUtxoToEncryptedBalanceClaimerFunction`
-
 ```typescript
-type SelfClaimableUtxoToEncryptedBalanceClaimerFunction = (
-  utxos: readonly ClaimableUtxoData[],
+type ReceiverBurnableStealthPoolNoteIntoETABurnerFunction = (
+  stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "receiver-burnable" })[],
   optionalData?: OptionalData32,
-) => Promise<ClaimUtxoIntoEncryptedBalanceResult>
+  microLamportsPerAcu?: MicroLamportsPerAcu,
+) => Promise<BurnStealthPoolNoteIntoETAResult>;
+
+interface BurnStealthPoolNoteIntoETAResult {
+  readonly signatures: readonly TransactionSignature[]; // every tx submitted (from OperationOutcome)
+  readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
+}
+
+interface BurnBatchResult {
+  readonly requestId: string;                  // relayer-assigned tracking ID
+  readonly status: BurnStatus;
+  readonly txSignature?: string;               // on-chain burn tx (when landed)
+  readonly callbackSignature?: string;         // MPC callback tx (when finalised)
+  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v17"
+  readonly failureReason?: string | null;
+  readonly stealthPoolNoteIds?: readonly string[]; // "treeIndex:leafIndex" pairs
+}
+
+type BurnStatus =
+  | "received" | "validating" | "offsets_reserved" | "building_tx" | "tx_built"
+  | "submitting" | "submitted" | "awaiting_callback" | "callback_received"
+  | "finalizing" | "completed" | "failed" | "timed_out" | "refunded";
 ```
 
-- `utxos: readonly ClaimableUtxoData[]` - Array of claimable UTXOs from `getClaimableUtxoScannerFunction`. Use UTXOs from `result.selfBurnable`.
-- `optionalData?: OptionalData32` - Optional 32-byte caller metadata.
-
-Returns `ClaimUtxoIntoEncryptedBalanceResult` with `signatures: Record<number, TransactionSignature[]>` organized by batch index.
-
----
+`completed` / `callback_received` indicate success. The signature to display is `callbackSignature ?? txSignature`. `failureReason` containing `"NullifierAlreadyBurnt"` means the note was already burnt — the SDK treats this as idempotent success.
 
 ### Errors
 
-Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror). The `"transaction-validate"` stage often indicates a stale Merkle proof - fetch fresh UTXOs and retry.
+Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror). The `"transaction-validate"` stage often indicates a stale Merkle proof — the burner refetches on retry.
 
 ---
 
-## getSelfClaimableUtxoToPublicBalanceClaimerFunction
+## getSelfBurnableStealthPoolNoteIntoETABurnerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/burn`
 
-```typescript
-function getSelfClaimableUtxoToPublicBalanceClaimerFunction(
-  args: GetSelfClaimableUtxoToPublicBalanceClaimerFunctionArgs,
-  deps: GetSelfClaimableUtxoToPublicBalanceClaimerFunctionDeps,
-): SelfClaimableUtxoToPublicBalanceClaimerFunction
-```
-
-Claims a self-burnable UTXO (one you created yourself) and sends its value to a public ATA. Same flow as `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction` but the output goes to a public account instead of an encrypted balance. `deps.zkProver` is **required**.
-
-### Returns
-
-`SelfClaimableUtxoToPublicBalanceClaimerFunction`
-
-```typescript
-type SelfClaimableUtxoToPublicBalanceClaimerFunction = (
-  utxos: readonly ClaimableUtxoData[],
-  optionalData?: OptionalData32,
-) => Promise<ClaimUtxoIntoPublicBalanceResult>
-```
-
-- `utxos: readonly ClaimableUtxoData[]` - Array of claimable UTXOs. Use UTXOs from `result.selfBurnable` or `result.publicSelfBurnable`.
-- `optionalData?: OptionalData32` - Optional 32-byte caller metadata.
-
-Returns `ClaimUtxoIntoPublicBalanceResult` with `signatures: Record<number, TransactionSignature[]>` organized by batch index.
-
-### Errors
-
-Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror).
+Same shape as the receiver variant. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1` — the SDK loops internally; caller still passes an array. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance` — use `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
 
 ---
 
-## getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction
+## getSelfBurnableStealthPoolNoteIntoATABurnerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/burn`
 
-```typescript
-function getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
-  args: GetReceiverClaimableUtxoToEncryptedBalanceClaimerFunctionArgs,
-  deps: GetReceiverClaimableUtxoToEncryptedBalanceClaimerFunctionDeps,
-): ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction
-```
+Same shape; tokens released to the destination ATA instead of an ETA. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance` — use `getClaimSelfClaimableUtxoIntoPublicBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
 
-Claims a receiver-addressed UTXO (one sent to the caller by another user) and deposits its value into the caller's encrypted balance. `deps.zkProver` is **required**.
-
-### Returns
-
-`ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction`
-
-```typescript
-type ReceiverClaimableUtxoToEncryptedBalanceClaimerFunction = (
-  utxos: readonly ClaimableUtxoData[],
-  optionalData?: OptionalData32,
-) => Promise<ClaimUtxoIntoEncryptedBalanceResult>
-```
-
-- `utxos: readonly ClaimableUtxoData[]` - Array of claimable UTXOs. Use UTXOs from `result.received` or `result.publicReceived`.
-- `optionalData?: OptionalData32` - Optional 32-byte caller metadata.
-
-Returns `ClaimUtxoIntoEncryptedBalanceResult` with `signatures: Record<number, TransactionSignature[]>` organized by batch index.
-
-### Errors
-
-Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror).
+<Note>
+Receiver-burnable → ATA exists on-chain but is not yet shipped in the SDK. Use receiver-burnable → ETA then a regular withdrawal until the SDK adds the direct path.
+</Note>
 
 ---
 
-## Full Mixer Flow Example
+## Full scan + burn example
 
 ```typescript
 import {
-  getClaimableUtxoScannerFunction,
-  getSelfClaimableUtxoToEncryptedBalanceClaimerFunction,
-  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
-} from "@umbra-privacy/sdk";
-import { getSelfClaimableUtxoToEncryptedBalanceClaimerProver, getReceiverClaimableUtxoToEncryptedBalanceClaimerProver } from "@umbra-privacy/web-zk-prover";
+  getBurnableStealthPoolNoteScannerFunction,
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+  getSelfBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import {
+  getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
+  getClaimSelfClaimableUtxoIntoEncryptedBalanceProver,
+} from "@umbra-privacy/sdk/zk-prover";
 
-// Build functions (once)
-const scanUtxos = getClaimableUtxoScannerFunction({ client });
-const claimSelf = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
+const r = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+const relayerDeps = {
+  submitBurn:        r.submitClaim,
+  pollBurnStatus:    r.pollClaimStatus,
+  getRelayerAddress: r.getRelayerAddress,
+};
+
+const scan = getBurnableStealthPoolNoteScannerFunction({ client });
+
+const burnReceiverIntoEta = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver: getSelfClaimableUtxoToEncryptedBalanceClaimerProver() },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver: getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(),
+    relayer:  relayerDeps,
+  },
 );
-const claimReceived = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+
+const burnSelfIntoEta = getSelfBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver: getReceiverClaimableUtxoToEncryptedBalanceClaimerProver() },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver: getClaimSelfClaimableUtxoIntoEncryptedBalanceProver(),
+    relayer:  relayerDeps,
+  },
 );
 
-// Fetch claimable UTXOs
-const { selfBurnable, received } = await scanUtxos(0, 0, 1000);
-
-// Claim each one
-if (selfBurnable.length > 0) {
-  const result = await claimSelf(selfBurnable);
-  console.log("Claimed self UTXOs:", result.signatures);
+const result = await scan();
+if (result.ataToStealthPoolReceiverBurnable.length > 0) {
+  const out = await burnReceiverIntoEta(result.ataToStealthPoolReceiverBurnable);
+  for (const [batchIndex, batch] of out.batches) {
+    console.log("Batch", batchIndex, "status:", batch.status, "id:", batch.requestId);
+  }
 }
-if (received.length > 0) {
-  const result = await claimReceived(received);
-  console.log("Claimed received UTXOs:", result.signatures);
+if (result.etaToStealthPoolSelfBurnable.length > 0) {
+  await burnSelfIntoEta(result.etaToStealthPoolSelfBurnable);
 }
 ```
 
@@ -267,18 +223,18 @@ if (received.length > 0) {
 
 ## FetchUtxosError
 
-Thrown by `getClaimableUtxoScannerFunction`.
+Thrown by `getBurnableStealthPoolNoteScannerFunction`.
 
-Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"indexer-fetch"` | `"proof-fetch"`
+Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"indexer-fetch"` | `"proof-fetch"` | `"proof-enrichment"`.
 
-See [Errors](./errors#fetchutxoserror) for full documentation.
+See [Errors](./errors#fetchutxoserror).
 
 ---
 
 ## ClaimUtxoError
 
-Thrown by all claim functions.
+Thrown by all burner factories.
 
-Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
+Stage values: `"initialization"` | `"validation"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`.
 
-See [Errors](./errors#claimutxoerror) for full documentation. Before retrying after `"transaction-send"`, verify on-chain - the nullifier may have been burned.
+See [Errors](./errors#claimutxoerror). Before retrying after `"transaction-send"`, verify on-chain — the nullifier may have been burnt. The burner itself treats `NullifierAlreadyBurnt` as idempotent success in `BurnBatchOutcome.failureReason`.

@@ -12,7 +12,7 @@ Compliance functions allow users to voluntarily grant selective viewing access t
 ## `getComplianceGrantIssuerFunction`
 
 ```typescript
-import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk/compliance";
 
 function getComplianceGrantIssuerFunction(
   args: { client: IUmbraClient },
@@ -37,7 +37,7 @@ Returns `Promise<TransactionSignature>`.
 ## `getComplianceGrantRevokerFunction`
 
 ```typescript
-import { getComplianceGrantRevokerFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantRevokerFunction } from "@umbra-privacy/sdk/compliance";
 
 function getComplianceGrantRevokerFunction(
   args: { client: IUmbraClient },
@@ -62,7 +62,7 @@ Revoking a grant prevents future re-encryption requests but does not invalidate 
 ## `getUserComplianceGrantQuerierFunction`
 
 ```typescript
-import { getUserComplianceGrantQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserComplianceGrantQuerierFunction } from "@umbra-privacy/sdk/compliance";
 
 function getUserComplianceGrantQuerierFunction(args: {
   accountInfoProvider: AccountInfoProviderFunction;
@@ -94,7 +94,7 @@ type ComplianceGrantQueryResult =
 ## `getSharedCiphertextReencryptorForUserGrantFunction`
 
 ```typescript
-import { getSharedCiphertextReencryptorForUserGrantFunction } from "@umbra-privacy/sdk";
+import { getSharedCiphertextReencryptorForUserGrantFunction } from "@umbra-privacy/sdk/compliance";
 
 function getSharedCiphertextReencryptorForUserGrantFunction(
   args: { client: IUmbraClient },

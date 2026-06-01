@@ -6,11 +6,11 @@ description: "Complete reference for read-only state query functions."
 ## `getUserAccountQuerierFunction`
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 function getUserAccountQuerierFunction(args: {
-  accountInfoProvider: AccountInfoProviderFunction;
-}): UserAccountQuerierFunction
+  client: IUmbraClient;
+}): QueryUserAccountFunction
 ```
 
 Factory function returning a read-only query for any user's registration state.
@@ -20,18 +20,13 @@ Factory function returning a read-only query for any user's registration state.
 ```typescript
 async function queryUserAccount(
   userAddress: Address,
-  options?: { commitment?: Commitment },
 ): Promise<QueryUserAccountResult>
 ```
 
 ### Parameters
 
 <ParamField path="userAddress" type="Address" required>
-  The wallet address to query.
-</ParamField>
-
-<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
-  Commitment level for the RPC account read. Per-call override.
+  The wallet address to query. This is the only argument — the querier takes no options object.
 </ParamField>
 
 ### `QueryUserAccountResult`
@@ -53,7 +48,7 @@ type QueryUserAccountResult =
 </ResponseField>
 
 <ResponseField name="isUserCommitmentRegistered" type="boolean">
-  Poseidon user commitment registered; mixer participation is enabled.
+  Poseidon user commitment registered; receiving receiver-burnable Stealth Pool Notes is enabled.
 </ResponseField>
 
 <ResponseField name="isActiveForAnonymousUsage" type="boolean">
@@ -61,7 +56,7 @@ type QueryUserAccountResult =
 </ResponseField>
 
 <ResponseField name="x25519PublicKey" type="Uint8Array">
-  32-byte X25519 public key. Used by senders to encrypt UTXOs addressed to this account.
+  32-byte X25519 public key. Used by senders to encrypt Stealth Pool Notes addressed to this account.
 </ResponseField>
 
 <ResponseField name="generationIndex" type="bigint">
@@ -73,11 +68,11 @@ type QueryUserAccountResult =
 ## `getEncryptedBalanceQuerierFunction`
 
 ```typescript
-import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
 function getEncryptedBalanceQuerierFunction(args: {
   client: IUmbraClient;
-}): EncryptedBalanceQuerierFunction
+}): QueryEncryptedBalanceFunction
 ```
 
 Factory function returning a query for the signing user's encrypted balances across multiple mints.
@@ -87,7 +82,6 @@ Factory function returning a query for the signing user's encrypted balances acr
 ```typescript
 async function queryEncryptedBalance(
   mints: readonly Address[],
-  options?: { commitment?: Commitment },
 ): Promise<Map<Address, QueryEncryptedBalanceResult>>
 ```
 
@@ -96,11 +90,7 @@ Queries the calling user's encrypted token account PDAs for each mint in the arr
 ### Parameters
 
 <ParamField path="mints" type="readonly Address[]" required>
-  Mint addresses to query.
-</ParamField>
-
-<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
-  Commitment level for the RPC account reads. Per-call override.
+  Mint addresses to query. This is the only argument — the querier takes no options object.
 </ParamField>
 
 ### `QueryEncryptedBalanceResult`

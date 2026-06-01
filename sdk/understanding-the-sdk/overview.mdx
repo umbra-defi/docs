@@ -1,27 +1,29 @@
 ---
 title: "The SDK Pattern"
-description: "SDK architecture: factory pattern with get[Source]To[Target][Verb]Function naming, args (required params) vs deps (injectable providers), and per-call commitment overrides."
+description: "SDK architecture: factory pattern with verbose flow-based names, args (required params) vs deps (injectable providers), per-call commitment overrides, and subpath imports for every operation family."
 ---
 
 ## Design Philosophy
 
 The Umbra SDK is written in the same **functional, dependency-injected style** as [Anza's `@solana/kit`](https://github.com/anza-xyz/solana-web3.js). Every capability is either a pure function or a factory that returns one. There are no classes with internal state, no singletons, and no implicit globals. Dependencies are explicit, injectable, and testable.
 
-This mirrors the architecture of `@solana/kit` itself - functions like `getTransferSolInstruction` and `createSolanaRpc` follow the same closure-based factory pattern you will find throughout the Umbra SDK.
+This mirrors the architecture of `@solana/kit` itself — functions like `getTransferSolInstruction` and `createSolanaRpc` follow the same closure-based factory pattern you will find throughout the Umbra SDK.
 
 ## The Factory Pattern
 
 Every SDK operation follows the same two-step pattern:
 
 ```typescript
-// Step 1 - build the function once, at setup time
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-// Step 2 - call it at runtime
-const signature = await deposit(destinationAddress, mint, amount);
+// 1. Build the function once, at setup time.
+const deposit = getATAIntoETADirectDepositorFunction({ client });
+
+// 2. Call it at runtime.
+const result = await deposit(destinationAddress, mint, amount);
 ```
 
-The factory call (`get*Function`) is cheap. It binds configuration and resolves defaults. The returned function is what does the actual async work - sending transactions, generating proofs, querying the indexer.
+The factory call (`get*Function`) is cheap — it binds configuration and resolves defaults. The returned function is what does the actual async work: sending transactions, generating proofs, querying the indexer, polling the relayer.
 
 This is the same pattern `@solana/kit` uses for its instruction builders:
 
@@ -29,28 +31,43 @@ This is the same pattern `@solana/kit` uses for its instruction builders:
 // @solana/kit instruction builder
 const ix = getTransferSolInstruction({ source, destination, amount });
 
-// Umbra SDK factory function - same pattern, describing the data flow
-const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
+// Umbra SDK factory function — same pattern, describing the data flow end-to-end.
+const withdraw = getETAIntoATAWithdrawerFunction({ client });
 ```
 
 ## Naming Conventions
 
-All factory functions use a consistent `get[Source]To[Target][Verb]Function` scheme. The name describes the data flow and operation:
+Names are long, but they spell out the exact data flow.
 
-- `getPublicBalanceToEncryptedBalance...` - credits tokens from a public account to an encrypted account
-- `getEncryptedBalanceToPublicBalance...` - debits tokens from an encrypted account to a public account
-- `getEncryptedBalanceTo...UtxoCreator...` - creates a UTXO from an encrypted balance
-- `getPublicBalanceTo...UtxoCreator...` - creates a UTXO from a public balance
-- `get...UtxoToEncryptedBalanceClaimer...` - claims a UTXO into an encrypted balance
-- `get...UtxoToPublicBalanceClaimer...` - claims a UTXO into a public balance
-- `getClaimableUtxoScanner...` - scans for claimable UTXOs via the indexer
-- `get...Querier...` - queries on-chain state (RPC)
-- `get...Rotator...` - replaces a registered key
-- `get...Converter...` - migrates an account between protocol modes
-- `get...Reencryptor...` - re-encrypts ciphertexts under a new key
-- `getComplianceGrantIssuer...` - creates a compliance grant
-- `getComplianceGrantRevoker...` - deletes a compliance grant
-- `getUserRegistration...` - the full registration flow
+- **Deposit family** (`@umbra-privacy/sdk/deposit`)
+  - `getATAIntoETADirectDepositorFunction` — ATA → ETA.
+  - `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ATA → self-burnable Stealth Pool Note.
+  - `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ATA → receiver-burnable Stealth Pool Note.
+  - `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ETA → self-burnable Stealth Pool Note (MPC).
+  - `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ETA → receiver-burnable Stealth Pool Note (MPC).
+
+- **Withdrawal family** (`@umbra-privacy/sdk/withdrawal`)
+  - `getETAIntoATAWithdrawerFunction` — ETA → ATA.
+
+- **Burn family** (`@umbra-privacy/sdk/burn`)
+  - `getBurnableStealthPoolNoteScannerFunction` — zero-arg scanner, cursor in `client.utxoDataStore`.
+  - `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` — receiver-burnable → ETA.
+  - `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` — self-burnable → ETA.
+  - `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → ATA.
+  - (Receiver-burnable → ATA exists on-chain but is not yet shipped in the SDK.)
+
+- **Registration** (`@umbra-privacy/sdk/registration`) — `getUserRegistrationFunction`.
+- **Query** (`@umbra-privacy/sdk/query`) — `getUserAccountQuerierFunction`, `getEncryptedBalanceQuerierFunction`.
+- **Conversion** (`@umbra-privacy/sdk/conversion`) — `getNetworkEncryptionToSharedEncryptionConverterFunction`.
+- **Compliance** (`@umbra-privacy/sdk/compliance`) — grant issuer / revoker / re-encryptors / queriers.
+- **Account** (`@umbra-privacy/sdk/account`) — staged-token recoverers (`getStagedSplRecovererFunction`, `getStagedSolRecovererFunction`), key rotators, maintenance helpers.
+
+You read each name as `[verb] from [source] (into|to) [destination]` or `[verb] [object]`. There is no abbreviation — `EncryptedTokenAccount`, not `ETA`, and `AssociatedTokenAccount`, not `ATA` — because the symbols are searchable and self-describing in code.
+
+## Vocabulary
+
+- **Stealth Pool Note** — the SDK's name for a mixer-tree leaf in factory names and types. The wire protocol and on-chain instructions use `claim_*` / `utxo_*` spellings; SDK consumers don't need to touch those.
+- **Burn** — the verb for redeeming a Stealth Pool Note. The relayer endpoint is `/v1/claims` and the relayer client exposes `submitClaim` / `pollClaimStatus`. The burner factory's `relayer` dep accepts `{ submitBurn, pollBurnStatus, getRelayerAddress }`, which are TypeScript aliases of the claim equivalents — plug the relayer client in directly.
 
 ## args and deps
 
@@ -60,15 +77,15 @@ Every factory accepts two arguments:
 const fn = getOperationFunction(args, deps?);
 ```
 
-- `args` - required. Always contains `client: IUmbraClient` and any fixed configuration for this operation (e.g. a specific mint).
-- `deps` - optional. Contains every infrastructure provider, key generator, and ZK prover used internally. All `deps` fields have sensible defaults derived from the `client`. The only exceptions are ZK provers, which have no default and must always be supplied explicitly.
+- **`args`** — required. Always contains `client: IUmbraClient` and any fixed configuration for this operation (e.g. a specific mint).
+- **`deps`** — optional. Contains every infrastructure provider, key generator, ZK prover, and relayer adapter used internally. All `deps` fields have sensible defaults derived from the `client`. The only exceptions are **ZK provers and the burner factory `relayer` adapter**, which have no built-in defaults and must always be supplied explicitly.
 
 ```typescript
-// Using all defaults
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+// Using all defaults.
+const deposit = getATAIntoETADirectDepositorFunction({ client });
 
-// Overriding the transaction forwarder (e.g. Jito bundles)
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
+// Overriding the transaction forwarder (e.g. Jito bundles).
+const deposit = getATAIntoETADirectDepositorFunction(
   { client },
   { transactionForwarder: jitoForwarder },
 );

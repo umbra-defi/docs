@@ -1,6 +1,6 @@
 ---
 title: "Conversion"
-description: "getNetworkEncryptionToSharedEncryptionConverterFunction: upgrade MXE-only ETAs to Shared mode. getMintEncryptionKeyRotatorFunction: rotate per-mint X25519 encryption keys."
+description: "getNetworkEncryptionToSharedEncryptionConverterFunction: upgrade MXE-only ETAs to Shared mode. getMintEncryptionKeyRotatorFunction: rotate per-mint X25519 encryption keys (MPC)."
 ---
 
 ## Overview
@@ -14,11 +14,16 @@ This step is only necessary if you deposited tokens before registering your X255
 ## Usage
 
 ```typescript
-import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk/conversion";
 
 const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
 
-const result = await convert(mints, optionalData?, callbacks?);
+const result = await convert(
+  mints,                   // readonly Address[]
+  optionalData?,           // OptionalData32 — pre-hashed only
+  hooks?,                  // ConvertToSharedHooks
+  microLamportsPerAcu?,    // optional Arcium priority fee
+);
 ```
 
 ### Parameters
@@ -31,8 +36,12 @@ const result = await convert(mints, optionalData?, callbacks?);
   32 bytes of optional metadata stored with each conversion transaction. Defaults to all zeros.
 </ParamField>
 
-<ParamField path="callbacks" type="object">
-  Optional lifecycle hooks fired before and after each per-mint conversion transaction.
+<ParamField path="hooks" type="ConvertToSharedHooks">
+  Optional overall + per-mint lifecycle hooks. Top-level fields cover the batch (`onValidationStart`/`onValidationComplete`, `onAccountFetchStart`/`onAccountFetchComplete`, `onMintConversionStart`/`onMintConversionComplete`/`onMintConversionSkipped`, `onComplete`, `onError`). The MPC-step hooks for each individual conversion (`onPreSend`, `onPostSend`, `onMonitorStarted`, `onFinalized`) live inside the `perMintTransaction` member.
+</ParamField>
+
+<ParamField path="microLamportsPerAcu" type="MicroLamportsPerAcu">
+  Optional Arcium compute-unit priority fee.
 </ParamField>
 
 ### Return Value
@@ -57,7 +66,7 @@ Skip reasons:
 ## Example
 
 ```typescript
-import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk/conversion";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
@@ -77,43 +86,41 @@ for (const [mint, reason] of result.skipped) {
 
 ## Rotate Mint Encryption Key
 
-If a per-mint X25519 key may have been compromised, use `getMintEncryptionKeyRotatorFunction` to rotate it:
+If a per-mint X25519 key may have been compromised, use the mint X25519 rotator from `@umbra-privacy/sdk/account`:
 
 ```typescript
-import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk";
+import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk/account";
 
 const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
 const signature = await rotateMintKey(mint);
 ```
 
-The account must already be in Shared mode. See [Key Rotation](/sdk/understanding-the-sdk/key-rotation) for details on when and how to rotate keys.
+This is an MPC operation — it re-encrypts the on-chain balance under the new per-mint key. The account must already be in Shared mode. See [Recovery & Rotation](/sdk/advanced/recovery) for details on when and how to rotate keys.
 
 ## When to Call This
 
 A typical onboarding flow checks whether conversion is needed after completing registration:
 
 ```typescript
-import {
-  getUserRegistrationFunction,
-  getNetworkEncryptionToSharedEncryptionConverterFunction,
-  getEncryptedBalanceQuerierFunction,
-} from "@umbra-privacy/sdk";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk/conversion";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
-// 1. Register (ensures X25519 key is on-chain)
+// 1. Register (ensures X25519 key is on-chain).
 const register = getUserRegistrationFunction({ client });
 await register({ confidential: true, anonymous: true });
 
-// 2. Check which mints need conversion
+// 2. Check which mints need conversion.
 const queryBalance = getEncryptedBalanceQuerierFunction({ client });
 const MINTS_TO_CHECK = [USDC, USDT];
 const balances = await queryBalance(MINTS_TO_CHECK);
 
 const mxeOnlyMints = [...balances.entries()]
-  .filter(([, result]) => result.state === "exists" && result.data.mode === "mxe")
+  .filter(([, result]) => result.state === "mxe")
   .map(([mint]) => mint);
 
 if (mxeOnlyMints.length > 0) {
-  // 3. Upgrade MXE-only balances to Shared mode
+  // 3. Upgrade MXE-only balances to Shared mode.
   const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
   const conversionResult = await convert(mxeOnlyMints);
   console.log(`Converted ${conversionResult.converted.size} balance(s) to Shared mode`);
@@ -122,7 +129,7 @@ if (mxeOnlyMints.length > 0) {
 
 ## Error Handling
 
-Conversion processes each mint sequentially. If a transaction fails or is cancelled mid-way, any mints already converted will have their signatures in `result.converted` - they are not rolled back.
+Conversion submits all eligible mints in parallel (via `Promise.all`). If a transaction fails or is cancelled mid-batch, whichever conversions landed before the rejection will already be confirmed on-chain — they are not rolled back. Because submission is parallel, the set of mints that succeeded before a failure is non-deterministic; inspect on-chain state (or re-run `convert()`, which skips already-shared mints) rather than assuming a sequential checkpoint.
 
 ```typescript
 import { isConversionError } from "@umbra-privacy/sdk/errors";
@@ -137,9 +144,10 @@ try {
     switch (err.stage) {
       case "transaction-sign":
         // User rejected a per-mint transaction in their wallet.
-        // Any mints converted before this point are already confirmed on-chain.
-        // Re-call convert() with the remaining mints to resume.
-        showNotification("Conversion cancelled. Progress has been saved.");
+        // Conversions run in parallel, so some mints may already be confirmed
+        // on-chain while others never submitted — the partial set is non-deterministic.
+        // Re-call convert() with the same mint list; already-shared mints are skipped.
+        showNotification("Conversion cancelled. Re-run to convert any remaining mints.");
         break;
 
       case "account-fetch":
@@ -148,8 +156,9 @@ try {
         break;
 
       case "transaction-send":
-        // Transaction submitted but confirmation timed out.
-        // Any mints already converted in this batch are confirmed on-chain.
+        // A per-mint transaction was submitted but confirmation timed out.
+        // Other mints in the parallel batch may have landed; the partial set is
+        // non-deterministic. Check on-chain before retrying.
         console.warn("Confirmation timeout. Check on-chain before retrying.");
         break;
 

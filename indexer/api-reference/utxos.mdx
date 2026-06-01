@@ -1,10 +1,14 @@
 ---
-title: "Global UTXOs"
+title: "Global Notes"
 openapi: "GET /v1/utxos"
-description: "Returns a paginated list of UTXO records across all Merkle trees, ordered by absolute index ascending."
+description: "Returns a paginated list of Stealth Pool Note records across all Merkle trees, ordered by absolute index ascending."
 ---
 
-Use this endpoint when you need to scan UTXOs globally without knowing which tree they belong to. For tree-specific queries, prefer [Tree UTXOs](/indexer/api-reference/tree-utxos).
+Use this endpoint when you need to scan notes globally without knowing which tree they belong to. For tree-specific queries, prefer [Tree Notes](/indexer/api-reference/tree-utxos).
+
+<Note>
+The path retains the legacy `/v1/utxos` segment. The records it serves are Stealth Pool Notes.
+</Note>
 
 ## Pagination
 
@@ -17,7 +21,7 @@ curl "https://utxo-indexer.api.umbraprivacy.com/v1/utxos?start=0&limit=1000"
 # Next page
 curl "https://utxo-indexer.api.umbraprivacy.com/v1/utxos?start=1000&limit=1000"
 
-# Fetch a specific range (e.g. all UTXOs in tree 1: absolute indices 1,048,576 to 2,097,151)
+# Fetch a specific range (e.g. all notes in tree 1: absolute indices 1,048,576 to 2,097,151)
 curl "https://utxo-indexer.api.umbraprivacy.com/v1/utxos?start=1048576&end=2097151&limit=5000"
 ```
 

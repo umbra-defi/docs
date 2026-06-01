@@ -3,20 +3,20 @@ title: "Deposit API Reference"
 description: "Complete reference for direct deposit into encrypted balance."
 ---
 
-## `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`
+## `getATAIntoETADirectDepositorFunction`
 
 ```typescript
-import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-function getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
-  args: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs,
-  deps?: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps,
-): PublicBalanceToEncryptedBalanceDirectDepositorFunction
+function getATAIntoETADirectDepositorFunction(
+  args: GetATAIntoETADirectDepositorFunctionArgs,
+  deps?: GetATAIntoETADirectDepositorFunctionDeps,
+): ATAIntoETADirectDepositorFunction
 ```
 
 Factory function that returns a callable deposit function.
 
-### `GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs`
+### `GetATAIntoETADirectDepositorFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -33,12 +33,12 @@ async function deposit(
 ): Promise<DepositResult>
 ```
 
-Moves tokens from the calling user's ATA into their encrypted balance. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium MPC, then waits for the callback to confirm.
+Moves tokens from the calling user's ATA into their EncryptedTokenAccount. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium MPC, then waits for the callback to confirm.
 
 ### Parameters
 
 <ParamField path="destinationAddress" type="Address" required>
-  Wallet address whose encrypted balance is credited. Can be any registered user - not just the signer. The tokens are encrypted under the destination's X25519 key (or MPC key if no X25519 key is registered).
+  Wallet address whose ETA is credited. Can be any registered user - not just the signer. The tokens are encrypted under the destination's X25519 key (or MPC key if no X25519 key is registered).
 </ParamField>
 
 <ParamField path="mint" type="Address" required>
@@ -46,51 +46,51 @@ Moves tokens from the calling user's ATA into their encrypted balance. Follows t
 </ParamField>
 
 <ParamField path="transferAmount" type="bigint" required>
-  Gross amount in native token units (accounting for decimals). Protocol fees and Token-2022 transfer fees are deducted from this value before the encrypted balance is credited.
+  Gross amount in native token units (accounting for decimals). Protocol fees and Token-2022 transfer fees are deducted from this value before the ETA is credited.
 </ParamField>
 
-<ParamField path="options.priorityFees" type="bigint" default="0n">
-  Additional compute unit price in microlamports.
-</ParamField>
-
-<ParamField path="options.purpose" type="number" default="0">
-  Purpose flag stored with the deposit. Reserved for protocol use.
-</ParamField>
-
-<ParamField path="options.optionalData" type="Uint8Array">
-  32 bytes of optional metadata stored with the deposit. Defaults to zero bytes.
-</ParamField>
-
-<ParamField path="options.awaitCallback" type="boolean" default="true">
-  Whether to wait for the Arcium MPC callback transaction to confirm before resolving.
-</ParamField>
-
-<ParamField path="options.skipPreflight" type="boolean" default="false">
-  Skip Solana transaction preflight simulation.
-</ParamField>
-
-<ParamField path="options.maxRetries" type="number">
-  Maximum number of times the RPC node should retry sending the transaction.
+<ParamField path="options.optionalData" type="OptionalData32">
+  32 bytes of opaque caller metadata. **Pre-hashed only.** Default 32 zero bytes.
 </ParamField>
 
 <ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level for RPC account reads. Per-call override.
+  Commitment level for RPC account reads.
 </ParamField>
 
 <ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level for epoch info fetches (Token-2022 fee schedule). Per-call override.
+  Commitment level for epoch-info fetches (Token-2022 fee schedule).
 </ParamField>
+
+<ParamField path="options.hooks" type="ATAIntoETADirectDepositHooks">
+  Per-phase lifecycle hooks. See [Transaction Callbacks](/sdk/understanding-the-sdk/callbacks).
+</ParamField>
+
+<Note>
+V4 fields `priorityFees`, `purpose`, `awaitCallback`, `skipPreflight`, `maxRetries` do not exist on the V5 depositor. Priority fees are factory-time config; callback waiting is always on.
+</Note>
 
 ### Return Value
 
 Returns `Promise<DepositResult>`:
 
-- `queueSignature` - Transaction signature of the handler (queue computation) transaction.
-- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
-- `callbackSignature` - Transaction signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
-- `callbackElapsedMs` - Milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
-- `rentClaimError` - Error from rent reclaim attempt, if any. The deposit itself still succeeded.
+```typescript
+interface DepositResult {
+  readonly signatures: readonly TransactionSignature[];
+  readonly queueSignature: TransactionSignature;
+  readonly callback?:
+    | { readonly status: "finalized"; readonly signature?: TransactionSignature; readonly elapsedMs: number }
+    | { readonly status: "pruned";    readonly elapsedMs: number }
+    | { readonly status: "timed-out"; readonly elapsedMs: number };
+  readonly rentClaim?:
+    | { readonly claimed: true;  readonly signature: TransactionSignature }
+    | { readonly claimed: false; readonly reason: string };
+}
+```
+
+- `signatures` — every transaction signature submitted, in submission order.
+- `queueSignature` — handler (queue computation) signature.
+- `callback` — present once the callback round-trip completes (always awaited). `"finalized"` exposes the MPC callback `signature`; other statuses indicate the callback did not land.
+- `rentClaim` — best-effort. `claimed: false` does not invalidate the deposit.
 
 ---
 
@@ -110,7 +110,7 @@ No manual mode selection is needed.
 ## Protocol Fee Formula
 
 ```
-credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 10000)
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 16384)
 ```
 
 Fee parameters are set on-chain per pool by the pool administrator.

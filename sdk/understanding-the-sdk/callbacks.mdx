@@ -1,114 +1,204 @@
 ---
 title: "Transaction Callbacks"
-description: "TransactionCallbacks interface: PreTransactionCallback and PostTransactionCallback hooks fired around sign/send/confirm lifecycle. Used for progress UI, analytics, and transaction logging."
+description: "Per-operation hooks interfaces: DirectTransactionStepHooks, MpcTransactionStepHooks, RegistrationHooks, BurnHooks. Named per-phase and per-step slots scoped to each operation."
 ---
 
 ## Overview
 
-Every function that submits a transaction accepts an optional `callbacks` object on its options or options-like argument. Callbacks give you visibility into each transaction as it moves through the sign → send → confirm lifecycle.
+The SDK uses per-operation **hooks** objects (not a single generic `TransactionCallbacks`). Each factory's `deps.hooks` or `options.hooks` slot accepts a named interface specific to that operation, with named per-phase / per-step hook keys. Hooks observe the operation as it moves through validation, fetching, ZK proving, transaction submission, MPC callback waiting, and completion.
+
+The two transaction-level building blocks every hooks interface uses:
 
 ```typescript
-import type {
-  TransactionCallbacks,
-  PreTransactionCallback,
-  PostTransactionCallback,
-} from "@umbra-privacy/sdk/interfaces";
-```
+// Direct (non-MPC) transaction step — used for the synchronous registration sub-steps
+// and for any single-tx operation.
+interface DirectTransactionStepHooks {
+  readonly interceptInstructions?: (event: InstructionsReadyEvent) => Promise<readonly Instruction[]> | readonly Instruction[];
+  readonly onTransactionBuilt?:    (event: TransactionBuiltEvent)  => Promise<void>;
+  readonly onTransactionSigned?:   (event: TransactionSignedEvent) => Promise<void>;
+  readonly onPreSend?:             (event: PreSendEvent)           => Promise<void>;
+  readonly onPostSend?:            (event: PostSendEvent)          => Promise<void>;
+}
 
----
+// Same, but with an extra `onSkipped` slot fired when the step is a no-op
+// because the on-chain state already satisfies it (e.g. initUserAccount when
+// the account already exists).
+interface SkippableDirectTransactionStepHooks extends DirectTransactionStepHooks {
+  readonly onSkipped?: (event: { readonly reason: string }) => Promise<void>;
+}
 
-## Callback Types
-
-```typescript
-// Called with the signed transaction immediately before it is sent
-type PreTransactionCallback = (transaction: SignedTransaction) => Promise<void>;
-
-// Called with the transaction and its confirmed signature after it lands
-type PostTransactionCallback = (
-  transaction: SignedTransaction,
-  signature: TransactionSignature,
-) => Promise<void>;
-
-interface TransactionCallbacks {
-  readonly pre?: PreTransactionCallback;
-  readonly post?: PostTransactionCallback;
+// MPC transaction step — extends DirectTransactionStepHooks with Arcium MPC
+// progress events and rent-reclaim outcome hooks.
+interface MpcTransactionStepHooks extends DirectTransactionStepHooks {
+  readonly onMonitorStarted?:       (event: { readonly computationAccount: Address }) => Promise<void>;
+  readonly onProgress?:             (event: ComputationMonitorProgressEvent)          => Promise<void>;
+  readonly onFinalized?:            (event: ComputationFinalizedEvent)                => Promise<void>;
+  readonly onRentReclaimSubmitted?: (event: { readonly signature: TransactionSignature }) => Promise<void>;
+  readonly onRentReclaimError?:     (event: { readonly error: string })               => Promise<void>;
 }
 ```
 
-**Skipped steps do not invoke callbacks.** If a registration step is already complete on-chain, neither `pre` nor `post` fires for it.
+**Skipped steps fire `onSkipped`, not `onPreSend` / `onPostSend`.** This is how the SDK signals "the step was a no-op because the on-chain state was already correct."
 
 ---
 
-## Usage - Registration
+## Usage — Registration
 
-Each of the three registration steps has its own `TransactionCallbacks` slot:
+Registration uses a single `hooks` option (`RegistrationHooks`) with named per-step slots and top-level phase hooks. Each skippable step slot takes `{ onPreSend, onPostSend, onSkipped }`.
 
 ```typescript
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+
 const register = getUserRegistrationFunction({ client });
 
 await register({
   confidential: true,
   anonymous: true,
-  callbacks: {
-    userAccountInitialisation: {
-      pre: async (tx) => setStatus("Creating account..."),
-      post: async (tx, sig) => setProgress(33),
+  hooks: {
+    onValidationStart:       async () => setStatus("Validating..."),
+    onAccountFetchComplete:  async ({ userAccountExists }) => setStatus(userAccountExists ? "Account exists" : "Will create account"),
+    initUserAccount: {
+      onSkipped:  async ({ reason }) => setStatus("Account already initialised: " + reason),
+      onPreSend:  async () => setStatus("Creating account..."),
+      onPostSend: async ({ signature }) => setProgress(33),
     },
     registerX25519PublicKey: {
-      pre: async (tx) => setStatus("Registering encryption key..."),
-      post: async (tx, sig) => setProgress(66),
+      onSkipped:  async ({ reason }) => setStatus("X25519 key already registered: " + reason),
+      onPreSend:  async () => setStatus("Registering encryption key..."),
+      onPostSend: async ({ signature }) => setProgress(66),
     },
-    registerUserForAnonymousUsage: {
-      pre: async (tx) => setStatus("Enabling anonymous mode..."),
-      post: async (tx, sig) => { setProgress(100); setStatus("Done!"); },
+    registerAnonymousUsage: {
+      onSkipped:  async ({ reason }) => setStatus("Anonymous usage already enabled: " + reason),
+      onPreSend:  async () => setStatus("Enabling anonymous mode..."),
+      onPostSend: async ({ signature }) => { setProgress(100); setStatus("Done!"); },
     },
+    onComplete: async (result) => setStatus(`Registered with ${result.signatures.length} signatures`),
+    onError:    async ({ phase, error }) => console.error("Registration failed at", phase, error),
   },
 });
 ```
 
+<Note>
+Step slot names: `initUserAccount`, `registerX25519PublicKey`, `registerAnonymousUsage`. Each fires `onSkipped` when the on-chain state already satisfies the step, `onPreSend` before the transaction is submitted, and `onPostSend` after it confirms.
+</Note>
+
 ---
 
-## Usage - UTXO Creation
+## Usage — Stealth Pool Note creation
 
-UTXO creation involves up to three transactions. Each has its own callbacks slot inside the `options` argument:
+Creating a Stealth Pool Note runs through validation, mint fetch, key derivation, ZK proving, and up to two on-chain transaction steps. Hooks are supplied through the factory's `deps.hooks` slot (type `ATAIntoStealthPoolNoteCreatorHooks`), which carries top-level phase hooks plus per-step `DirectTransactionStepHooks` for each transaction. (The same hooks shape is also accepted at call time via `options.hooks`.) The per-step slots are `populateProofAccount` and `createStealthPoolNote` — each a `DirectTransactionStepHooks` with `onPreSend` / `onPostSend`. There is no `createUtxo` or `closeProofAccount` slot.
 
 ```typescript
-// See /sdk/advanced/zk-provers for zkProver setup
-const createUtxo = getPublicBalanceToSelfClaimableUtxoCreatorFunction(
+import { getATAIntoSelfBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
+import { getATAIntoStealthPoolNoteCreatorProver } from "@umbra-privacy/sdk/zk-prover";
+
+const createNote = getATAIntoSelfBurnableStealthPoolNoteCreatorFunction(
   { client },
-  { zkProver }, // e.g. getCreateSelfClaimableUtxoFromPublicBalanceProver(assetProvider)
+  {
+    zkProver: getATAIntoStealthPoolNoteCreatorProver(),
+    hooks: {
+      // Top-level phase hooks
+      onValidationStart:         async () => console.log("Validating..."),
+      onValidationComplete:      async ({ generationIndex }) => console.log("Generation index:", generationIndex),
+      onMintFetchStart:          async () => console.log("Fetching mint..."),
+      onMintFetchComplete:       async ({ tokenProgram, hasTransferFee }) => console.log("Mint:", tokenProgram, "T22 fee:", hasTransferFee),
+      onKeyDerivationStart:      async () => console.log("Deriving keys..."),
+      onKeyDerivationComplete:   async ({ elapsedMs }) => console.log("Keys ready in", elapsedMs, "ms"),
+      onZkProofGenerationStart:  async () => console.log("Proving..."),
+      onZkProofGenerationComplete: async ({ elapsedMs }) => console.log("Proof done in", elapsedMs, "ms"),
+
+      // Per-transaction-step hooks (DirectTransactionStepHooks)
+      populateProofAccount: {
+        onPreSend:  async () => console.log("Creating proof account..."),
+        onPostSend: async ({ signature }) => console.log("Proof account:", signature),
+      },
+      createStealthPoolNote: {
+        onPreSend:  async () => console.log("Submitting note write..."),
+        onPostSend: async ({ signature }) => console.log("Note written:", signature),
+      },
+
+      onComplete: async (result) => console.log("Note created:", result),
+      onError:    async ({ phase, error }) => console.error("Failed at", phase, error),
+    },
+  },
 );
 
-await createUtxo(recipient, mint, amount, {
-  createUtxo: {
-    pre: async (tx) => console.log("Submitting UTXO creation..."),
-    post: async (tx, sig) => console.log("UTXO created:", sig),
-  },
-  createProofAccount: {
-    pre: async (tx) => console.log("Creating proof account..."),
-    post: async (tx, sig) => console.log("Proof account:", sig),
-  },
-  closeProofAccount: {
-    // Only fires if a stale proof account was found and closed
-    pre: async (tx) => console.log("Closing stale proof account..."),
-    post: async (tx, sig) => console.log("Closed:", sig),
-  },
-});
+await createNote({ destinationAddress: recipient, mint, amount });
 ```
 
 ---
 
-## Usage - Single-Transaction Operations
+## Usage — Single-transaction operations
 
-Deposits, withdrawals, compliance operations, and most other functions take a single top-level `callbacks` argument:
+Deposits, withdrawals, conversions, and most other operations take an `options.hooks` field whose shape is operation-specific. There is no single global `TransactionCallbacks { pre, post }` shape — each operation defines its own hooks interface with named per-phase slots:
 
 ```typescript
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+
+const deposit = getATAIntoETADirectDepositorFunction({ client });
 
 await deposit(destinationAddress, mint, amount, {
-  callbacks: {
-    pre: async (tx) => console.log("Sending deposit..."),
-    post: async (tx, sig) => console.log("Deposited:", sig),
+  hooks: {
+    onValidationStart:       async () => console.log("Validating..."),
+    onMintFetchComplete:     async ({ tokenProgram, hasTransferFee }) => console.log("Mint:", tokenProgram, "T22 fee:", hasTransferFee),
+    onAccountFetchComplete:  async ({ userAccountExists, isSharedMode }) => console.log("Account:", { userAccountExists, isSharedMode }),
+    queueComputation: {
+      onPreSend:   async ({ signedTransaction }) => console.log("Sending deposit..."),
+      onPostSend:  async ({ signature }) => console.log("Queued:", signature),
+      onMonitorStarted: async ({ computationAccount }) => console.log("MPC monitoring:", computationAccount),
+      onFinalized: async ({ callbackSignature }) => console.log("MPC callback:", callbackSignature),
+    },
+    onComplete: async (result) => console.log("Deposit done:", result.queueSignature),
+    onError:    async ({ phase, error }) => console.error("Failed at", phase, error),
   },
 });
 ```
+
+The exact hook slot names per operation:
+
+- **Deposit** (`ATAIntoETADirectDepositHooks`) — top-level: `onValidationStart/Complete`, `onMintFetchStart/Complete`, `onAccountFetchStart/Complete`, `onArciumSetupStart/Complete`, `onInstructionBuildStart/Complete`, `onComplete`, `onError`. Per-step: `queueComputation: MpcTransactionStepHooks` — slots: `onPreSend`, `onPostSend`, `onMonitorStarted`, `onProgress`, `onFinalized`, `onRentReclaimSubmitted`, `onRentReclaimError`.
+- **Withdrawal** (`WithdrawalHooks`) — analogous shape with the same MpcTransactionStepHooks slot.
+- **Conversion** (`ConvertToSharedHooks`) — per-mint hooks plus `onComplete` / `onError`.
+
+---
+
+## Usage — Burn lifecycle hooks (`BurnHooks`)
+
+Burns are relayer-managed: ZK proof generation, relayer submission, polling, and the on-chain callback all happen behind a single `burn()` call. The burner factory exposes per-stage **lifecycle hooks** on the `deps.hooks` slot. The hooks are named per-event (not generic `onPhase*`):
+
+```typescript
+import { getReceiverBurnableStealthPoolNoteIntoETABurnerFunction } from "@umbra-privacy/sdk/burn";
+
+const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
+  { client },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: { submitBurn: r.submitClaim, pollBurnStatus: r.pollClaimStatus, getRelayerAddress: r.getRelayerAddress },
+    hooks: {
+      // Setup phase
+      onKeyDerivationStart:    async () => console.log("Deriving keys..."),
+      onKeyDerivationComplete: async ({ elapsedMs }) => console.log("Keys ready in", elapsedMs, "ms"),
+
+      // Batch assembly
+      onBatchAssemblyStart:    async () => console.log("Assembling batches..."),
+      onBatchAssemblyComplete: async ({ batchCount, totalStealthPoolNotes }) =>
+        console.log("Assembled", batchCount, "batches for", totalStealthPoolNotes, "notes"),
+
+      // Per-batch lifecycle
+      onBatchStart:                     async ({ batchIndex, batchCount }) => console.log(`Batch ${batchIndex}/${batchCount} starting`),
+      onBatchZkProofGenerationStart:    async ({ batchIndex }) => console.log("Batch", batchIndex, "proving..."),
+      onBatchZkProofGenerationComplete: async ({ batchIndex, elapsedMs }) => console.log("Batch", batchIndex, "proof done in", elapsedMs, "ms"),
+      onBatchSubmitted:                 async ({ batchIndex, requestId }) => console.log("Batch", batchIndex, "submitted:", requestId),
+      onBatchProgress:                  async ({ batchIndex, status }) => console.log("Batch", batchIndex, "status:", status),
+      onBatchComplete:                  async ({ batchIndex, status, signatures }) => console.log("Batch", batchIndex, "complete:", status, signatures),
+
+      // Terminal
+      onComplete: async (result) => console.log("Burn complete:", result),
+      onError:    async ({ phase, error }) => console.error("Burn error in phase", phase, ":", error),
+    },
+  },
+);
+```
+
+`onError`'s `phase` is one of: `"keyDerivation"`, `"batchAssembly"`, `"zkProofGeneration"`, `"batchSubmission"`, `"batchPolling"`.

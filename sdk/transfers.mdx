@@ -1,37 +1,139 @@
 ---
 title: "Transfers"
-description: "An overview of the two transfer types in Umbra - unlinkable transfers via the mixer and confidential-only transfers via encrypted balances."
+description: "An overview of the transfer models in Umbra — unlinkable transfers via Stealth Pool Notes, confidential direct transfers via getTransferorFunction (ETA-to-ETA), and amount-hiding ETA operations."
 ---
 
 ## Overview
 
 Umbra supports two distinct models for transferring tokens privately. They differ in what they hide, what infrastructure they require, and how strong their privacy guarantees are.
 
-## Unlinkable Transfers (via the Mixer)
+## Unlinkable transfers (via the Stealth Pool)
 
-The strongest privacy model. The on-chain link between the sender's deposit and the recipient's withdrawal is broken entirely - an observer cannot connect the two events by examining the chain.
+The strongest privacy model. The on-chain link between the sender's note write and the recipient's burn is broken entirely — an observer cannot connect the two events by examining the chain.
 
-Tokens enter the shielded pool as a UTXO commitment inserted into an on-chain Indexed Merkle Tree. The claim is later submitted with a Groth16 ZK proof that proves ownership of the UTXO without revealing which commitment is being spent. The deposit and the withdrawal are indistinguishable from every other deposit and withdrawal in the same tree.
+Tokens enter the pool as a **Stealth Pool Note** commitment inserted into an on-chain Indexed Merkle Tree. The note is later **burned** with a Groth16 ZK proof that proves ownership of the note without revealing which commitment is being spent. The note write and the burn are indistinguishable from every other note write and burn in the same tree.
 
-Both entry and exit can be from any account type:
+Note writes have four variants — `(source × unlocker)`:
 
-- **From an encrypted balance** - tokens are drawn from an encrypted balance before entering the shielded pool
-- **From a public wallet (ATA)** - tokens enter the shielded pool directly from a public Associated Token Account
+- **From an ATA** — tokens enter the pool directly from a `AssociatedTokenAccount`. Single tx, no MPC.
+- **From an ETA** — tokens are drawn from an `EncryptedTokenAccount` before entering the pool. Two-tx pipeline (proof account → note write), MPC under the hood.
 
-On exit, the recipient can claim tokens into either a public wallet (ATA) or an encrypted balance.
+Each source has both a **self-burnable** variant (sender keeps the unlocker; useful for "stage funds and burn out from a fresh wallet" flows — recipient needs no on-chain state) and a **receiver-burnable** variant (unlocker encrypted against the recipient's `userCommitment` — recipient must have completed all three registration sub-steps).
 
-This gives four source configurations in total, each available in both self-claimable and receiver-claimable variants. See the [Mixer](/sdk/mixer/overview) section for the full API.
+Burns have three shipped variants:
+
+- **Receiver-burnable → ETA** — anonymous payment into the recipient's encrypted balance.
+- **Self-burnable → ETA** — write a note, then burn it back into an encrypted balance from any wallet.
+- **Self-burnable → ATA** — write a note, then burn it out to a plaintext ATA from any wallet.
+
+(Receiver-burnable → ATA exists on-chain but is not yet exposed in the SDK.)
+
+See the [Stealth Pool](/sdk/mixer/overview) section for the full API and per-variant pre-checks.
 
 <Note>
-Unlinkable transfers require full registration with `anonymous: true`. The indexer must also be configured on the client for UTXO discovery.
+Receiver-burnable notes require the **recipient** to have completed full registration (`confidential: true` **and** `anonymous: true`). Self-burnable notes have no recipient-side prerequisites — they're the right choice for one-shot transfers when the recipient hasn't onboarded yet.
 </Note>
 
-## Confidential-Only Transfers (via Encrypted Balances)
+## Confidential-only transfers (via EncryptedTokenAccounts)
 
-A lighter-weight privacy model that hides token amounts and balances on-chain, but does not break the link between sender and recipient. The transfer is confidential - amounts are hidden under MPC encryption - but the participating addresses remain observable.
+A lighter-weight privacy model that hides token amounts and balances on-chain, but does not break the link between sender and recipient. The transfer is confidential — amounts are hidden under MPC encryption — but the participating addresses remain observable.
 
 This covers scenarios where amount privacy is the goal and linkability is an acceptable trade-off: for example, moving tokens between accounts you control without exposing the amounts, or settling a payment where both parties know each other but want the value hidden.
 
-<Note>
-SDK support for confidential-only transfers is a work in progress and will be available shortly. The on-chain program already supports confidential transfers - the SDK factory functions are being finalised.
-</Note>
+The on-chain program supports several confidential-transfer variants. For direct ETA-to-ETA transfers, use `getTransferorFunction` documented below. For moving funds between ATAs and your own ETAs, use [deposit](/sdk/deposit) / [withdraw](/sdk/withdraw) / [convert](/sdk/conversion).
+
+## ETA-to-ETA Direct Transfer
+
+`getTransferorFunction` from `@umbra-privacy/sdk/transfer` performs a direct confidential transfer between two `EncryptedTokenAccount`s. A single MPC instruction moves the amount from the sender's encrypted balance to the receiver's, creating or initialising the receiver's token account if needed.
+
+**When to use this vs the Stealth Pool:** Transfer settles immediately (one MPC instruction) but the on-chain event is linkable — an observer can see that two Umbra users interacted. The Stealth Pool breaks that link entirely but requires a note write followed by a separate burn, which takes longer and involves the relayer. Use Transfer when speed matters and the relationship between sender and receiver is already known; use the Stealth Pool when on-chain anonymity is the goal.
+
+### Import
+
+```typescript
+import { getTransferorFunction } from "@umbra-privacy/sdk/transfer";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
+```
+
+### Factory pattern
+
+```typescript
+const transfer = getTransferorFunction({ client }, deps?);
+// deps?: { accountInfoProvider?, executorConfig? }
+```
+
+### Recipient pre-check
+
+The recipient must have an `EncryptedTokenAccount` (or the transfer will create one, provided they have an `x25519PublicKey` registered). Verify before calling:
+
+```typescript
+const queryAccount = getUserAccountQuerierFunction({ client });
+const receiverAccount = await queryAccount(receiverAddress);
+
+if (receiverAccount.state !== "exists" || !receiverAccount.data?.isUserAccountX25519KeyRegistered) {
+  throw new Error("Recipient has not registered an X25519 key on Umbra");
+}
+```
+
+### Calling the function
+
+```typescript
+const result = await transfer({
+  receiverAddress,
+  mint,
+  transferAmount,     // U64 — amount in mint's smallest unit
+  optionalData?,      // OptionalData32 — pre-hashed, never plaintext
+  microLamportsPerAcu?,
+  accountInfoCommitment?,
+});
+```
+
+### TransferVariant — the 8 on-chain variants
+
+The SDK auto-selects the correct variant by fetching all four accounts in one RPC round-trip:
+
+```typescript
+type TransferVariant =
+  | "network_to_existing_network"
+  | "network_to_existing_shared"
+  | "network_to_new_network"
+  | "network_to_new_shared"
+  | "shared_to_existing_network"
+  | "shared_to_existing_shared"
+  | "shared_to_new_network"
+  | "shared_to_new_shared";
+```
+
+The two dimensions are:
+- **Sender mode** — `network` (MXE-only balance) or `shared` (user-decryptable shared balance)
+- **Receiver state** — `existing_network`, `existing_shared`, `new_network`, `new_shared`
+
+Two helper guards are exported:
+
+```typescript
+import { isSharedSenderVariant, isNewReceiverVariant } from "@umbra-privacy/sdk/transfer";
+
+if (isSharedSenderVariant(result.preparation.variant)) {
+  // SDK submitted the transaction; result.kind === "submitted"
+}
+if (isNewReceiverVariant(result.preparation.variant)) {
+  // SDK created the receiver's token account as part of the transfer
+}
+```
+
+### TransferResult
+
+The result is a discriminated union on `kind`:
+
+```typescript
+type TransferResult =
+  | { kind: "prepared";  preparation: TransferPreparation }
+  | { kind: "submitted"; preparation: TransferPreparation; signature: TransactionSignature };
+```
+
+- **`"submitted"`** — returned for `shared_to_*` variants; the SDK ran the full queue-computation pipeline.
+- **`"prepared"`** — returned for `network_to_*` variants; the SDK built and returned the preparation bundle and the caller decides what to do with it (typically for advanced flows or batching).
+
+### Privacy note
+
+All 8 variants conceal the transferred amount. However, the on-chain instruction reveals that the two wallet addresses are both Umbra users and that a transfer occurred between them at a given slot. If you need to hide the relationship entirely, use a Stealth Pool note instead.

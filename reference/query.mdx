@@ -5,35 +5,34 @@ description: "API reference: getEncryptedBalanceQuerierFunction (Rescue cipher d
 
 ## getUserAccountQuerierFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/query`
 
 ```typescript
 function getUserAccountQuerierFunction(
-  args: GetUserAccountQuerierFunctionArgs,
-  deps?: GetUserAccountQuerierFunctionDeps,
-): UserAccountQuerierFunction
+  args: GetQueryUserAccountFunctionArgs,
+  deps?: GetQueryUserAccountFunctionDeps,
+): QueryUserAccountFunction
 ```
 
 Returns a function that fetches and decodes the on-chain user account for any Umbra address.
 
 ---
 
-### GetUserAccountQuerierFunctionArgs
+### GetQueryUserAccountFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetUserAccountQuerierFunctionDeps
+### GetQueryUserAccountFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 
 ### Returns
 
-`UserAccountQuerierFunction`
+`QueryUserAccountFunction`
 
 ```typescript
-type UserAccountQuerierFunction = (
+type QueryUserAccountFunction = (
   userAddress: Address,
-  options?: { commitment?: Commitment },
 ) => Promise<QueryUserAccountResult>
 ```
 
@@ -54,7 +53,7 @@ Fields of the decoded on-chain account:
 - `isActiveForAnonymousUsage: boolean` - Whether anonymous (mixer) usage is enabled.
 - `isUserCommitmentRegistered: boolean` - Whether the Poseidon commitment has been registered.
 - `isUserAccountX25519KeyRegistered: boolean` - Whether the X25519 public key has been registered.
-- `x25519PublicKey: X25519PublicKey` - The user's X25519 public key (used for UTXO encryption).
+- `x25519PublicKey: X25519PublicKey` — the user's X25519 public key (used to encrypt Stealth Pool Notes addressed to this account).
 - `userCommitment: PoseidonHash` - The user's on-chain Poseidon commitment.
 - `generationIndex: U128` - Current generation index used in key derivation.
 - `randomGenerationSeed: U256LeBytes` - Current random generation seed.
@@ -68,7 +67,7 @@ Throws `QueryError`. See [Errors](./errors#queryerror).
 ### Example
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const queryUserAccount = getUserAccountQuerierFunction({ client });
 const result = await queryUserAccount(userAddress);
@@ -85,36 +84,35 @@ if (result.state === "exists") {
 
 ## getEncryptedBalanceQuerierFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/query`
 
 ```typescript
 function getEncryptedBalanceQuerierFunction(
-  args: GetEncryptedBalanceQuerierFunctionArgs,
-  deps?: GetEncryptedBalanceQuerierFunctionDeps,
-): EncryptedBalanceQuerierFunction
+  args: GetQueryEncryptedBalanceFunctionArgs,
+  deps?: GetQueryEncryptedBalanceFunctionDeps,
+): QueryEncryptedBalanceFunction
 ```
 
 Returns a function that fetches and decrypts encrypted token balances for a set of mints. For shared-mode accounts, the balance is decrypted locally using the caller's X25519 private key. For MXE-mode accounts, the ciphertext cannot be decrypted client-side.
 
 ---
 
-### GetEncryptedBalanceQuerierFunctionArgs
+### GetQueryEncryptedBalanceFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetEncryptedBalanceQuerierFunctionDeps
+### GetQueryEncryptedBalanceFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
-- `rcDecryptor?: RcDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
+- `rescueCipherDecryptor?: RescueCipherDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
 
 ### Returns
 
-`EncryptedBalanceQuerierFunction`
+`QueryEncryptedBalanceFunction`
 
 ```typescript
-type EncryptedBalanceQuerierFunction = (
+type QueryEncryptedBalanceFunction = (
   mints: readonly Address[],
-  options?: { commitment?: Commitment },
 ) => Promise<Map<Address, QueryEncryptedBalanceResult>>
 ```
 
@@ -138,7 +136,7 @@ Throws `QueryError`. See [Errors](./errors#queryerror).
 ### Example
 
 ```typescript
-import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const queryBalances = getEncryptedBalanceQuerierFunction({ client });
 const balances = await queryBalances([usdcMint, solMint]);

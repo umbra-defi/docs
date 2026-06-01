@@ -57,12 +57,12 @@ Modern Solana wallets — Phantom, Backpack, Solflare, and others — implement 
 You obtain the `wallet` and `account` objects by discovering registered wallets with `getWallets()` from `@wallet-standard/app`, then calling the wallet's `standard:connect` feature.
 
 ```bash
-pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
+pnpm add @wallet-standard/app @wallet-standard/core @wallet-standard/features
 ```
 
 ```typescript
 import { getWallets } from "@wallet-standard/app";
-import type { Wallet, WalletAccount } from "@wallet-standard/base";
+import type { Wallet, WalletAccount } from "@wallet-standard/core";
 import { StandardConnect, StandardDisconnect } from "@wallet-standard/features";
 import {
   createSignerFromWalletAccount,
@@ -86,7 +86,7 @@ const { accounts } = await connectFeature.connect();
 const account = accounts[0];
 
 // 3. Create the Umbra signer
-const signer = createSignerFromWalletAccount(wallet, account);
+const signer = createSignerFromWalletAccount({ wallet, account });
 
 // 4. Create the Umbra client
 const client = await getUmbraClient({
@@ -125,10 +125,10 @@ This path is compatible with all Wallet Standard wallets and does not require `@
 
 The first time any cryptographic operation runs (typically during `register()`), the SDK calls `signer.signMessage` with a deterministic message to derive the **master seed** (overridable via [dependency injection](/sdk/understanding-the-sdk/dependency-injection#master-seed-storage)). This produces a one-time wallet signing prompt.
 
-The message that the user signs is a multi-paragraph legal consent and acknowledgement. It is exported as `UMBRA_MESSAGE_TO_SIGN` from `@umbra-privacy/sdk`:
+The message that the user signs is a multi-paragraph legal consent and acknowledgement. It is exported as `UMBRA_MESSAGE_TO_SIGN` from the `@umbra-privacy/sdk/shared` subpath:
 
 ```typescript
-import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
+import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk/shared";
 ```
 
 The signature is then hashed with KMAC256 (dkLen=64) to produce the 512-bit master seed.

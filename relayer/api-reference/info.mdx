@@ -4,6 +4,6 @@ openapi: "openapi-relayer.yaml GET /v1/relayer/info"
 description: "Get relayer identity, supported mints, and active stealth pool indices."
 ---
 
-Use this endpoint to verify the relayer is operational and supports the mint you want to claim.
+Use this endpoint to verify the relayer is operational and supports the mint you want to burn. The `mints` field is the authoritative runtime source of truth — the SDK's hardcoded mint list is a fallback only.
 
 The SDK calls this internally via `getUmbraRelayer()` to cache the relayer's fee payer address.

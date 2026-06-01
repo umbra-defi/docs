@@ -1,116 +1,132 @@
 ---
 title: "Withdrawal"
-description: "API reference: getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
+description: "API reference: getETAIntoATAWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
 ---
 
-## getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction
+## getETAIntoATAWithdrawerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/withdrawal`
 
 ```typescript
-function getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction(
-  args: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs,
-  deps?: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps,
-): EncryptedBalanceToPublicBalanceDirectWithdrawerFunction
+function getETAIntoATAWithdrawerFunction(
+  args: { client: IUmbraClient },
+  deps?: GetETAIntoATAWithdrawerFunctionDeps,
+): ETAIntoATAWithdrawerFunction;
 ```
 
-Withdraws tokens from the caller's encrypted balance to a public associated token account (ATA). This is the primary withdrawal path - no ZK proof required. The withdrawal queues an Arcium MPC computation; the Arcium network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
+Withdraws tokens from the caller's ETA to a destination ATA. This is the primary withdrawal path — no ZK proof required. The withdrawal queues an Arcium MPC computation; the network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
----
+### Deps
 
-### GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs
+All optional — each category falls back to the corresponding provider on `client`.
 
-- `client: IUmbraClient`
-
----
-
-### GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps
-
-All fields are optional.
-
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-
----
+```typescript
+interface GetETAIntoATAWithdrawerFunctionDeps {
+  readonly rpc?: {
+    readonly accountInfoProvider?: AccountInfoProviderFunction;
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+  };
+  readonly arcium?: {
+    readonly microLamportsPerAcu?: MicroLamportsPerAcu;                // default 0n (no priority fees)
+    readonly awaitComputationFinalization?: AwaitComputationFinalizationConfig | false;
+  };
+  readonly random?: {
+    readonly generateRandomU64?: () => U64;                            // default `computationOffset`
+    readonly generateRandomU128?: () => U128;                          // default `mpcCallbackDataOffset` / `feeVaultOffset`
+  };
+}
+```
 
 ### Returns
 
-`EncryptedBalanceToPublicBalanceDirectWithdrawerFunction`
-
 ```typescript
-type EncryptedBalanceToPublicBalanceDirectWithdrawerFunction = (
+type ETAIntoATAWithdrawerFunction = (
   destinationAddress: Address,
   mint: Address,
   withdrawalAmount: U64,
   options?: WithdrawOptions,
-) => Promise<WithdrawResult>
+) => Promise<WithdrawResult>;
 ```
 
-- `destinationAddress: Address` - The public ATA recipient. Must be an initialised token account for `mint`.
-- `mint: Address` - Token mint address.
-- `withdrawalAmount: U64` - Amount in base token units to withdraw from the encrypted balance.
+- `destinationAddress: Address` — wallet whose ATA receives the tokens.
+- `mint: Address` — token mint address.
+- `withdrawalAmount: U64` — amount in base token units to withdraw from the ETA.
 
-### WithdrawOptions
+### Options (`ETAIntoATAWithdrawerOptions`)
 
-- `priorityFees?: U64` - Compute unit price in micro-lamports. Default: `0n`.
-- `purpose?: number` - Caller-defined purpose tag stored on-chain. Default: `0`.
-- `optionalData?: OptionalData32` - 32-byte caller metadata. Default: 32 zero bytes.
-- `awaitCallback?: boolean` - Whether to wait for the MPC callback. Default: `true`.
-- `skipPreflight?: boolean` - Skip Solana preflight simulation. Default: `false`.
-- `maxRetries?: number` - Max RPC retry attempts for transaction sending.
-- `accountInfoCommitment?: Commitment` - Per-call commitment for RPC account reads. Default: `"confirmed"`.
-- `epochInfoCommitment?: Commitment` - Per-call commitment for epoch info fetches. Default: `"confirmed"`.
+```typescript
+interface ETAIntoATAWithdrawerOptions {
+  readonly optionalData?: OptionalData32;
+  readonly accountInfoCommitment?: Commitment;
+  readonly computationOffset?: U64;
+  readonly mpcCallbackDataOffset?: U128;
+  readonly feeVaultOffset?: U128;                  // default 0n (sentinel: no fee-vault interaction)
+  readonly destinationProgram?: Address;           // default System Program (sentinel: no observer CPI)
+  // plus observer-CPI passthrough accounts and a `hooks?: WithdrawalHooks`
+}
+```
+
+- `optionalData` — 32-byte caller metadata. **Pre-hashed only.** Default 32 zero bytes.
+- `accountInfoCommitment` — per-call commitment for RPC account reads.
+- `computationOffset`, `mpcCallbackDataOffset` — PDA offsets. Default to fresh CSPRNG values per call.
+- `feeVaultOffset`, `destinationProgram` — observer-forward CPI configuration. Leave at defaults unless you are intentionally routing post-callback into another program.
+- `hooks` — per-phase lifecycle hooks (`onValidationStart`, `onAccountFetchComplete`, `queueComputation`, `onComplete`, `onError`, etc.).
+
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the withdrawer.
 
 ### WithdrawResult
 
 ```typescript
 interface WithdrawResult {
-  queueSignature: TransactionSignature;
-  callbackStatus?: "finalized" | "pruned" | "timed-out";
-  callbackSignature?: TransactionSignature;
-  callbackElapsedMs?: number;
-  rentClaimSignature?: TransactionSignature;
-  rentClaimError?: string;
+  readonly signatures: readonly TransactionSignature[];
+  readonly queueSignature: TransactionSignature;
+  readonly callback?: CallbackOutcome;
+  readonly rentClaim?: RentClaimOutcome;
 }
+
+type CallbackOutcome =
+  | { readonly status: "finalized"; readonly signature?: TransactionSignature; readonly elapsedMs: number }
+  | { readonly status: "pruned";    readonly elapsedMs: number }
+  | { readonly status: "timed-out"; readonly elapsedMs: number };
+
+type RentClaimOutcome =
+  | { readonly claimed: true;  readonly signature: TransactionSignature }
+  | { readonly claimed: false; readonly reason: string };
 ```
-
-- `queueSignature` - Signature of the handler (queue computation) transaction.
-- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
-- `callbackSignature` - Signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
-- `callbackElapsedMs` - Milliseconds spent waiting for the callback.
-- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
-- `rentClaimError` - Error from rent reclaim attempt, if any. The withdrawal itself still succeeded.
-
----
 
 ### Errors
 
 Throws `EncryptedWithdrawalError`. See [Errors](./errors#encryptedwithdrawalerror).
 
----
-
 ### Example
 
 ```typescript
-import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
-const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
+const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
 const result = await withdraw(
-  destinationAta,  // public ATA to receive tokens
+  destinationWallet,   // tokens land in this wallet's ATA
   mintAddress,
-  500_000n,        // amount in base units
+  500_000n,
 );
 console.log("Queue signature:", result.queueSignature);
+if (result.callback?.status === "finalized") {
+  console.log("Callback signature:", result.callback.signature);
+}
 ```
+
+### Dropped-callback recovery
+
+If the handler succeeds but the Arcium callback never lands, tokens stay staged in the pool ATA. Reclaim them with `getStagedSplRecovererFunction` / `getStagedSolRecovererFunction` from `@umbra-privacy/sdk/account` — synchronous, no MPC, no ZK proof.
 
 ---
 
 ## EncryptedWithdrawalError
 
-Thrown by `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction`.
+Thrown by the withdrawer factory.
 
-Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-send"`
+Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-send"`.
 
-See [Errors](./errors#encryptedwithdrawalerror) for full documentation.
+See [Errors](./errors#encryptedwithdrawalerror).

@@ -1,38 +1,38 @@
 ---
 title: "Deposit"
-description: "getPublicBalanceToEncryptedBalanceDirectDepositorFunction: transfer SPL/Token-2022 tokens from public ATA to encrypted balance. Returns DepositResult with net amount and tx signatures."
+description: "getATAIntoETADirectDepositorFunction: transfer SPL/Token-2022 tokens from an ATA to an EncryptedTokenAccount. Returns DepositResult with net amount and tx signatures."
 ---
 
 ## Overview
 
-The `deposit` operation moves tokens from a user's public **Associated Token Account (ATA)** into their **encrypted balance**. After a successful deposit, the balance is hidden on-chain.
+The `deposit` operation moves tokens from a user's `AssociatedTokenAccount (ATA)` into their `EncryptedTokenAccount (ETA)`. After a successful deposit, the balance is hidden on-chain.
 
 <Steps>
-  <Step title="Transfer from Public ATA">
-    Tokens are moved from the user's **Associated Token Account (ATA)** into the Shielded Pool - an on-chain SPL or Token-2022 custody account controlled by the Umbra program.
+  <Step title="Transfer from ATA">
+    Tokens are moved from the user's `AssociatedTokenAccount` into the pool custody account — an on-chain SPL or Token-2022 account controlled by the Umbra program.
   </Step>
   <Step title="Fee Deduction">
-    Protocol fees and any Token-2022 transfer fees are subtracted from the incoming amount. The net amount is what gets credited to the encrypted balance.
+    Protocol fees and any Token-2022 transfer fees are subtracted from the incoming amount. The net amount is what gets credited to the ETA.
   </Step>
-  <Step title="Credit Encrypted Balance">
-    The net amount is added to the destination user's **encrypted balance**. The balance is hidden on-chain - it can only be decrypted by the Arcium MPC network and, in Shared mode, by the user's own X25519 key.
+  <Step title="Credit ETA">
+    The net amount is added to the destination user's ETA. The balance is hidden on-chain — it can only be decrypted by the Arcium MPC network and, in Shared mode, by the user's own X25519 key.
   </Step>
 </Steps>
 
 <Note>
-The user must be [registered](/sdk/registration) before depositing. An `EncryptedUserAccount` PDA must exist for their wallet address.
+The user must be [registered](/sdk/registration) before depositing. An `EncryptedUserAccount` PDA must exist for the destination wallet address.
 </Note>
 
 <Warning>
-Deposit transactions are publicly visible on-chain. The depositor's wallet address, the destination address, and the gross transfer amount are all readable from the transaction. Only the resulting encrypted balance is hidden - the act of shielding itself is not private.
+Deposit transactions are publicly visible on-chain. The depositor's wallet address, the destination address, and the gross transfer amount are all readable from the transaction. Only the resulting ETA balance is hidden — the act of shielding itself is not private.
 </Warning>
 
 ## Usage
 
 ```typescript
-import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const deposit = getATAIntoETADirectDepositorFunction({ client });
 
 const result = await deposit(
   destinationAddress,  // whose encrypted balance to credit
@@ -45,7 +45,7 @@ const result = await deposit(
 ## Parameters
 
 <ParamField path="destinationAddress" type="Address" required>
-  The wallet address whose encrypted balance is credited. This is usually `client.signer.address` (depositing to yourself), but you can deposit into any registered user's account - the funds will be encrypted under *their* X25519 key.
+  The wallet address whose ETA is credited. This is usually `client.signer.address` (depositing to yourself), but you can deposit into any registered user's account — the funds will be encrypted under *their* X25519 key.
 </ParamField>
 
 <ParamField path="mint" type="Address" required>
@@ -56,48 +56,52 @@ const result = await deposit(
   The gross amount to transfer, in the token's native units (accounting for decimals). For example, `1_000_000n` for 1 USDC (6 decimals). Protocol fees and Token-2022 transfer fees are **subtracted** from this amount before the encrypted balance is credited.
 </ParamField>
 
-<ParamField path="options.priorityFees" type="bigint" default="0n">
-  Additional compute unit price in microlamports. Increase this if transactions are timing out during periods of high network congestion.
-</ParamField>
-
-<ParamField path="options.purpose" type="number" default="0">
-  A purpose flag stored alongside the deposit. Reserved for protocol use; leave at `0` unless instructed otherwise.
-</ParamField>
-
-<ParamField path="options.optionalData" type="Uint8Array">
-  32 bytes of arbitrary metadata stored with the deposit. Defaults to all zeros.
-</ParamField>
-
-<ParamField path="options.awaitCallback" type="boolean" default="true">
-  Whether to wait for the Arcium MPC callback transaction to confirm before resolving. When `true`, the returned `DepositResult` includes `callbackSignature` and `callbackElapsedMs`. When `false`, returns immediately after the handler (queue) transaction confirms.
-</ParamField>
-
-<ParamField path="options.skipPreflight" type="boolean" default="false">
-  Skip Solana transaction preflight simulation. Useful when preflight nodes are behind.
-</ParamField>
-
-<ParamField path="options.maxRetries" type="number">
-  Maximum number of times the RPC node should retry sending the transaction.
+<ParamField path="options.optionalData" type="OptionalData32">
+  32 bytes of caller metadata stored with the deposit. Defaults to 32 zero bytes. **Must be a pre-hashed or pre-encrypted 32-byte value** — never store plaintext identifiers.
 </ParamField>
 
 <ParamField path="options.accountInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level used for RPC account reads during deposit preparation. Overrides the default on a per-call basis.
+  Commitment level used for RPC account reads during deposit preparation.
 </ParamField>
 
 <ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
-  Commitment level used for fetching epoch info (Token-2022 transfer fee schedule). Overrides the default on a per-call basis.
+  Commitment level used for fetching epoch info (Token-2022 transfer-fee schedule).
 </ParamField>
+
+<ParamField path="options.hooks" type="ATAIntoETADirectDepositHooks">
+  Per-phase lifecycle hooks. Keys: `onValidationStart`, `onValidationComplete`, `onMintFetchStart`, `onMintFetchComplete`, `onAccountFetchStart`, `onAccountFetchComplete`, `onArciumSetupStart`, `onArciumSetupComplete`, `onInstructionBuildStart`, `onInstructionBuildComplete`, `queueComputation` (`MpcTransactionStepHooks` — `onPreSend`, `onPostSend`, `onMonitorStarted`, `onProgress`, `onFinalized`, `onRentReclaimSubmitted`, `onRentReclaimError`), `onComplete`, `onError`. Each receives a typed event object.
+</ParamField>
+
+<Note>
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `purpose` options on the depositor. Priority fees are configured at factory time via `deps.arcium.microLamportsPerAcu`. Callback waiting is always-on for direct deposits — the result's `callback` field is populated on success.
+</Note>
 
 ## Return Value
 
 Returns a `Promise<DepositResult>`. The `DepositResult` object contains:
 
-- `queueSignature` - The transaction signature of the handler (queue computation) transaction.
-- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true` (the default).
-- `callbackSignature` - The transaction signature of the Arcium MPC callback transaction. Present when `callbackStatus` is `"finalized"`.
-- `callbackElapsedMs` - Wall-clock milliseconds spent waiting for the callback. Present when `awaitCallback` is `true`.
-- `rentClaimSignature` - Transaction signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
-- `rentClaimError` - Error encountered during rent reclaim, if any. The deposit itself still succeeded.
+```typescript
+interface DepositResult {
+  readonly signatures: readonly TransactionSignature[];   // every tx signature submitted, in order
+  readonly queueSignature: TransactionSignature;          // the handler (queue computation) signature
+  readonly callback?: CallbackOutcome;                    // present once the callback round-trip completes (always awaited)
+  readonly rentClaim?: RentClaimOutcome;                  // rent reclamation outcome (best-effort)
+}
+
+type CallbackOutcome =
+  | { readonly status: "finalized"; readonly signature?: TransactionSignature; readonly elapsedMs: number }
+  | { readonly status: "pruned";    readonly elapsedMs: number }
+  | { readonly status: "timed-out"; readonly elapsedMs: number };
+
+type RentClaimOutcome =
+  | { readonly claimed: true;  readonly signature: TransactionSignature }
+  | { readonly claimed: false; readonly reason: string };
+```
+
+- `signatures` — every transaction signature submitted by this call, in submission order (handler, callback, rent claim).
+- `queueSignature` — the handler (queue computation) transaction signature.
+- `callback` — present once the callback round-trip completes (always awaited) (the default). Discriminated on `status`: `"finalized"` means the callback landed and `signature` is the MPC callback tx signature; `"pruned"` / `"timed-out"` indicate the callback never landed.
+- `rentClaim` — present once rent reclamation has been attempted. `{ claimed: true }` returns the rent-reclaim signature; `{ claimed: false }` returns the reason. Rent reclamation is best-effort — the deposit itself still succeeded even when `claimed: false`.
 
 Deposits follow the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium to complete the MPC computation, then waits for the callback transaction to confirm.
 
@@ -105,46 +109,48 @@ Deposits follow the [dual-instruction pattern](/concepts/how-umbra-works#the-dua
 
 The SDK automatically selects the correct instruction variant based on the state of the destination user's account:
 
-- **New MXE-only balance** - destination has no X25519 key registered; first deposit
-- **Existing MXE-only balance** - destination has no X25519 key; balance already exists
-- **New Shared balance** - destination has X25519 key registered; first deposit
-- **Existing Shared balance** - destination has X25519 key; balance already exists
+- **New MXE-only balance** — destination has no X25519 key registered; first deposit.
+- **Existing MXE-only balance** — destination has no X25519 key; balance already exists.
+- **New Shared balance** — destination has X25519 key registered; first deposit.
+- **Existing Shared balance** — destination has X25519 key; balance already exists.
 
-You do not need to specify the mode manually.
+You do not need to specify the mode manually. The destination address's `isUserAccountX25519KeyRegistered` flag drives the selection.
 
 ## Protocol Fees
 
-Fees are deducted from the `transferAmount` before crediting the encrypted balance. The amount credited is:
+Fees are deducted from the `transferAmount` before crediting the ETA. With Umbra's BPS divisor of 16,384:
 
 ```
-credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 10000)
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 16384)
 ```
 
-Protocol fee configuration is set on-chain by the pool admin and may vary per pool. The current default is a small fixed base fee plus a 0.3% commission.
+Protocol-fee configuration is set on-chain by the pool admin and may vary per pool. The current default is a small fixed base fee plus a 35-bps commission. See [Pricing](/pricing) for full details.
 
 <Note>
-In most cases, direct deposits from your own ATA to your own encrypted balance carry **zero protocol fees** - the `baseFee` and `commissionBps` are both set to 0 for standard self-shielding. Fees may apply for deposits routed through relayers or for specific pool configurations.
+In most cases, direct deposits from your own ATA to your own ETA carry **zero protocol fees** — the `baseFee` and `commissionBps` are both set to 0 for standard self-shielding. Fees may apply for deposits routed through relayers or for specific pool configurations.
 </Note>
 
 ## Example: Self-Deposit
 
 ```typescript
-import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const deposit = getATAIntoETADirectDepositorFunction({ client });
 
-// Deposit 100 USDC into your own encrypted balance
+// Deposit 100 USDC into your own ETA.
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const ONE_HUNDRED_USDC = 100_000_000n; // 6 decimals
 
 const result = await deposit(client.signer.address, USDC, ONE_HUNDRED_USDC);
 console.log("Queue signature:", result.queueSignature);
-console.log("Callback signature:", result.callbackSignature);
+if (result.callback?.status === "finalized") {
+  console.log("Callback signature:", result.callback.signature);
+}
 ```
 
 ## Example: Deposit to Another User
 
-You can shield tokens directly into another registered user's encrypted balance:
+You can shield tokens directly into another registered user's ETA:
 
 ```typescript
 const RECIPIENT = "GsbwXfJraMomNxBcpR3DBFyKCCmN9SKGzKFJBNKxRFkT";

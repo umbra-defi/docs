@@ -1,41 +1,89 @@
 ---
 title: "Supported Tokens"
-description: "List of SPL and Token-2022 tokens with active shielded pools per network: USDC, USDT, wSOL, UMBRA. Includes mint addresses, decimals, and Token-2022 transfer fee handling."
+description: "Mint list: wSOL, USDC, USDT, UMBRA, CASH on mainnet; wSOL, dUSDC, dUSDT, STREAMFLOW on devnet. CASH is Token-2022. Each pool supports both EncryptedTokenAccount operations and the Stealth Pool mixer."
 ---
 
 ## Overview
 
-Each shielded pool is deployed per token mint. A pool supports both the **confidential balance** feature (encrypted deposits and withdrawals) and the **mixer** feature (anonymous transfers via the Indexed Merkle Tree).
+Each Umbra pool is deployed per token mint. A pool supports both the **EncryptedTokenAccount** flow (deposit / withdraw / convert / transfer) and the **Stealth Pool** flow (Stealth Pool Note create + burn).
 
-Token-2022 mints with a transfer fee extension are fully supported - the SDK automatically accounts for the transfer fee before calculating protocol fees. See [Token-2022 Support](/advanced/token-2022).
+Both SPL Token and Token-2022 mints are supported. For Token-2022 mints with the transfer-fee extension (e.g. **CASH** on mainnet), the SDK accounts for the transfer fee before applying protocol fees. See [Token-2022 Support](/advanced/token-2022).
+
+The lists below are a snapshot. **The authoritative source at runtime is the relayer's `getSupportedMints()` endpoint** — it returns only mints with deployed token-pool and fee-schedule PDAs, so it doubles as a "pool deployed" check.
+
+```typescript
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+
+const relayer = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+const live    = await relayer.getSupportedMints();
+```
 
 ---
 
 ## Mainnet
 
+- **wSOL** (Wrapped SOL)
+  - Mint: `So11111111111111111111111111111111111111112`
+  - Decimals: 9
+  - Token program: SPL Token
+
 - **USDC**
   - Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
-  - Token program: SPL
-  - Confidentiality: enabled
-  - Mixer: enabled
+  - Decimals: 6
+  - Token program: SPL Token
 
 - **USDT**
   - Mint: `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`
-  - Token program: SPL
-  - Confidentiality: enabled
-  - Mixer: enabled
-
-- **wSOL** (Wrapped SOL)
-  - Mint: `So11111111111111111111111111111111111111112`
-  - Token program: SPL
-  - Confidentiality: enabled
-  - Mixer: enabled
+  - Decimals: 6
+  - Token program: SPL Token
 
 - **UMBRA**
   - Mint: `PRVT6TB7uss3FrUd2D9xs2zqDBsa3GbMJMwCQsgmeta`
-  - Token program: SPL
-  - Confidentiality: enabled
-  - Mixer: enabled
+  - Decimals: 6
+  - Token program: SPL Token
+
+- **CASH**
+  - Mint: `CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`
+  - Decimals: 6
+  - Token program: Token-2022
+
+---
+
+## Devnet
+
+Get **dUSDC** / **dUSDT** from the faucet at [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/). wSOL is obtained via a standard Solana airdrop and wrapped.
+
+- **wSOL** (Wrapped SOL)
+  - Mint: `So11111111111111111111111111111111111111112`
+  - Decimals: 9
+  - Token program: SPL Token
+  - Faucet: standard Solana airdrop + wrap
+
+- **dUSDC** (devnet test USDC)
+  - Mint: `4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7`
+  - Decimals: 6
+  - Token program: SPL Token
+  - Faucet: yes — faucet.umbraprivacy.com
+
+- **dUSDT** (devnet test USDT)
+  - Mint: `DXQwBNGgyQ2BzGWxEriJPVmXYFQBsQbXvfvfSNTaJkL6`
+  - Decimals: 6
+  - Token program: SPL Token
+  - Faucet: yes — faucet.umbraprivacy.com
+
+- **STREAMFLOW** (devnet partner test mint)
+  - Mint: `Gssm3vfi8s65R31SBdmQRq6cKeYojGgup7whkw4VCiQj`
+  - Decimals: 9
+  - Token program: SPL Token
+  - Faucet: no
+
+Mints outside the deployed set fail at the account-fetch stage with `error 3012` (pool missing).
+
+---
+
+## Localnet
+
+Localnet runs against a local Solana validator with a locally-spun-up indexer/relayer stack. The mint set is whatever you configure when bringing the validator up — wSOL is the typical default.
 
 ---
 
@@ -44,19 +92,22 @@ Token-2022 mints with a transfer fee extension are fully supported - the SDK aut
 Pass the mint address directly to any SDK function that accepts a `mint` parameter:
 
 ```typescript
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
+
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-// Deposit into encrypted balance
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
-const depositResult = await deposit(client.signer.address, USDC, 1_000_000n);
+// Deposit: ATA → ETA
+const deposit = getATAIntoETADirectDepositorFunction({ client });
+await deposit(client.signer.address, USDC, 1_000_000n);
 
-// Withdraw from encrypted balance
-const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
-const withdrawResult = await withdraw(client.signer.address, USDC, 1_000_000n);
+// Withdraw: ETA → ATA
+const withdraw = getETAIntoATAWithdrawerFunction({ client });
+await withdraw(client.signer.address, USDC, 1_000_000n);
 ```
 
-The SDK will fetch the pool configuration on-chain and select the correct instruction variant automatically.
+The SDK fetches the pool configuration on-chain and selects the correct instruction variant automatically.
 
-<Note>
-Attempting to deposit into a mint that has no active pool will fail at the account-fetch stage with an account-not-found error.
-</Note>
+<Warning>
+Always verify the mint is supported before building a transaction. Use `relayer.getSupportedMints()` at app boot and cache the result for the session. Calling a deposit / withdraw / create with an unsupported mint fails with `error 3012` after the account-fetch stage — surface a clear user-facing error before you get there.
+</Warning>

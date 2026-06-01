@@ -1,81 +1,97 @@
 ---
 title: "Deposit"
-description: "API reference: getPublicBalanceToEncryptedBalanceDirectDepositorFunction (DepositResult) + 4 UTXO creators for self/receiver-claimable from encrypted/public balance."
+description: "API reference: getATAIntoETADirectDepositorFunction + Stealth Pool Note creators."
 ---
 
-## getPublicBalanceToEncryptedBalanceDirectDepositorFunction
+All deposit-side factories live under `@umbra-privacy/sdk/deposit`.
 
-**Import:** `@umbra-privacy/sdk`
+---
+
+## getATAIntoETADirectDepositorFunction
+
+**Import:** `@umbra-privacy/sdk/deposit`
 
 ```typescript
-function getPublicBalanceToEncryptedBalanceDirectDepositorFunction(
-  args: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs,
-  deps?: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps,
-): PublicBalanceToEncryptedBalanceDirectDepositorFunction
+function getATAIntoETADirectDepositorFunction(
+  args: { client: IUmbraClient },
+  deps?: GetATAIntoETADirectDepositorFunctionDeps,
+): ATAIntoETADirectDepositorFunction;
 ```
 
-Transfers tokens from a public associated token account (ATA) into a destination address's encrypted balance. The destination must be registered on Umbra. This is the primary deposit path - no ZK proof required. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
+Transfers tokens from an ATA into a destination user's ETA. The destination must be registered on Umbra. This is the primary deposit path — no ZK proof required. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
----
+### Deps
 
-### GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs
+All optional — each category falls back to the corresponding provider on `client`.
 
-- `client: IUmbraClient`
-
-### GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps
-
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-- `getEpochInfo?: GetEpochInfo` - Required for Token-2022 transfer fee calculation.
+```typescript
+interface GetATAIntoETADirectDepositorFunctionDeps {
+  readonly rpc?: {
+    readonly accountInfoProvider?: AccountInfoProviderFunction;
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+    readonly epochInfo?: GetEpochInfo;                                 // Token-2022 transfer-fee schedule
+  };
+  readonly arcium?: {
+    readonly microLamportsPerAcu?: MicroLamportsPerAcu;                // default 0n (no priority fees)
+    readonly awaitComputationFinalization?: AwaitComputationFinalizationConfig | false;
+  };
+}
+```
 
 ### Returns
 
-`PublicBalanceToEncryptedBalanceDirectDepositorFunction`
-
 ```typescript
-type PublicBalanceToEncryptedBalanceDirectDepositorFunction = (
+type ATAIntoETADirectDepositorFunction = (
   destinationAddress: Address,
   mint: Address,
   transferAmount: U64,
-  options?: DepositIntoEncryptedBalanceOptions,
-) => Promise<DepositResult>
+  options?: ATAIntoETADirectDepositorOptions,
+) => Promise<DepositResult>;
 ```
 
-- `destinationAddress: Address` - The Umbra-registered recipient.
-- `mint: Address` - Token mint address.
-- `transferAmount: U64` - Amount in base token units.
+### Options (`ATAIntoETADirectDepositorOptions`)
 
-### DepositIntoEncryptedBalanceOptions
+```typescript
+interface ATAIntoETADirectDepositorOptions {
+  readonly optionalData?: OptionalData32;                   // 32-byte caller metadata (pre-hashed / pre-encrypted)
+  readonly accountInfoCommitment?: Commitment;              // default "confirmed"
+  readonly epochInfoCommitment?: Commitment;                // default "confirmed"
+  readonly hooks?: ATAIntoETADirectDepositHooks;
+}
+```
 
-- `priorityFees?: U64` - Compute unit price in micro-lamports. Default: `0n`.
-- `purpose?: number` - Caller-defined purpose tag stored on-chain. Default: `0`.
-- `optionalData?: OptionalData32` - 32-byte caller metadata. Default: 32 zero bytes.
-- `awaitCallback?: boolean` - Whether to wait for the MPC callback. Default: `true`.
-- `skipPreflight?: boolean` - Skip Solana preflight simulation. Default: `false`.
-- `maxRetries?: number` - Max RPC retry attempts for transaction sending.
-- `accountInfoCommitment?: Commitment` - Per-call commitment for RPC account reads. Default: `"confirmed"`.
-- `epochInfoCommitment?: Commitment` - Per-call commitment for epoch info fetches. Default: `"confirmed"`.
+- `optionalData` — 32 bytes of opaque caller metadata. **Must be pre-hashed or pre-encrypted.** Default 32 zero bytes.
+- `accountInfoCommitment` — per-call commitment for RPC reads.
+- `epochInfoCommitment` — per-call commitment for epoch-info fetches (Token-2022 transfer-fee schedule).
+- `hooks` — per-phase lifecycle hooks. Keys: `onValidationStart`, `onValidationComplete`, `onMintFetchStart`, `onMintFetchComplete`, `onAccountFetchStart`, `onAccountFetchComplete`, `onArciumSetupStart`, `onArciumSetupComplete`, `onInstructionBuildStart`, `onInstructionBuildComplete`, `queueComputation` (`MpcTransactionStepHooks`), `onComplete`, `onError`.
+
+Per-call priority/retry options are not surfaced on the call signature. Priority fees are configured at factory time via `deps.arcium.microLamportsPerAcu`; transport behaviour comes from `deps.rpc.transactionForwarder`.
 
 ### DepositResult
 
 ```typescript
 interface DepositResult {
-  queueSignature: TransactionSignature;
-  callbackStatus?: "finalized" | "pruned" | "timed-out";
-  callbackSignature?: TransactionSignature;
-  callbackElapsedMs?: number;
-  rentClaimSignature?: TransactionSignature;
-  rentClaimError?: string;
+  readonly signatures: readonly TransactionSignature[];
+  readonly queueSignature: TransactionSignature;
+  readonly callback?: CallbackOutcome;
+  readonly rentClaim?: RentClaimOutcome;
 }
+
+type CallbackOutcome =
+  | { readonly status: "finalized"; readonly signature?: TransactionSignature; readonly elapsedMs: number }
+  | { readonly status: "pruned";    readonly elapsedMs: number }
+  | { readonly status: "timed-out"; readonly elapsedMs: number };
+
+type RentClaimOutcome =
+  | { readonly claimed: true;  readonly signature: TransactionSignature }
+  | { readonly claimed: false; readonly reason: string };
 ```
 
-- `queueSignature` - Signature of the handler (queue computation) transaction.
-- `callbackStatus` - The outcome of computation monitoring: `"finalized"`, `"pruned"`, or `"timed-out"`. Present when `awaitCallback` is `true`.
-- `callbackSignature` - Signature of the Arcium MPC callback. Present when `callbackStatus` is `"finalized"`.
-- `callbackElapsedMs` - Milliseconds spent waiting for the callback.
-- `rentClaimSignature` - Signature for reclaiming rent from the computation account. Attempted regardless of callback outcome.
-- `rentClaimError` - Error from rent reclaim attempt, if any. The deposit itself still succeeded.
+- `signatures` — every tx signature submitted, in submission order (handler, callback, rent claim).
+- `queueSignature` — handler (queue computation) signature.
+- `callback` — present once the callback round-trip completes (always awaited). `"finalized"` exposes the MPC callback `signature`; other statuses indicate the callback did not land.
+- `rentClaim` — best-effort. `claimed: false` does not invalidate the deposit.
 
 ### Errors
 
@@ -84,68 +100,62 @@ Throws `EncryptedDepositError`. See [Errors](./errors#encrypteddepositerror).
 ### Example
 
 ```typescript
-import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
-const result = await deposit(recipientAddress, mintAddress, 1_000_000n);
+const deposit = getATAIntoETADirectDepositorFunction({ client });
+const result  = await deposit(recipientAddress, mintAddress, 1_000_000n);
 console.log("Queue signature:", result.queueSignature);
+if (result.callback?.status === "finalized") {
+  console.log("Callback signature:", result.callback.signature);
+}
 ```
 
 ---
 
-## getEncryptedBalanceToSelfClaimableUtxoCreatorFunction
+## getETAIntoSelfBurnableStealthPoolNoteCreatorFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/deposit`
 
 ```typescript
-function getEncryptedBalanceToSelfClaimableUtxoCreatorFunction(
-  args: GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionArgs,
-  deps: GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionDeps,
-): CreateSelfClaimableUtxoFromEncryptedBalanceFunction
+function getETAIntoSelfBurnableStealthPoolNoteCreatorFunction(
+  args: { client: IUmbraClient },
+  deps: GetETAIntoSelfBurnableStealthPoolNoteCreatorFunctionDeps, // { zkProver: IZkProverForETAIntoStealthPoolNote; … }
+): ETAIntoSelfBurnableStealthPoolNoteCreatorFunction;
 ```
 
-Creates a self-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance -> Mixer). The created UTXO can only be claimed by the creator. Requires a ZK proof - `deps.zkProver` is **required**.
-
----
-
-### GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionArgs
-
-- `client: IUmbraClient`
-
-### GetCreateSelfClaimableUtxoFromEncryptedBalanceFunctionDeps
-
-- `zkProver: IZkProverForSelfClaimableUtxo` - **Required.** ZK proof generator for UTXO commitments. Use `getCreateSelfClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers). This operation submits two transactions: a proof account creation followed by the UTXO instruction.
-- `blockhashProvider?: GetLatestBlockhash`
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `transactionForwarder?: TransactionForwarder`
-- `getEpochInfo?: GetEpochInfo`
-- Additional cryptographic dependency overrides (key derivation, Poseidon, AES, commitment generators - all optional, default to SDK implementations).
+Writes a self-burnable Stealth Pool Note funded from the caller's ETA (ETA → pool). The note can only be burnt by the writer. Two-tx MPC pipeline. `deps.zkProver` is **required** — use `getETAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
 ### Returns
 
-`CreateSelfClaimableUtxoFromEncryptedBalanceFunction`
-
 ```typescript
-type CreateSelfClaimableUtxoFromEncryptedBalanceFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateUtxoOptions,
-) => Promise<TransactionSignature[]>
+type ETAIntoSelfBurnableStealthPoolNoteCreatorFunction = (
+  args: CreateStealthPoolNoteArgs,
+  options?: CreateStealthPoolNoteOptions,
+) => Promise<ETAIntoStealthPoolNoteCreatorResult>;
+
+// ETAIntoStealthPoolNoteCreatorResult (= CreateUtxoFromEncryptedBalanceResult) is an object:
+interface ETAIntoStealthPoolNoteCreatorResult {
+  readonly signatures: readonly TransactionSignature[]; // every tx submitted, in order
+  readonly populateProofAccountSignature: TransactionSignature;
+  readonly queueSignature: TransactionSignature;
+  readonly callback?: CallbackOutcome;
+  readonly rentClaim?: RentClaimOutcome;
+}
 ```
 
-Returns two signatures: `[proofAccountSignature, utxoCreationSignature]`.
+### CreateStealthPoolNoteArgs
 
-### CreateUtxoArgs
+- `amount: U64` — net amount locked into the note (pre-fee).
+- `destinationAddress: Address` — unlocker address (must equal the caller for self-burnable).
+- `mint: Address` — token mint address.
 
-- `amount: U64` - Token amount in base units to lock into the UTXO.
-- `destinationAddress: Address` - The Umbra-registered owner of the UTXO (must equal the caller for self-claimable).
-- `mint: Address` - Token mint address.
+### CreateStealthPoolNoteOptions (ETA-source)
 
-### CreateUtxoOptions
+- `generationIndex?: U256` — deterministic generation index. Default: random `U256`. Pass the same value on retry to allow the pipeline's `closeProofAccount` step to reclaim a proof-account orphan from a prior failed attempt.
+- `optionalData?: OptionalData32` — caller metadata. Pre-hashed only. Default 32 zero bytes.
+- `accountInfoCommitment?: Commitment` — per-call RPC commitment. Default `"confirmed"`.
 
-- `generationIndex?: U256` - Override the generation index used for key derivation. Defaults to the on-chain value.
-- `optionalData?: OptionalData32` - 32-byte caller metadata.
-- `createProofAccount?: TransactionCallbacks` - Lifecycle hooks for the proof account creation transaction.
-- `createUtxo?: TransactionCallbacks` - Lifecycle hooks for the UTXO creation transaction.
+(Per-step hooks for the ETA-source pipeline are attached at factory time via `deps.hooks: ETAIntoStealthPoolNoteCreatorHooks`, not on the per-call options object.)
 
 ### Errors
 
@@ -153,46 +163,52 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ---
 
-## getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction
+## getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/deposit`
 
-```typescript
-function getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction(
-  args: GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionArgs,
-  deps: GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionDeps,
-): CreateReceiverClaimableUtxoFromEncryptedBalanceFunction
-```
+Same shape as the self variant. `deps.zkProver` is `IZkProverForETAIntoStealthPoolNote` — use `getETAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
-Creates a receiver-claimable UTXO in the mixer funded from the caller's encrypted balance (encrypted balance -> Mixer). The UTXO is encrypted for the recipient's X25519 key - only the recipient can claim it. Requires `deps.zkProver` (**required**).
+**Recipient prerequisite:** must have all three registration sub-step flags (`isInitialised`, `isUserAccountX25519KeyRegistered`, `isUserCommitmentRegistered`). Pre-check with `getUserAccountQuerierFunction` from `@umbra-privacy/sdk/query` before calling — fall back to the self-burnable creator if the recipient is not ready.
 
 ---
 
-### GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionArgs
+## getATAIntoSelfBurnableStealthPoolNoteCreatorFunction
 
-- `client: IUmbraClient`
+**Import:** `@umbra-privacy/sdk/deposit`
 
-### GetCreateReceiverClaimableUtxoFromEncryptedBalanceFunctionDeps
+```typescript
+function getATAIntoSelfBurnableStealthPoolNoteCreatorFunction(
+  args: { client: IUmbraClient },
+  deps: { zkProver: IZkProverForATAIntoStealthPoolNote; /* … */ },
+): ATAIntoSelfBurnableStealthPoolNoteCreatorFunction;
+```
 
-- `zkProver: IZkProverForReceiverClaimableUtxo` - **Required.** Use `getCreateReceiverClaimableUtxoFromEncryptedBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
-- `blockhashProvider?: GetLatestBlockhash`
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `transactionForwarder?: TransactionForwarder`
-- `getEpochInfo?: GetEpochInfo`
-- Additional cryptographic dependency overrides (all optional).
+Writes a self-burnable note funded from an ATA (ATA → pool). Single-tx, no MPC. `deps.zkProver` is **required** — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
 ### Returns
 
-`CreateReceiverClaimableUtxoFromEncryptedBalanceFunction`
-
 ```typescript
-type CreateReceiverClaimableUtxoFromEncryptedBalanceFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateUtxoOptions,
-) => Promise<TransactionSignature[]>
+type ATAIntoSelfBurnableStealthPoolNoteCreatorFunction = (
+  args: CreateStealthPoolNoteArgs,
+  options?: ATAIntoStealthPoolNoteCreatorOptions,
+) => Promise<ATAIntoStealthPoolNoteCreatorResult>;
+
+// ATAIntoStealthPoolNoteCreatorResult (= CreateUtxoFromPublicBalanceResult) is an object:
+interface ATAIntoStealthPoolNoteCreatorResult {
+  readonly signatures: readonly TransactionSignature[]; // every tx submitted, in order
+  readonly populateProofAccountSignature: TransactionSignature;
+  readonly createUtxoSignature: TransactionSignature;
+}
 ```
 
-See `CreateUtxoArgs` and `CreateUtxoOptions` above.
+### ATAIntoStealthPoolNoteCreatorOptions (ATA-source)
+
+- `generationIndex?: U256`.
+- `optionalData?: OptionalData32`.
+- `accountInfoCommitment?: Commitment` — default `"confirmed"`.
+- `epochInfoCommitment?: Commitment` — default `"confirmed"`.
+- `hooks?: ATAIntoStealthPoolNoteCreatorHooks` — per-phase + per-step lifecycle hooks. There are exactly two step slots: `populateProofAccount` and `createStealthPoolNote` — each typed `DirectTransactionStepHooks` with `{ onPreSend, onPostSend }` (plus `interceptInstructions`, `onTransactionBuilt`, `onTransactionSigned`). There is no `closeProofAccount` slot and no `onSkipped` (these steps are not skippable).
 
 ### Errors
 
@@ -200,140 +216,30 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 ---
 
-## getPublicBalanceToSelfClaimableUtxoCreatorFunction
+## getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/deposit`
 
-```typescript
-function getPublicBalanceToSelfClaimableUtxoCreatorFunction(
-  args: GetCreateSelfClaimableUtxoFromPublicBalanceFunctionArgs,
-  deps: GetCreateSelfClaimableUtxoFromPublicBalanceFunctionDeps,
-): CreateSelfClaimableUtxoFromPublicBalanceFunction
-```
+Same shape as the self-ATA variant. `deps.zkProver` is `IZkProverForATAIntoStealthPoolNote` — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
-Creates a self-claimable UTXO in the mixer funded from a public ATA (ATA -> Mixer). No MPC required - the ZK proof is generated client-side. `deps.zkProver` is **required**.
-
----
-
-### GetCreateSelfClaimableUtxoFromPublicBalanceFunctionArgs
-
-- `client: IUmbraClient`
-
-### GetCreateSelfClaimableUtxoFromPublicBalanceFunctionDeps
-
-- `zkProver: ZkProverForSelfClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateSelfClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
-- `blockhashProvider?: GetLatestBlockhash`
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `transactionForwarder?: TransactionForwarder`
-- `getEpochInfo?: GetEpochInfo`
-- `masterViewingKeyGenerator?: MasterViewingKeyGeneratorFunction`
-- `masterViewingKeyBlindingFactorGenerator?: MasterViewingKeyBlindingFactorGeneratorFunction`
-- `poseidonPrivateKeyGenerator?: PoseidonPrivateKeyGeneratorFunction`
-- `poseidonBlindingFactorGenerator?: PoseidonBlindingFactorGeneratorFunction`
-- `userAccountX25519KeypairGenerator?: Curve25519KeypairGeneratorFunction`
-- `secondViewingKeyGenerator?: SecondViewingKeyGeneratorFunction`
-- `ephemeralUtxoMasterViewingKeyGenerator?: EphemeralUtxoMasterViewingKeyGeneratorFunction`
-- `ephemeralUtxoMasterViewingKeyBlindingFactorGenerator?: EphemeralUtxoMasterViewingKeyBlindingFactorGeneratorFunction`
-- `ephemeralUtxoPoseidonKeyGenerator?: EphemeralUtxoPoseidonPrivateKeyGeneratorFunction`
-- `ephemeralUtxoPoseidonKeyBlindingFactorGenerator?: EphemeralUtxoPoseidonPrivateKeyBlindingFactorGeneratorFunction`
-- `poseidonKeystreamBlindingFactorGenerator?: PoseidonKeystreamBlindingFactorGeneratorFunction`
-- `poseidonHasher?: PoseidonHashFunction`
-- `aesEncryptor?: AesEncryptorFunction`
-- `userCommitmentGenerator?: UserCommitmentGeneratorFunction`
-- `h2Generator?: H2GeneratorFns`
-- `keystreamCommitmentGenerator?: KeystreamCommitmentFunction`
-- `poseidonEncryptor?: PoseidonEncryptorFunction`
-- `poseidonKeystreamGenerator?: PoseidonKeystreamGeneratorFunction`
-- `getUtcNow?: () => UtcTimestampComponents`
-
-### Returns
-
-`CreateSelfClaimableUtxoFromPublicBalanceFunction`
-
-```typescript
-type CreateSelfClaimableUtxoFromPublicBalanceFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateUtxoFromPublicBalanceOptions,
-) => Promise<TransactionSignature[]>
-```
-
-### CreateUtxoFromPublicBalanceOptions
-
-- `generationIndex?: U256`
-- `optionalData?: OptionalData32`
-- `createUtxo?: TransactionCallbacks` - Lifecycle hooks for the single UTXO creation transaction.
-
-### Errors
-
-Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
-
----
-
-## getPublicBalanceToReceiverClaimableUtxoCreatorFunction
-
-**Import:** `@umbra-privacy/sdk`
-
-```typescript
-function getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
-  args: GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionArgs,
-  deps: GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionDeps,
-): CreateReceiverClaimableUtxoFromPublicBalanceFunction
-```
-
-Creates a receiver-claimable UTXO funded from a public ATA (ATA -> Mixer). The UTXO is encrypted for the recipient - only they can claim it. `deps.zkProver` is **required**.
-
----
-
-### GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionArgs
-
-- `client: IUmbraClient`
-
-### GetCreateReceiverClaimableUtxoFromPublicBalanceFunctionDeps
-
-- `zkProver: ZkProverForReceiverClaimableUtxoFromPublicBalance` - **Required.** Use `getCreateReceiverClaimableUtxoFromPublicBalanceProver` from `@umbra-privacy/web-zk-prover` -- see [ZK Provers](/sdk/advanced/zk-provers).
-- `blockhashProvider?: GetLatestBlockhash`
-- `accountInfoProvider?: AccountInfoProviderFunction`
-- `transactionForwarder?: TransactionForwarder`
-- `getEpochInfo?: GetEpochInfo`
-- Additional cryptographic dependency overrides (all optional).
-
-### Returns
-
-`CreateReceiverClaimableUtxoFromPublicBalanceFunction`
-
-```typescript
-type CreateReceiverClaimableUtxoFromPublicBalanceFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateReceiverClaimableUtxoFromPublicBalanceOptions,
-) => Promise<TransactionSignature[]>
-```
-
-### CreateReceiverClaimableUtxoFromPublicBalanceOptions
-
-- `generationIndex?: U256`
-- `optionalData?: OptionalData32`
-- `createUtxo?: TransactionCallbacks`
-
-### Errors
-
-Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
+**Recipient prerequisite:** must have all three registration sub-step flags. Pre-check and fall back to self-burnable when needed.
 
 ---
 
 ## EncryptedDepositError
 
-Thrown by `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`.
+Thrown by the ATA→ETA depositor.
 
-Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"fee-calculation"` | `"pda-derivation"` | `"account-fetch"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
+Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"fee-calculation"` | `"pda-derivation"` | `"account-fetch"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`.
 
-See [Errors](./errors#encrypteddepositerror) for full documentation.
+See [Errors](./errors#encrypteddepositerror).
 
 ---
 
 ## CreateUtxoError
 
-Thrown by all four UTXO creation functions.
+Thrown by all four Stealth Pool Note creators.
 
-Stage values: `"initialization"` | `"validation"` | `"account-fetch"` | `"mint-fetch"` | `"fee-calculation"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`
+Stage values: `"initialization"` | `"validation"` | `"account-fetch"` | `"mint-fetch"` | `"fee-calculation"` | `"key-derivation"` | `"zk-proof-generation"` | `"pda-derivation"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`.
 
-See [Errors](./errors#createutxoerror) for full documentation.
+See [Errors](./errors#createutxoerror).

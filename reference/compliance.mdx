@@ -12,7 +12,7 @@ Compliance grants allow authorized third parties (regulators, compliance tools) 
 
 ## getComplianceGrantIssuerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
 function getComplianceGrantIssuerFunction(
@@ -29,9 +29,17 @@ Creates an on-chain compliance grant signed by the user, authorizing a third-par
 
 ### GetCreateUserGrantedComplianceGrantFunctionDeps
 
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-- `masterViewingKeyX25519KeypairGenerator?: MasterViewingKeyX25519KeypairGeneratorFunction`
+```typescript
+interface GetCreateUserGrantedComplianceGrantFunctionDeps {
+  readonly rpc?: {
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+  };
+  readonly keys?: {
+    readonly masterViewingKeyX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
+  };
+}
+```
 
 ### Returns
 
@@ -42,21 +50,21 @@ type CreateUserGrantedComplianceGrantFunction = (
   receiver: Address,
   granterX25519: X25519PublicKey,
   receiverX25519: X25519PublicKey,
-  nonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: SimpleOperationHooks,
 ) => Promise<TransactionSignature>
 ```
 
 - `receiver: Address` - The third-party account that will be authorized to call re-encryption.
 - `granterX25519: X25519PublicKey` - The granter's X25519 public key (MVK encrypting key).
 - `receiverX25519: X25519PublicKey` - The receiver's X25519 public key (the target re-encryption key).
-- `nonce: RcEncryptionNonce` - Grant nonce, used to differentiate multiple grants to the same receiver.
+- `nonce: RescueCipherEncryptionNonce` - Grant nonce, used to differentiate multiple grants to the same receiver.
 
 ### Example
 
 ```typescript
-import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk/compliance";
 
 const createGrant = getComplianceGrantIssuerFunction({ client });
 const signature = await createGrant(
@@ -71,7 +79,7 @@ const signature = await createGrant(
 
 ## getComplianceGrantRevokerFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
 function getComplianceGrantRevokerFunction(
@@ -88,9 +96,17 @@ Revokes an existing user-granted compliance grant, removing the third-party's au
 
 ### GetDeleteUserGrantedComplianceGrantFunctionDeps
 
-- `getLatestBlockhash?: GetLatestBlockhash`
-- `transactionForwarder?: TransactionForwarder`
-- `masterViewingKeyX25519KeypairGenerator?: MasterViewingKeyX25519KeypairGeneratorFunction`
+```typescript
+interface GetDeleteUserGrantedComplianceGrantFunctionDeps {
+  readonly rpc?: {
+    readonly blockhashProvider?: GetLatestBlockhash;
+    readonly transactionForwarder?: TransactionForwarder;
+  };
+  readonly keys?: {
+    readonly masterViewingKeyX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
+  };
+}
+```
 
 ### Returns
 
@@ -101,9 +117,9 @@ type DeleteUserGrantedComplianceGrantFunction = (
   receiver: Address,
   granterX25519: X25519PublicKey,
   receiverX25519: X25519PublicKey,
-  nonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: SimpleOperationHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -113,7 +129,7 @@ Parameters are identical to `CreateUserGrantedComplianceGrantFunction` - pass th
 
 ## getUserComplianceGrantQuerierFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
 function getUserComplianceGrantQuerierFunction(
@@ -139,62 +155,58 @@ Checks whether a specific user-granted compliance grant exists on-chain.
 ```typescript
 type QueryUserComplianceGrantFunction = (
   granterX25519: X25519PublicKey,
-  nonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
   receiverX25519: X25519PublicKey,
 ) => Promise<QueryComplianceGrantResult>
 ```
 
 ---
 
-## getQueryNetworkMxeComplianceGrantFunction
+## getNetworkComplianceGrantQuerierFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
-function getQueryNetworkMxeComplianceGrantFunction(
-  args: GetQueryNetworkMxeComplianceGrantFunctionArgs,
-  deps?: GetQueryNetworkMxeComplianceGrantFunctionDeps,
-): QueryNetworkMxeComplianceGrantFunction
+function getNetworkComplianceGrantQuerierFunction(
+  args: { client: IUmbraClient },
+  deps?: { accountInfoProvider?: AccountInfoProviderFunction },
+): NetworkComplianceGrantQuerierFunction;
 ```
 
-Checks whether a network MXE compliance grant exists for the given nonce and receiver key. Network MXE grants allow the Arcium network to re-encrypt MXE-mode ciphertexts.
+Checks whether a **network MXE** compliance grant exists for the given nonce and receiver key. Network MXE grants allow the Arcium network to re-encrypt MXE-mode ciphertexts.
 
 ### Returns
 
-`QueryNetworkMxeComplianceGrantFunction`
-
 ```typescript
-type QueryNetworkMxeComplianceGrantFunction = (
-  nonce: RcEncryptionNonce,
+type NetworkComplianceGrantQuerierFunction = (
+  nonce: RescueCipherEncryptionNonce,
   receiverX25519: X25519PublicKey,
-) => Promise<QueryComplianceGrantResult>
+) => Promise<QueryComplianceGrantResult>;
 ```
 
 ---
 
-## getQueryNetworkSharedComplianceGrantFunction
+## getSharedComplianceGrantQuerierFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
-function getQueryNetworkSharedComplianceGrantFunction(
-  args: GetQueryNetworkSharedComplianceGrantFunctionArgs,
-  deps?: GetQueryNetworkSharedComplianceGrantFunctionDeps,
-): QueryNetworkSharedComplianceGrantFunction
+function getSharedComplianceGrantQuerierFunction(
+  args: { client: IUmbraClient },
+  deps?: { accountInfoProvider?: AccountInfoProviderFunction },
+): SharedComplianceGrantQuerierFunction;
 ```
 
-Checks whether a network shared compliance grant exists. Network shared grants allow the Arcium network to re-encrypt shared-mode ciphertexts.
+Checks whether a **network shared** compliance grant exists. Allows the Arcium network to re-encrypt Shared-mode ciphertexts.
 
 ### Returns
 
-`QueryNetworkSharedComplianceGrantFunction`
-
 ```typescript
-type QueryNetworkSharedComplianceGrantFunction = (
+type SharedComplianceGrantQuerierFunction = (
   granterX25519: X25519PublicKey,
-  nonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
   receiverX25519: X25519PublicKey,
-) => Promise<QueryComplianceGrantResult>
+) => Promise<QueryComplianceGrantResult>;
 ```
 
 ### QueryComplianceGrantResult
@@ -206,76 +218,76 @@ Returned by all three query functions:
 
 ---
 
-## getReencryptMxeCiphertextsNetworkGrantFunction
+## getNetworkCiphertextReencryptorForNetworkGrantFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
-function getReencryptMxeCiphertextsNetworkGrantFunction(
-  args: GetReencryptMxeCiphertextsNetworkGrantFunctionArgs,
-  deps?: GetReencryptMxeCiphertextsNetworkGrantFunctionDeps,
-): ReencryptMxeCiphertextsNetworkGrantFunction
+function getNetworkCiphertextReencryptorForNetworkGrantFunction(
+  args: GetReencryptNetworkCiphertextsNetworkGrantV10FunctionArgs,
+  deps?: GetReencryptNetworkCiphertextsNetworkGrantV10FunctionDeps,
+): ReencryptNetworkCiphertextsNetworkGrantV10Function;
 ```
 
 Re-encrypts MXE-mode ciphertexts under a network grant, making them readable by the grant receiver. Queues an Arcium MPC computation.
 
-### GetReencryptMxeCiphertextsNetworkGrantFunctionArgs
+### GetReencryptNetworkCiphertextsNetworkGrantV10FunctionArgs
 
 - `client: IUmbraClient`
 
-### GetReencryptMxeCiphertextsNetworkGrantFunctionDeps
+### GetReencryptNetworkCiphertextsNetworkGrantV10FunctionDeps
 
 - `getLatestBlockhash?: GetLatestBlockhash`
 - `transactionForwarder?: TransactionForwarder`
 
 ### Returns
 
-`ReencryptMxeCiphertextsNetworkGrantFunction`
+`ReencryptNetworkCiphertextsNetworkGrantV10Function`
 
 ```typescript
-type ReencryptMxeCiphertextsNetworkGrantFunction = (
+type ReencryptNetworkCiphertextsNetworkGrantV10Function = (
   receiverX25519Key: X25519PublicKey,
-  nonce: RcEncryptionNonce,
-  inputEncryptionNonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
+  inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: ReencryptHooks,
 ) => Promise<TransactionSignature>
 ```
 
 - `receiverX25519Key: X25519PublicKey` - The receiver's X25519 public key.
-- `nonce: RcEncryptionNonce` - The grant nonce identifying which network grant to use.
-- `inputEncryptionNonce: RcEncryptionNonce` - The nonce used when the ciphertexts were originally encrypted.
+- `nonce: RescueCipherEncryptionNonce` - The grant nonce identifying which network grant to use.
+- `inputEncryptionNonce: RescueCipherEncryptionNonce` - The nonce used when the ciphertexts were originally encrypted.
 - `ciphertexts: readonly Uint8Array[]` - The MXE-encrypted ciphertexts to re-encrypt. Must contain between 1 and 6 elements.
 
 ---
 
 ## getSharedCiphertextReencryptorForNetworkGrantFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
 function getSharedCiphertextReencryptorForNetworkGrantFunction(
-  args: GetSharedCiphertextReencryptorForNetworkGrantFunctionArgs,
-  deps?: GetSharedCiphertextReencryptorForNetworkGrantFunctionDeps,
-): SharedCiphertextReencryptorForNetworkGrantFunction
+  args: GetReencryptSharedCiphertextsNetworkGrantV10FunctionArgs,
+  deps?: GetReencryptSharedCiphertextsNetworkGrantV10FunctionDeps,
+): ReencryptSharedCiphertextsNetworkGrantV10Function
 ```
 
 Re-encrypts shared-mode ciphertexts under a network shared grant.
 
 ### Returns
 
-`ReencryptSharedCiphertextsNetworkGrantFunction`
+`ReencryptSharedCiphertextsNetworkGrantV10Function`
 
 ```typescript
-type ReencryptSharedCiphertextsNetworkGrantFunction = (
+type ReencryptSharedCiphertextsNetworkGrantV10Function = (
   granterX25519Key: X25519PublicKey,
   receiverX25519Key: X25519PublicKey,
-  nonce: RcEncryptionNonce,
-  inputEncryptionNonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
+  inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: ReencryptHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -287,33 +299,33 @@ type ReencryptSharedCiphertextsNetworkGrantFunction = (
 
 ## getSharedCiphertextReencryptorForUserGrantFunction
 
-**Import:** `@umbra-privacy/sdk`
+**Import:** `@umbra-privacy/sdk/compliance`
 
 ```typescript
 function getSharedCiphertextReencryptorForUserGrantFunction(
-  args: GetReencryptSharedCiphertextsUserGrantFunctionArgs,
-  deps?: GetReencryptSharedCiphertextsUserGrantFunctionDeps,
-): ReencryptSharedCiphertextsUserGrantFunction
+  args: GetReencryptSharedCiphertextsUserGrantV10FunctionArgs,
+  deps?: GetReencryptSharedCiphertextsUserGrantV10FunctionDeps,
+): ReencryptSharedCiphertextsUserGrantV10Function
 ```
 
 Re-encrypts shared-mode ciphertexts under a user-granted compliance grant.
 
 ### Returns
 
-`ReencryptSharedCiphertextsUserGrantFunction`
+`ReencryptSharedCiphertextsUserGrantV10Function`
 
 ```typescript
-type ReencryptSharedCiphertextsUserGrantFunction = (
+type ReencryptSharedCiphertextsUserGrantV10Function = (
   granterX25519Key: X25519PublicKey,
   receiverX25519Key: X25519PublicKey,
-  nonce: RcEncryptionNonce,
-  inputEncryptionNonce: RcEncryptionNonce,
+  nonce: RescueCipherEncryptionNonce,
+  inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  callbacks?: TransactionCallbacks,
+  hooks?: ReencryptHooks,
 ) => Promise<TransactionSignature>
 ```
 
-Identical signature to `ReencryptSharedCiphertextsNetworkGrantFunction`. The difference is which on-chain grant account is used to authorize the re-encryption.
+Identical signature to `ReencryptSharedCiphertextsNetworkGrantV10Function`. The difference is which on-chain grant account is used to authorize the re-encryption.
 
 - `ciphertexts: readonly Uint8Array[]` - Must contain between 1 and 6 elements.

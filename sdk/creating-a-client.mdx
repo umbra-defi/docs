@@ -49,11 +49,23 @@ const client = await getUmbraClient(args, deps?);
 </ParamField>
 
 <ParamField path="indexerApiEndpoint" type="string">
-  Base URL for the Umbra indexer. Required for UTXO discovery and Merkle proof generation when using the mixer. Omit if you are only using encrypted balances (deposit/withdraw) and not the mixer.
+  Base URL for the Umbra indexer. Required for Stealth Pool Note discovery and Merkle proof generation when using the Stealth Pool. Omit if you are only using EncryptedTokenAccounts (deposit / withdraw / convert) and not the pool.
 
   ```
   https://utxo-indexer.api.umbraprivacy.com  # mainnet
   ```
+</ParamField>
+
+<Note>
+The relayer endpoint is **not** a `getUmbraClient` argument. For burning, construct a relayer client separately with `getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" })` and pass it to the burner factory's `relayer` dep.
+</Note>
+
+<ParamField path="deps.utxoDataStore" type="UtxoDataStore">
+  Persistent storage for scan cursors and decrypted Stealth Pool Note data. **Strongly recommended on the browser** — without it the scanner re-scans every active tree from genesis on every call. Build it with `await createShardedUtxoDataStore(client, backend)` from `@umbra-privacy/sdk/store-adapters`, where `backend` comes from `createBrowserStorageBackend()`. Because the store derives its encryption keys from `client.masterSeed`, the client must already exist — so either pass it through the `deps` argument once you have an instance, or attach it after construction with `client.utxoDataStore = …` (see the full setup example below).
+</ParamField>
+
+<ParamField path="deps.nullifierStore" type="NullifierStore">
+  Persistent storage for nullifiers discovered during scanning. Same provenance and recommendation as `utxoDataStore` — build it with `await createShardedNullifierStore(client, backend)`.
 </ParamField>
 
 <Note>
@@ -114,14 +126,16 @@ The second argument, `deps`, lets you override individual infrastructure provide
 
 Once constructed, the client exposes these properties (read-only):
 
-- `client.signer` - your wallet signer
-- `client.network` - `"mainnet"` | `"devnet"` | `"localnet"`
-- `client.networkConfig` - resolved program addresses and cluster config
-- `client.accountInfoProvider` - pre-built RPC account fetcher
-- `client.blockhashProvider` - pre-built blockhash fetcher
-- `client.transactionForwarder` - pre-built transaction broadcaster
-- `client.epochInfoProvider` - pre-built epoch info provider
-- `client.masterSeed.getMasterSeed()` - async function that derives (and caches) the master seed
+- `client.signer` — your wallet signer.
+- `client.network` — `"mainnet"` | `"devnet"` | `"localnet"`.
+- `client.networkConfig` — resolved program addresses and cluster config.
+- `client.accountInfoProvider` — pre-built RPC account fetcher.
+- `client.blockhashProvider` — pre-built blockhash fetcher.
+- `client.transactionForwarder` — pre-built transaction broadcaster.
+- `client.epochInfoProvider` — pre-built epoch info provider.
+- `client.masterSeed.getMasterSeed()` — async function that derives (and caches) the master seed.
+- `client.fetchBatchMerkleProof` — present when `indexerApiEndpoint` was supplied; used by the burner factories to fetch the per-batch Merkle proof at submit time.
+- `client.utxoDataStore`, `client.nullifierStore` — present when the stores were supplied; consulted by the scanner for cursor state and known nullifiers.
 
 ## Master Seed Derivation
 
@@ -169,11 +183,17 @@ await register({ confidential: true, anonymous: true });
 
 After the first derivation, the seed is cached in memory for the lifetime of the client object. The user is not prompted again unless the client is recreated.
 
-## Example: Full Client Setup
+## Example: Full Client Setup (browser, recommended)
 
 ```typescript
 import { getUmbraClient } from "@umbra-privacy/sdk";
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
 
+// 1. Create the client first.
 const client = await getUmbraClient({
   signer,
   network: "mainnet",
@@ -181,7 +201,31 @@ const client = await getUmbraClient({
   rpcSubscriptionsUrl: "wss://rpc.helius.xyz/?api-key=YOUR_KEY",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
 });
+
+// 2. Build the storage backend (browser/IndexedDB — takes no arguments).
+const backend = createBrowserStorageBackend();
+
+// 3. Build the sharded stores FROM the client (async — they read
+//    client.masterSeed to derive their encryption keys), then attach them.
+client.utxoDataStore  = await createShardedUtxoDataStore(client, backend);
+client.nullifierStore = await createShardedNullifierStore(client, backend);
 ```
+
+## Example: Node.js (no browser persistence)
+
+```typescript
+import { getUmbraClient } from "@umbra-privacy/sdk";
+
+const client = await getUmbraClient({
+  signer,
+  network: "mainnet",
+  rpcUrl: "https://api.mainnet-beta.solana.com",
+  rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
+  indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
+});
+```
+
+Omitting `utxoDataStore` and `nullifierStore` is acceptable for short-lived scripts or tests, but means every `scan()` walks every active tree from scratch. For any long-running process, wire a Node-side store (you can implement `IUtxoDataStore` / `INullifierStore` against any KV — disk, Redis, Postgres).
 
 ## Example: Testing with Mocks
 

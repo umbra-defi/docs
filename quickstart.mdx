@@ -1,198 +1,236 @@
 ---
 title: "Quickstart"
-description: "End-to-end guide: install @umbra-privacy/sdk, call getUmbraClient, register, deposit into encrypted balance, create a UTXO, scan with getClaimableUtxoScannerFunction, and claim."
+description: "End-to-end SDK guide: install @umbra-privacy/sdk, call getUmbraClient, register, deposit into an EncryptedTokenAccount, create a Stealth Pool Note, scan, then burn into the recipient's balance."
 ---
+
+New to Umbra? Skim [Key Terms](/introduction#key-terms) in the introduction first — this page assumes you know what ATA, ETA, Stealth Pool Note, and Burn refer to.
+
+<Note>
+This is the happy path. Persistent scan stores, RPC transport choices, real signers, and the gotchas that bite at scale all live in [Production & Pitfalls](/production-and-pitfalls) — read it before you ship.
+</Note>
 
 ## Prerequisites
 
-- Node.js 18+ or a modern browser environment
+- Node.js 18+ or a modern browser
 - A Solana wallet (or a generated keypair for testing)
-- An RPC endpoint - any standard Solana JSON-RPC URL works
+- A Solana JSON-RPC URL (HTTP **and** WebSocket)
 
 ## 1. Install
 
+The SDK ships as a single package. The ZK prover, indexer client, relayer client, and Solana primitives are all subpath modules of `@umbra-privacy/sdk`.
+
 <CodeGroup>
 ```bash pnpm
-pnpm add @umbra-privacy/sdk
+pnpm add @umbra-privacy/sdk@5.0.0-rc.3
 ```
 
 ```bash npm
-npm install @umbra-privacy/sdk
+npm install @umbra-privacy/sdk@5.0.0-rc.3
 ```
 
 ```bash yarn
-yarn add @umbra-privacy/sdk
+yarn add @umbra-privacy/sdk@5.0.0-rc.3
 ```
 </CodeGroup>
 
+<Warning>
+Pin an exact version (no `^`, no `~`) — ZK assets are version-locked. [Why →](/production-and-pitfalls#pin-the-sdk-to-an-exact-version)
+</Warning>
+
 ## 2. Create a Signer
 
-For quick testing, generate an in-memory keypair. For production, see [Wallet Adapters](/sdk/wallet-adapters).
+For quick testing, generate an in-memory keypair.
 
 ```typescript
 import { createInMemorySigner } from "@umbra-privacy/sdk";
 
-// Generate a random keypair (for testing only)
 const signer = await createInMemorySigner();
-console.log("Wallet address:", signer.address);
+// signer.address is your wallet's public key
 ```
 
-<Warning>
-An in-memory keypair is ephemeral - it disappears when your process exits. Use a browser wallet or a persistent keypair for anything beyond local testing.
-</Warning>
+<Note>
+In-memory keypairs are ephemeral — use a wallet for anything real. [Signers →](/production-and-pitfalls#use-a-real-signer-not-an-in-memory-keypair)
+</Note>
 
 ## 3. Create the Umbra Client
+
+The client owns your signer, network configuration, and indexer endpoint. The minimal setup is a single call:
 
 ```typescript
 import { getUmbraClient } from "@umbra-privacy/sdk";
 
-const client = await getUmbraClient({
+const config = {
   signer,
   network: "mainnet",
   rpcUrl: "https://api.mainnet-beta.solana.com",
   rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
-});
+} as const;
+
+const client = await getUmbraClient(config);
 ```
 
-<Note>
-The Umbra program address differs between devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
-</Note>
+This is enough to register, deposit, withdraw, and scan. The first operation that needs your master seed (usually `register()`) prompts a one-time deterministic signature, cached for the session.
 
 <Note>
-The first operation that requires the master seed (typically `register()` or `deposit()`) will prompt the user to sign a consent message. Subsequent operations reuse the cached seed without re-prompting.
+Production setup — persistent scan stores, RPC/WebSocket transport, and the separately-built relayer — lives in [Production & Pitfalls](/production-and-pitfalls).
 </Note>
 
 ## 4. Register Your Account
 
-Registration sets up your on-chain Umbra identity. This function can be called regardless of whether the user is already registered - it handles the full setup, including key rotation when keys have changed. That said, each call submits on-chain transactions with SOL costs, so in practice you should check whether the account is already registered before calling it.
+Registration sets up your on-chain Umbra identity. It is idempotent: skipped sub-steps cost zero SOL, so you can call it safely on every app start.
 
 ```typescript
-import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
 
 const register = getUserRegistrationFunction({ client });
 
-// This is where the wallet signing prompt appears for the first time.
-// The user signs once to derive the master seed; subsequent operations
-// reuse the cached seed without prompting again.
 const signatures = await register({
-  confidential: true, // enable encrypted balances
-  anonymous: true,    // enable mixer / anonymous transfers
+  confidential: true, // register the X25519 key (Shared-mode balances + receiver-burnable notes)
+  anonymous: true,    // register the user commitment (anonymous mixer transfers)
 });
-
-console.log(`Registered in ${signatures.length} transaction(s)`);
+// signatures.length === number of on-chain transactions that actually ran
 ```
 
-## 5. Deposit Tokens
+Internally registration is two independent on-chain instructions:
 
-Shield an SPL or Token-2022 token balance by moving it from your public wallet into an encrypted account.
+- **`register_user_for_confidential_usage`** — synchronous; initialises the `EncryptedUserAccount` and stores the X25519 token-encryption pubkey.
+- **`register_user_for_anonymous_usage_v17`** — MPC + ZK; stages master-viewing-key material, runs Fiat-Shamir + Groth16, queues the Arcium MPC computation, and stores the on-chain user commitment.
+
+Both `init_if_needed` the user account, so either may run first. The orchestrator picks the right combination based on requested flags and on-chain state.
+
+## 5. Deposit Tokens (ATA → ETA)
+
+Shield an SPL or Token-2022 balance by moving it from your Associated Token Account into your Encrypted Token Account.
 
 ```typescript
-import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
+import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+const deposit = getATAIntoETADirectDepositorFunction({ client });
 
-const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
 const amount = 1_000_000n; // 1 USDC (6 decimals)
 
 const result = await deposit(
-  client.signer.address, // deposit into your own encrypted account
+  client.signer.address, // credit your own ETA
   MINT,
   amount,
 );
-
-console.log("Deposit queued:", result.queueSignature);
-console.log("Callback confirmed:", result.callbackSignature);
+// result.queueSignature — the queue tx; result.callback?.signature once finalized
 ```
-
-## 6. Withdraw Tokens
-
-Move tokens back from your encrypted account to your public wallet.
-
-```typescript
-import { getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction } from "@umbra-privacy/sdk";
-
-const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
-
-const result = await withdraw(
-  client.signer.address, // destination address
-  MINT,
-  amount,
-);
-
-console.log("Withdrawal queued:", result.queueSignature);
-console.log("Callback confirmed:", result.callbackSignature);
-```
-
-## 7. Create a Receiver-Claimable UTXO
-
-Send tokens privately to a recipient by depositing them into the [mixer](/sdk/mixer/overview). The recipient can later claim them with no on-chain link back to you as the sender.
 
 <Note>
-UTXO creation requires a `zkProver` dependency for Groth16 proof generation. Install `@umbra-privacy/web-zk-prover` for the recommended browser-based prover - see [ZK Provers](/sdk/advanced/zk-provers) for details.
+Amounts (`U64`) and addresses (`Address`) are branded — [constructing them in strict TypeScript](/production-and-pitfalls#branded-types-u64-address).
 </Note>
 
+## 6. Withdraw Tokens (ETA → ATA)
+
+Move tokens back from your Encrypted Token Account to your public ATA.
+
 ```typescript
-import { getPublicBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
-import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
-const zkProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
+const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
-const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
+const result = await withdraw(
+  client.signer.address, // destination ATA owner
+  MINT,
+  amount,
+);
+// result.queueSignature — the queue tx; result.callback?.signature once finalized
+```
+
+## 7. Create a Receiver-Burnable Stealth Pool Note
+
+Send tokens privately to a recipient by writing a Stealth Pool Note into the mixer. The recipient can later scan and burn it with no on-chain link to you as the sender. Creating a note needs a `zkProver` from `@umbra-privacy/sdk/zk-prover`.
+
+```typescript
+import { getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
+import { getATAIntoStealthPoolNoteCreatorProver } from "@umbra-privacy/sdk/zk-prover";
+
+const zkProver = getATAIntoStealthPoolNoteCreatorProver();
+
+const createNote = getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction(
   { client },
   { zkProver },
 );
 
 const RECIPIENT = "RecipientWalletAddressHere";
 
-const signatures = await createUtxo({
+// ATA-source create runs TWO transactions and returns an object (NOT an array):
+// CreateUtxoFromPublicBalanceResult { populateProofAccountSignature, createUtxoSignature }.
+const { populateProofAccountSignature, createUtxoSignature } = await createNote({
   destinationAddress: RECIPIENT,
   mint: MINT,
   amount,
 });
-console.log("UTXO created:", signatures[0]);
 ```
 
-## 8. Fetch Claimable UTXOs
+<Warning>
+Receiver-burnable needs a **fully-registered** recipient; otherwise use a self-burnable create. [Why →](/production-and-pitfalls#receiver-burnable-requires-a-fully-registered-recipient)
+</Warning>
 
-As the recipient, scan the Merkle tree for UTXOs addressed to your X25519 key. The SDK attempts to decrypt each ciphertext and returns only those belonging to you.
+## 8. Scan for Burnable Notes
+
+As the recipient, run the scanner. It walks every active stealth-pool tree, decrypts every commitment it can with your viewing keys, and groups the results by `(burn kind, source)`. Cursor state lives in `client.utxoDataStore` — the scanner picks up exactly where the last call left off.
 
 ```typescript
-import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
+import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/burn";
 
-const fetchUtxos = getClaimableUtxoScannerFunction({ client });
+const scan = getBurnableStealthPoolNoteScannerFunction({ client });
 
-// Scan tree 0 from the start - pass your last seen index to resume
-const { received } = await fetchUtxos(0, 0);
+// Zero-arg. The cursor is managed by the SDK via client.utxoDataStore.
+const result = await scan();
 
-console.log("Received UTXOs:", received.length);
+// Notes are bucketed by (burn kind × source):
+//   result.etaToStealthPoolSelfBurnable      result.etaToStealthPoolReceiverBurnable
+//   result.ataToStealthPoolSelfBurnable      result.ataToStealthPoolReceiverBurnable
+// plus result.scannedTrees (per-tree progress).
 ```
 
-## 9. Claim the UTXO
+<Warning>
+`scan()` is incremental and returns already-burnt notes — don't treat one call as your complete set. [Details →](/production-and-pitfalls#scan-is-incremental-and-returns-already-burnt-notes)
+</Warning>
 
-Present a ZK proof on-chain to burn the UTXO and receive the tokens. Claiming into an encrypted balance keeps the received amount private - no on-chain trace of who received what.
+## 9. Burn the Note
+
+Burning consumes a note, reveals its nullifier on-chain to prevent double-spend, and credits the destination balance. We'll burn the receiver-burnable note we just created, into the recipient's Encrypted Token Account.
+
+The burner factory needs three dependencies: a `fetchBatchMerkleProof` (already exposed on `client`), a `zkProver` for the burn circuit, and a `relayer` adapter whose three methods (`submitBurn`, `pollBurnStatus`, `getRelayerAddress`) forward to the relayer service.
 
 ```typescript
 import {
-  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
-  getUmbraRelayer,
-} from "@umbra-privacy/sdk";
-import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
 
 const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
-const relayer = getUmbraRelayer({
-  apiEndpoint: "https://relayer.api.umbraprivacy.com",
-});
+const r        = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
 
-const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver, relayer },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        r.submitClaim,        // alias: BurnSubmitter ≡ ClaimSubmitter
+      pollBurnStatus:    r.pollClaimStatus,    // alias: BurnStatusPoller ≡ ClaimStatusPoller
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
 );
 
-const claimResult = await claim([received[0]]);
-
-console.log("Claimed into encrypted balance:", claimResult);
+const notes = result.etaToStealthPoolReceiverBurnable; // or ataToStealthPoolReceiverBurnable, depending on source
+if (notes.length > 0) {
+  const out = await burn([notes[0]]);
+  // out.batches: Map<batchIndex, { status, requestId, callbackSignature ?? txSignature }>
+}
 ```
+
+<Warning>
+Filter already-burnt notes before burning, or burn one per call — a single stale note reverts the whole batch. [Why →](/production-and-pitfalls#strip-already-burnt-notes-before-burning)
+</Warning>
 
 ## Full Example
 
@@ -200,80 +238,87 @@ console.log("Claimed into encrypted balance:", claimResult);
 import {
   createInMemorySigner,
   getUmbraClient,
-  getUserRegistrationFunction,
-  getPublicBalanceToEncryptedBalanceDirectDepositorFunction,
-  getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction,
-  getPublicBalanceToReceiverClaimableUtxoCreatorFunction,
-  getClaimableUtxoScannerFunction,
-  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
 import {
-  getCreateReceiverClaimableUtxoFromPublicBalanceProver,
+  getATAIntoETADirectDepositorFunction,
+  getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction,
+} from "@umbra-privacy/sdk/deposit";
+import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
+import {
+  getBurnableStealthPoolNoteScannerFunction,
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import {
+  getATAIntoStealthPoolNoteCreatorProver,
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
-} from "@umbra-privacy/web-zk-prover";
+} from "@umbra-privacy/sdk/zk-prover";
 
 async function main() {
-  // 1. Signer (use your wallet adapter in production)
+  // 1. Signer (use your wallet adapter in production).
   const signer = await createInMemorySigner();
 
-  // 2. Client
-  const client = await getUmbraClient({
+  // 2. Minimal client. For persistent scan stores + RPC transport, see
+  //    Production & Pitfalls (/production-and-pitfalls).
+  const config = {
     signer,
     network: "mainnet",
     rpcUrl: "https://api.mainnet-beta.solana.com",
     rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
     indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
-  });
+  } as const;
 
-  // 3. Register (safe to call regardless of prior registration state)
+  const client = await getUmbraClient(config);
+
+  // 3. Register (idempotent).
   const register = getUserRegistrationFunction({ client });
   await register({ confidential: true, anonymous: true });
 
-  const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
 
-  // 4. Deposit into encrypted balance
-  const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
-  const depositResult = await deposit(signer.address, MINT, 1_000_000n);
-  console.log("Deposited:", depositResult.queueSignature);
+  // 4. Deposit (ATA → ETA).
+  const deposit = getATAIntoETADirectDepositorFunction({ client });
+  await deposit(signer.address, MINT, 1_000_000n);
 
-  // 5. Withdraw back to public wallet
-  const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
-  const withdrawResult = await withdraw(signer.address, MINT, 1_000_000n);
-  console.log("Withdrawn:", withdrawResult.queueSignature);
+  // 5. Withdraw (ETA → ATA).
+  const withdraw = getETAIntoATAWithdrawerFunction({ client });
+  await withdraw(signer.address, MINT, 1_000_000n);
 
-  // 6. Set up ZK provers
-  const utxoProver = getCreateReceiverClaimableUtxoFromPublicBalanceProver();
-  const claimProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+  // 6. ZK provers (browser-side Groth16).
+  const createProver = getATAIntoStealthPoolNoteCreatorProver();
+  const burnProver   = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
-  // 7. Create a receiver-claimable UTXO
-  const createUtxo = getPublicBalanceToReceiverClaimableUtxoCreatorFunction(
+  // 7. Create a receiver-burnable Stealth Pool Note.
+  const createNote = getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction(
     { client },
-    { zkProver: utxoProver },
+    { zkProver: createProver },
   );
   const RECIPIENT = "RecipientWalletAddressHere";
-  await createUtxo({
-    destinationAddress: RECIPIENT,
-    mint: MINT,
-    amount: 500_000n,
-  });
+  await createNote({ destinationAddress: RECIPIENT, mint: MINT, amount: 500_000n });
 
-  // 8. Fetch UTXOs addressed to this wallet (as the recipient)
-  const fetchUtxos = getClaimableUtxoScannerFunction({ client });
-  const { received } = await fetchUtxos(0, 0);
+  // 8. Scan (zero-arg, cursor in client.utxoDataStore).
+  const scan = getBurnableStealthPoolNoteScannerFunction({ client });
+  const result = await scan();
 
-  // 9. Claim the first received UTXO into an encrypted balance
-  const relayer = getUmbraRelayer({
-    apiEndpoint: "https://relayer.api.umbraprivacy.com",
-  });
+  // 9. Burn the first receiver-burnable note into the recipient's ETA.
+  const r = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+  const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
+    { client },
+    {
+      fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+      zkProver: burnProver,
+      relayer: {
+        submitBurn:        r.submitClaim,
+        pollBurnStatus:    r.pollClaimStatus,
+        getRelayerAddress: r.getRelayerAddress,
+      },
+    },
+  );
 
-  if (received.length > 0) {
-    const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
-      { client },
-      { zkProver: claimProver, relayer },
-    );
-    const claimResult = await claim([received[0]]);
-    console.log("Claimed:", claimResult);
+  const candidates = result.ataToStealthPoolReceiverBurnable;
+  if (candidates.length > 0) {
+    await burn([candidates[0]]);
   }
 }
 
@@ -283,16 +328,16 @@ main().catch(console.error);
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="Production & Pitfalls" icon="triangle-exclamation" href="/production-and-pitfalls">
+    Persistent stores, RPC transport, real signers, and the common gotchas.
+  </Card>
   <Card title="Wallet Adapters" icon="wallet" href="/sdk/wallet-adapters">
     Connect Phantom, Solflare, or any Solana wallet.
   </Card>
-  <Card title="Mixer / UTXOs" icon="shuffle" href="/sdk/mixer/overview">
-    Make transfers fully anonymous using the mixer.
+  <Card title="Stealth Pool" icon="shuffle" href="/sdk/mixer/overview">
+    Anonymous transfers via Stealth Pool Notes.
   </Card>
   <Card title="Query State" icon="magnifying-glass" href="/sdk/query">
     Read encrypted balances and account state on-chain.
-  </Card>
-  <Card title="Error Handling" icon="triangle-exclamation" href="/reference/errors">
-    Handle deposit and withdrawal failures gracefully.
   </Card>
 </CardGroup>

@@ -1,0 +1,653 @@
+---
+title: "Migration: V4 → V5"
+description: "Step-by-step migration from @umbra-privacy/sdk@4.x to @umbra-privacy/sdk@5.x: package consolidation, subpath imports, factory renames, zero-arg scanner, burner relayer-dep shape, store adapters."
+---
+
+V5 is a vocabulary + ergonomics overhaul. The on-chain protocol and wire formats are **unchanged** — relayer paths are still `/v1/claims`, the on-chain instruction is still `burn_*` under the hood, and a handful of TypeScript aliases bridge the two namespaces so most callers can rename without rewriting logic.
+
+This page walks you through every breaking change. Work top-to-bottom; nothing later depends on something earlier you skipped.
+
+## TL;DR
+
+1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.3`. Pin an **exact** version.
+2. Delete `@umbra-privacy/web-zk-prover` from `package.json`. The prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
+3. Move every operation factory import from the main barrel to its **named subpath** (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`).
+4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, ATA → ATA, encrypted balance → ETA).
+5. Rewrite the scanner call: zero-arg in V5, results bucketed by `(kind, source)` under long-form keys.
+6. Burner factories take a new `relayer` dep — `{ submitBurn, pollBurnStatus, getRelayerAddress }` — these are TypeScript aliases of the relayer client's existing `submitClaim` / `pollClaimStatus` / `getRelayerAddress`, so plug in the same client unchanged.
+7. (Browser) Wire `utxoDataStore` + `nullifierStore` from `@umbra-privacy/sdk/store-adapters`. Without them every `scan()` walks every active tree from genesis.
+8. (Mainnet) Mint list adds `CASH`. (Devnet) Mint list: wSOL, dUSDC, dUSDT, STREAMFLOW.
+
+The rest of this page expands each step with before/after code.
+
+---
+
+## 1. Package consolidation
+
+**V4**
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "@umbra-privacy/sdk": "^4.0.0",
+    "@umbra-privacy/web-zk-prover": "^2.0.0"
+  }
+}
+```
+
+```typescript
+// app code
+import { getCreateReceiverClaimableUtxoFromPublicBalanceProver } from "@umbra-privacy/web-zk-prover";
+import { getCdnZkAssetProvider } from "@umbra-privacy/web-zk-prover/cdn";
+```
+
+**V5**
+
+```jsonc
+{
+  "dependencies": {
+    "@umbra-privacy/sdk": "5.0.0-rc.3"
+  }
+}
+```
+
+```typescript
+// Creator prover factories were renamed in V5:
+import { getATAIntoStealthPoolNoteCreatorProver } from "@umbra-privacy/sdk/zk-prover";
+// Burner prover factories kept V4 spellings:
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
+import { getCdnZkAssetProvider } from "@umbra-privacy/sdk/zk-prover/cdn";
+```
+
+**Why pin?** ZK assets are versioned in lockstep with the package. A floating version (`^5.0.0`) can resolve a manifest that points at a different circuit hash than the one your wallet's master seed was set up for.
+
+**Prover naming:** The **burner** prover factories (`getClaim…`) retained their V4 spellings. The **creator** prover factories were renamed — `getATAIntoStealthPoolNoteCreatorProver` (ATA-source) and `getETAIntoStealthPoolNoteCreatorProver` (ETA-source).
+
+If you also imported the package's CJS build paths or had a webpack alias for `web-zk-prover`, remove them.
+
+If your scaffold has a Next.js `transpilePackages` block, remove the `web-zk-prover` entry:
+
+```typescript
+// next.config.ts — before
+transpilePackages: ["@umbra-privacy/sdk", "@umbra-privacy/web-zk-prover"]
+// after
+transpilePackages: ["@umbra-privacy/sdk"]
+```
+
+---
+
+## 2. Subpath imports
+
+The V5 main barrel re-exports only:
+
+- `getUmbraClient`, the four signer factories, the error hierarchy, `Result<T,E>` helpers.
+- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, RPC providers, transaction forwarders.
+
+**Every operation factory now lives behind a named subpath.**
+
+| What you import | V4 path | V5 path |
+|---|---|---|
+| `getUmbraClient`, signer factories, `getUmbraRelayer` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk` (unchanged) |
+| `getUserRegistrationFunction` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/registration` |
+| Direct depositor + 4 note creators | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/deposit` |
+| Direct withdrawer | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/withdrawal` |
+| Scanner + 3 burner factories + `enrichWithMerkleProof` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/burn` |
+| Account + balance queriers | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/query` |
+| MXE→Shared converter | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/conversion` |
+| Compliance grant + reencrypt + querier | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/compliance` |
+| Staged-token recoverers, key rotators, maintenance | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/account` |
+| ZK provers | `@umbra-privacy/web-zk-prover` | `@umbra-privacy/sdk/zk-prover` |
+| CDN asset provider | `@umbra-privacy/web-zk-prover/cdn` | `@umbra-privacy/sdk/zk-prover/cdn` |
+| Browser store adapters | (new) | `@umbra-privacy/sdk/store-adapters` |
+| `UMBRA_MESSAGE_TO_SIGN` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/shared` |
+| Branded type helpers (`createU64`, etc.) | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/types` |
+| `generateRandomNonce` | `@umbra-privacy/sdk/utils` | `@umbra-privacy/sdk/arcium` (also re-exported from the main barrel) |
+| Function-type aliases | `@umbra-privacy/sdk/interfaces` | the same subpath as the factory |
+| Error classes + `is*` guards | `@umbra-privacy/sdk/errors` | `@umbra-privacy/sdk/errors` (unchanged) |
+| `BPS_DIVISOR` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/shared` |
+| mint lists | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/constants` |
+
+There is no `@umbra-privacy/sdk/interfaces` re-export in V5. Function-type aliases (`SelfBurnableStealthPoolNoteFromEncryptedTokenAccountCreatorFunction`, etc.) ship alongside their factories — import them from the same subpath.
+
+---
+
+## 3. Factory renames
+
+Names lengthened to spell out the data flow end-to-end. The vocabulary swap:
+
+- **`UTXO`** → **`Stealth Pool Note`** (in factory names + result types; on-chain commitments and the indexer route are still called UTXOs).
+- **`Claim`** → **`Burn`** (in factory names + lifecycle hooks; the wire endpoint is still `/v1/claims`).
+- **`ATA` / `PublicBalance`** → **`AssociatedTokenAccount` (ATA)** in factory names.
+- **`EncryptedBalance`** → **`EncryptedTokenAccount` (ETA)** in factory names.
+
+### Deposits
+
+| V4 | V5 (subpath `/deposit`) |
+|---|---|
+| `getPublicBalanceToEncryptedBalanceDirectDepositorFunction` | `getATAIntoETADirectDepositorFunction` |
+| `getPublicBalanceToSelfClaimableUtxoCreatorFunction` | `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` |
+| `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` | `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` |
+| `getEncryptedBalanceToSelfClaimableUtxoCreatorFunction` | `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` |
+| `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` | `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` |
+
+### Withdrawal
+
+| V4 | V5 (subpath `/withdrawal`) |
+|---|---|
+| `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction` | `getETAIntoATAWithdrawerFunction` |
+
+### Scan + burn
+
+| V4 | V5 (subpath `/burn`) |
+|---|---|
+| `getClaimableUtxoScannerFunction` | `getBurnableStealthPoolNoteScannerFunction` |
+| `getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction` | `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` |
+| `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction` | `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` |
+| `getSelfClaimableUtxoToPublicBalanceClaimerFunction` | `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` |
+| *(new in V5)* | `getTransferorFunction` (in `@umbra-privacy/sdk/transfer`) — ETA-to-ETA direct transfer, 8 variants |
+
+The `getReceiverClaimableUtxoToPublicBalanceClaimerFunction` variant from V4 is **not yet shipped in V5** — the on-chain instruction exists, but the SDK factory has not been written. Use receiver-into-ETA, then a regular withdrawal, until it lands.
+
+### Conversion + key rotation
+
+| V4 | V5 |
+|---|---|
+| `getNetworkEncryptionToSharedEncryptionConverterFunction` (main barrel) | `getNetworkEncryptionToSharedEncryptionConverterFunction` (now `@umbra-privacy/sdk/conversion`) |
+| `getMintEncryptionKeyRotatorFunction` (main barrel) | `getMintEncryptionKeyRotatorFunction` (name unchanged; moved to `@umbra-privacy/sdk/account`) |
+| `getRotateUserAccountX25519KeyFunction` | `getUserEncryptionKeyRotatorFunction` (in `@umbra-privacy/sdk/account`) |
+| `getRotateMvkX25519KeyFunction` | `getMasterViewingKeyRotatorFunction` (in `@umbra-privacy/sdk/account`) |
+
+### Account recovery + maintenance
+
+| V4 | V5 (subpath `/account`) |
+|---|---|
+| `getClaimStagedSolFromPoolFunction` | `getStagedSolRecovererFunction` |
+| `getClaimStagedSplFromPoolFunction` | `getStagedSplRecovererFunction` |
+| `getUpdateRandomGenerationSeedFunction` | `getUserEntropySeedRotatorFunction` |
+| `getUpdateTokenAccountRandomGenerationSeedFunction` | `getTokenEntropySeedRotatorFunction` |
+
+### Compliance
+
+| V4 | V5 (subpath `/compliance`) |
+|---|---|
+| `getComplianceGrantIssuerFunction` | `getComplianceGrantIssuerFunction` (unchanged) |
+| `getComplianceGrantRevokerFunction` | `getComplianceGrantRevokerFunction` (unchanged) |
+| `getUserComplianceGrantQuerierFunction` | `getUserComplianceGrantQuerierFunction` (unchanged) |
+| `getQueryNetworkMxeComplianceGrantFunction` | `getNetworkComplianceGrantQuerierFunction` |
+| `getQueryNetworkSharedComplianceGrantFunction` | `getSharedComplianceGrantQuerierFunction` |
+| `getReencryptMxeCiphertextsNetworkGrantFunction` | `getNetworkCiphertextReencryptorForNetworkGrantFunction` |
+| `getSharedCiphertextReencryptorForUserGrantFunction` | `getSharedCiphertextReencryptorForUserGrantFunction` (unchanged) |
+| `getSharedCiphertextReencryptorForNetworkGrantFunction` | `getSharedCiphertextReencryptorForNetworkGrantFunction` (unchanged) |
+
+---
+
+## 4. Scanner API rewrite
+
+V4's scanner took three positional args (`treeIndex`, `start`, `end?`) and returned proof-bundled UTXO data under four short-form keys. V5's scanner is **zero-arg**: it walks every active tree automatically, with the cursor persisted in `client.utxoDataStore`.
+
+The scanner **no longer bundles Merkle proofs**. Proofs are fetched per batch at burn time so a single proof set is shared across an entire batch — far cheaper than fetching one proof per note. The burner factory handles the per-batch fetch internally; you do not need to call `enrichWithMerkleProof` yourself unless you are building a custom burn pipeline.
+
+**V4**
+
+```typescript
+import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
+
+const scan   = getClaimableUtxoScannerFunction({ client });
+const result = await scan(0, 0); // (treeIndex, startInsertionIndex, endInsertionIndex?)
+
+console.log("Self-burnable from ETA:", result.selfBurnable.length);
+console.log("Receiver from ETA:",      result.received.length);
+console.log("Self-burnable from ATA:", result.publicSelfBurnable.length);
+console.log("Receiver from ATA:",      result.publicReceived.length);
+
+// Pass directly to a V4 claimer — the UTXOs come with Merkle proofs attached.
+await claim(result.received);
+```
+
+**V5**
+
+```typescript
+import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/burn";
+
+const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
+const result = await scan(); // zero-arg
+
+console.log("Self-burnable from ETA:    ", result.etaToStealthPoolSelfBurnable.length);
+console.log("Receiver from ETA:         ", result.etaToStealthPoolReceiverBurnable.length);
+console.log("Self-burnable from ATA:   ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Receiver from ATA:        ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Scanned trees:             ", result.scannedTrees.length);
+
+// Pass directly to a V5 burner — it fetches per-batch proofs internally.
+await burn(result.etaToStealthPoolReceiverBurnable);
+```
+
+Bucket key rename map:
+
+| V4 result key | V5 result key |
+|---|---|
+| `selfBurnable` | `etaToStealthPoolSelfBurnable` |
+| `received` | `etaToStealthPoolReceiverBurnable` |
+| `publicSelfBurnable` | `ataToStealthPoolSelfBurnable` |
+| `publicReceived` | `ataToStealthPoolReceiverBurnable` |
+
+The result object also gains `scannedTrees: readonly ScannedTreeProgress[]` so you can display per-tree progress in your UI.
+
+---
+
+## 5. Burner factory `relayer` dep
+
+V5's burner factories accept a new `relayer` dep — a three-property adapter built from the relayer client. The property names use the V5 vocabulary but are **TypeScript aliases** of the claim equivalents, so the relayer client's existing methods plug in directly.
+
+**V4**
+
+```typescript
+import {
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const relayer  = getUmbraRelayer({ apiEndpoint });
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+
+const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+  { client },
+  { zkProver, relayer }, // V4: pass the relayer object as-is
+);
+
+await claim(utxos);
+```
+
+**V5**
+
+```typescript
+import { getReceiverBurnableStealthPoolNoteIntoETABurnerFunction } from "@umbra-privacy/sdk/burn";
+import { getUmbraRelayer } from "@umbra-privacy/sdk";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
+
+const r        = getUmbraRelayer({ apiEndpoint });
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
+
+const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
+  { client },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        r.submitClaim,         // alias: BurnSubmitter ≡ ClaimSubmitter
+      pollBurnStatus:    r.pollClaimStatus,     // alias: BurnStatusPoller ≡ ClaimStatusPoller
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
+);
+
+await burn(notes);
+```
+
+Two new required deps to be aware of:
+
+- **`fetchBatchMerkleProof`** — pass `client.fetchBatchMerkleProof` (auto-wired when `indexerApiEndpoint` is set on the client). Replaces V4's pre-fetched proof bundle.
+- **`relayer: { submitBurn, pollBurnStatus, getRelayerAddress }`** — explicit three-property adapter. V4 accepted the full relayer client; V5 wants only these three methods.
+
+### Burn result shape
+
+V4 claimers returned `{ signatures: Record<number, TransactionSignature[]> }`. V5 burners return `BurnStealthPoolNoteIntoETAResult` (or `…IntoAssociatedTokenAccountResult` for the ATA variant):
+
+```typescript
+interface BurnStealthPoolNoteIntoETAResult {
+  readonly signatures: readonly TransactionSignature[]; // from OperationOutcome — every tx submitted
+  readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
+}
+
+interface BurnBatchResult {
+  readonly requestId: string;                  // relayer-assigned tracking ID
+  readonly status: BurnStatus;
+  readonly txSignature?: string;               // on-chain burn tx (when landed)
+  readonly callbackSignature?: string;         // MPC callback tx (when finalised)
+  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v17"
+  readonly failureReason?: string | null;
+  readonly stealthPoolNoteIds?: readonly string[]; // "treeIndex:leafIndex" pairs
+}
+
+type BurnStatus =
+  | "received" | "validating" | "offsets_reserved" | "building_tx" | "tx_built"
+  | "submitting" | "submitted" | "awaiting_callback" | "callback_received"
+  | "finalizing" | "completed" | "failed" | "timed_out" | "refunded";
+```
+
+`completed` / `callback_received` indicate success. The signature to surface to the user is `callbackSignature ?? txSignature`. A `failureReason` containing `NullifierAlreadyBurnt` is **idempotent success** — the burner factory handles this internally.
+
+### Burner function signature
+
+V5 burners take **three** positional args (one more than V4):
+
+```typescript
+type ReceiverBurnerFn = (
+  stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "receiver-burnable" })[],
+  optionalData?: OptionalData32,
+  microLamportsPerAcu?: MicroLamportsPerAcu,  // NEW in V5 — per-call priority fee
+) => Promise<BurnStealthPoolNoteIntoETAResult>;
+```
+
+### Batching is unchanged conceptually
+
+- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤4 per proof (`MAX_STEALTH_POOL_NOTES_PER_PROOF = 4`). Pass the whole array.
+- **Self-burnable → ETA / ATA** has `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array.
+
+---
+
+## 6. Store adapters (browser)
+
+V4 had no opinionated cursor / nullifier store — every scanner call walked every tree from genesis. V5 ships `createBrowserStorageBackend`, `createShardedUtxoDataStore`, and `createShardedNullifierStore` for browser persistence; and `createFileStorageBackend` for Node.js file-backed persistence.
+
+**On the browser, wire these.** Without them every `scan()` re-scans every active tree from genesis — fine on devnet, crippling on mainnet.
+
+```typescript
+import { getUmbraClient } from "@umbra-privacy/sdk";
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
+
+const storageBackend = createBrowserStorageBackend({ dbName: `umbra-${walletPubkey}` });
+const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
+const nullifierStore = createShardedNullifierStore({ storageBackend });
+
+const client = await getUmbraClient({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  indexerApiEndpoint,
+  utxoDataStore,   // NEW in V5
+  nullifierStore,  // NEW in V5
+});
+```
+
+Key the IndexedDB database **per-wallet** (e.g. `dbName: \`umbra-${walletPubkey}\``). A wallet swap mid-session must not load the previous wallet's stores.
+
+On Node.js or short-lived scripts, you can omit the stores — the scanner falls back to in-memory state.
+
+---
+
+## 7. Mint list changes
+
+- **Mainnet** gained `CASH` (`CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`). Mainnet list (5): wSOL, USDC, USDT, UMBRA, CASH.
+- **Devnet** mint list: wSOL, dUSDC, dUSDT, STREAMFLOW (dUSDC / dUSDT from [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/)).
+- **Localnet** stayed wSOL only.
+
+If your code hard-codes a mint allowlist, update it. The authoritative source at runtime is `relayer.getSupportedMints()` — call it once at app boot and cache for the session.
+
+---
+
+## 8. `UMBRA_MESSAGE_TO_SIGN` moved
+
+The deterministic consent message used for master-seed derivation now ships under the `/shared` subpath:
+
+```typescript
+// V4
+import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
+
+// V5
+import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk/shared";
+```
+
+The **bytes are unchanged** — your existing users' master seeds re-derive identically. Only the import path changed.
+
+---
+
+## 9. Registration hooks rewrite
+
+V5 registration replaces V4's `callbacks: { pre, post }` shape with `hooks: RegistrationHooks` — named per-step slots with `{ onPreSend, onPostSend, onSkipped }` plus top-level phase hooks.
+
+The on-chain instructions also changed: V4 emitted up to **three** transactions (account init, X25519 key registration, user commitment registration). V5 has the same three logical steps, but the underlying instructions now `init_if_needed` the user account, so the init step is usually folded into the X25519 step when account creation and key registration happen together.
+
+V5 registration hooks expose **three** skippable slots — each fires `onSkipped` when on-chain state already satisfies it:
+
+- `initUserAccount` — base `EncryptedUserAccount` PDA.
+- `registerX25519PublicKey` — X25519 token-encryption key.
+- `registerAnonymousUsage` — user-commitment registration via MPC + ZK.
+
+```typescript
+// V4 — callbacks: { pre, post } shape
+await register({
+  confidential: true,
+  anonymous: true,
+  callbacks: {
+    userAccountInitialisation:     { pre: async (tx) => …,         post: async (tx, sig) => … },
+    registerX25519PublicKey:       { pre: async (tx) => …,         post: async (tx, sig) => … },
+    registerUserForAnonymousUsage: { pre: async (tx) => …,         post: async (tx, sig) => … },
+  },
+});
+
+// V5 — hooks: RegistrationHooks shape (renamed slot + new hook event shape)
+await register({
+  confidential: true,
+  anonymous: true,
+  hooks: {
+    // Top-level phase hooks (new in V5)
+    onValidationStart:      async () => …,
+    onAccountFetchComplete: async ({ userAccountExists, hasX25519Key, isAnonymous }) => …,
+    onKeyDerivationComplete: async ({ elapsedMs }) => …,
+
+    // Per-step slots — { onPreSend, onPostSend, onSkipped }
+    initUserAccount: {
+      onSkipped:  async ({ reason }) => …,
+      onPreSend:  async ({ signedTransaction }) => …,
+      onPostSend: async ({ signature }) => …,
+    },
+    registerX25519PublicKey: {
+      onSkipped:  async ({ reason }) => …,
+      onPreSend:  async () => …,
+      onPostSend: async ({ signature }) => …,
+    },
+    registerAnonymousUsage: {
+      onSkipped:  async ({ reason }) => …,
+      onPreSend:  async () => …,
+      onPostSend: async ({ signature }) => …,
+    },
+
+    onComplete: async (result) => …,
+    onError:    async ({ phase, error }) => …,
+  },
+});
+```
+
+V4 → V5 slot rename map:
+
+| V4 callbacks slot | V5 hooks slot |
+|---|---|
+| `userAccountInitialisation` | `initUserAccount` |
+| `registerX25519PublicKey` | `registerX25519PublicKey` (unchanged) |
+| `registerUserForAnonymousUsage` | `registerAnonymousUsage` |
+
+Event-shape changes:
+
+- `pre(tx)` → `onPreSend({ signedTransaction })`.
+- `post(tx, sig)` → `onPostSend({ signature })`.
+- New: `onSkipped({ reason })` fires when a step is a no-op because on-chain state already satisfies it.
+- New: anonymous-usage step is an MPC step (`SkippableMpcTransactionStepHooks`) and additionally exposes `onMonitorStarted`, `onProgress`, `onFinalized`, `onRentReclaimSubmitted`, `onRentReclaimError` (see `MpcTransactionStepHooks`).
+
+---
+
+## 10. Options-shape change: `callbacks: TransactionCallbacks` → `hooks` (per-operation)
+
+V4 deposits, withdrawals, conversions, and registrations all took a generic `callbacks: { pre, post }` object. V5 replaces it with a per-operation **`hooks`** object whose shape is specific to that operation — named per-phase / per-step slots, each with a typed event object.
+
+V4 → V5 option-field changes on the **direct deposit / withdraw**:
+
+| V4 option | V5 |
+|---|---|
+| `priorityFees?: U64` | removed (priority fees are factory-time config) |
+| `purpose?: number` | removed |
+| `awaitCallback?: boolean` | removed (callback waiting is always on; the result's `callback?` field is populated on success) |
+| `skipPreflight?: boolean` | removed |
+| `maxRetries?: number` | removed (configure `deps.transactionForwarder` at factory time) |
+| `epochInfoCommitment?: Commitment` | retained on deposit; removed on withdrawal |
+| `callbacks?: TransactionCallbacks` | replaced by `hooks?: …DirectDepositHooks` / `…DirectWithdrawHooks` |
+| (new) | `computationOffset?: U64` (withdrawal) |
+| (new) | `mpcCallbackDataOffset?: U128` (withdrawal) |
+| (new) | `feeVaultOffset?: U128` (withdrawal) |
+| (new) | `destinationProgram?: Address` (withdrawal observer-CPI) |
+
+V4 → V5 option-field changes on **conversion**:
+
+| V4 | V5 |
+|---|---|
+| `convert(mints, optionalData, callbacks)` | `convert(mints, optionalData, hooks?, microLamportsPerAcu?)` |
+
+V4 → V5 result-shape change on **deposit / withdraw**:
+
+| V4 result field | V5 result field |
+|---|---|
+| `queueSignature: TransactionSignature` | `queueSignature: TransactionSignature` (unchanged) |
+| `callbackStatus?: "finalized" \| "pruned" \| "timed-out"` | flattened into `callback?: { status, signature?, elapsedMs }` (discriminated) |
+| `callbackSignature?: TransactionSignature` | inside `callback.signature` (when `status === "finalized"`) |
+| `callbackElapsedMs?: number` | inside `callback.elapsedMs` |
+| `rentClaimSignature?: TransactionSignature` | inside `rentClaim?: { claimed: true, signature } \| { claimed: false, reason }` |
+| `rentClaimError?: string` | inside `rentClaim.reason` (when `claimed: false`) |
+| (new) | `signatures: readonly TransactionSignature[]` — full submission list from `OperationOutcome` |
+
+---
+
+## 11. Error class names
+
+Error class names are **unchanged** for backwards compatibility — even though `ClaimUtxoError` is now thrown by burner factories that operate on "Stealth Pool Notes", the class kept its V4 spelling so existing `isClaimUtxoError(err)` guards still work.
+
+The `FetchUtxosStage` enum gained two values in V5 (no V4 equivalents):
+
+- `"proof-fetch"` — the burner's per-batch Merkle proof fetch failed.
+- `"proof-enrichment"` — `enrichWithMerkleProof` failed to attach a proof entry to a scanned note.
+
+All other operation `stage` enums are unchanged.
+
+---
+
+## End-to-end before/after
+
+A complete "scan → burn into ETA" flow.
+
+**V4**
+
+```typescript
+import {
+  getUmbraClient,
+  getClaimableUtxoScannerFunction,
+  getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction,
+  getUmbraRelayer,
+} from "@umbra-privacy/sdk";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/web-zk-prover";
+
+const client = await getUmbraClient({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  indexerApiEndpoint,
+});
+
+const scan   = getClaimableUtxoScannerFunction({ client });
+const result = await scan(0, 0);
+
+const relayer = getUmbraRelayer({ apiEndpoint });
+const claim   = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+  { client },
+  { zkProver: getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(), relayer },
+);
+
+if (result.received.length > 0) {
+  const out = await claim(result.received);
+  console.log("Signatures:", out.signatures);
+}
+```
+
+**V5**
+
+```typescript
+import { getUmbraClient, getUmbraRelayer } from "@umbra-privacy/sdk";
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
+import {
+  getBurnableStealthPoolNoteScannerFunction,
+  getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
+} from "@umbra-privacy/sdk/burn";
+import { getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver } from "@umbra-privacy/sdk/zk-prover";
+
+const storageBackend = createBrowserStorageBackend({ dbName: `umbra-${signer.address}` });
+const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
+const nullifierStore = createShardedNullifierStore({ storageBackend });
+
+const client = await getUmbraClient({
+  signer,
+  network: "mainnet",
+  rpcUrl,
+  rpcSubscriptionsUrl,
+  indexerApiEndpoint,
+  utxoDataStore,
+  nullifierStore,
+});
+
+const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
+const result = await scan();
+
+// The relayer is constructed separately — it is not a getUmbraClient argument.
+const r    = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
+  { client },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver: getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(),
+    relayer: {
+      submitBurn:        r.submitClaim,
+      pollBurnStatus:    r.pollClaimStatus,
+      getRelayerAddress: r.getRelayerAddress,
+    },
+  },
+);
+
+const notes = result.etaToStealthPoolReceiverBurnable;
+if (notes.length > 0) {
+  const out = await burn(notes);
+  for (const [batchIndex, b] of out.batches) {
+    console.log(
+      "Batch",   batchIndex,
+      "status:", b.status,
+      "id:",     b.requestId,
+      "sig:",    b.callbackSignature ?? b.txSignature,
+    );
+  }
+}
+```
+
+---
+
+## Compatibility checklist
+
+After migrating, verify each:
+
+- [ ] `package.json` pins `@umbra-privacy/sdk` to an exact version; `@umbra-privacy/web-zk-prover` is removed.
+- [ ] No imports from `@umbra-privacy/web-zk-prover` (replaced with `@umbra-privacy/sdk/zk-prover`).
+- [ ] No imports of `@umbra-privacy/sdk/interfaces` or `@umbra-privacy/sdk/utils` (V4-only subpaths).
+- [ ] Every V4 factory name above has been renamed to its V5 counterpart.
+- [ ] `getUmbraClient(...)` includes `indexerApiEndpoint` and, on browser, `utxoDataStore` + `nullifierStore`. The relayer is built separately via `getUmbraRelayer({ apiEndpoint })`.
+- [ ] Scanner is invoked with no arguments and result keys are dereferenced with the long-form names.
+- [ ] Burner factories receive `fetchBatchMerkleProof: client.fetchBatchMerkleProof!` and a `relayer: { submitBurn, pollBurnStatus, getRelayerAddress }` adapter.
+- [ ] Mainnet mint allowlist includes `CASH`; devnet allowlist includes wSOL, dUSDC, dUSDT, STREAMFLOW.
+- [ ] `UMBRA_MESSAGE_TO_SIGN` is imported from `@umbra-privacy/sdk/shared`.
+- [ ] `getEncryptedBalanceQuerierFunction` result `switch` covers the discriminator strings `"shared"`, `"mxe"`, `"uninitialized"`, `"non_existent"` (was `{ state: "exists", data: { mode } }` in V4 — flattened in V5).
+- [ ] Removed `callbacks: { pre, post }` from every call site. Deposits / withdrawals / conversions use `options.hooks` (typed per-operation hooks interface); registration uses `options.hooks: RegistrationHooks` with `{ onPreSend, onPostSend, onSkipped }` per-step slots.
+- [ ] Removed dead options from deposit / withdraw call sites: `priorityFees`, `purpose`, `awaitCallback`, `skipPreflight`, `maxRetries`.
+- [ ] Update `DepositResult` / `WithdrawResult` consumers: flat `callbackSignature` / `callbackStatus` / `rentClaimSignature` fields no longer exist — read `result.callback?.signature` (only present when `result.callback?.status === "finalized"`) and `result.rentClaim?.signature` (only when `result.rentClaim?.claimed === true`).
+- [ ] Run the SDK against devnet and verify a full register → deposit → write note → scan → burn round-trip succeeds before deploying to mainnet.
+
+---
+
+## Forward-compatibility note
+
+The V5 surface is the **target shape** going forward. Future minor releases will add factories (e.g. receiver-burnable → ATA), additional store backends, and ergonomic helpers — but the existing V5 factory names, subpath layout, and `relayer` dep shape are stable.

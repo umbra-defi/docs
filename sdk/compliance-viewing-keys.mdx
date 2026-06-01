@@ -1,20 +1,20 @@
 ---
-title: "Mixer Pool Viewing Keys"
-description: "MVK hierarchy: master viewing key (BN254) derived via KMAC256, Poseidon-derived temporal and per-mint scoped keys. Grant auditors read access to specific mixer UTXO time windows or tokens."
+title: "Stealth Pool Viewing Keys"
+description: "MVK hierarchy: master viewing key (BN254) derived via KMAC256, Poseidon-derived temporal and per-mint scoped keys. Grant auditors read access to specific Stealth Pool Note time windows or tokens."
 ---
 
 ## What Are Viewing Keys?
 
-The **master viewing key** (MVK) is a 252-bit BN254 field element derived deterministically from your master seed. It sits at the root of a hierarchical key system that lets you grant scoped read access to your mixer pool activity without ever exposing the root key or any data outside the defined scope.
+The **master viewing key** (MVK) is a 252-bit BN254 field element derived deterministically from your master seed. It sits at the root of a hierarchical key system that lets you grant scoped read access to your Stealth Pool activity without ever exposing the root key or any data outside the defined scope.
 
 Viewing keys are designed for compliance and audit use cases:
 - Provide an auditor or regulator access to transactions within a specific time window
 - Grant a compliance officer access to all activity for a specific token
 - Share full visibility at the master level with a tax advisor or legal counterparty
-- Prove to an exchange that specific UTXOs originated from you
+- Prove to an exchange that specific Stealth Pool Notes originated from you.
 
 <Note>
-Viewing keys are read-only credentials. Possessing a viewing key does not allow spending UTXOs or withdrawing balances. They can only be used to decrypt ciphertext data that was encrypted under the associated key.
+Viewing keys are read-only credentials. Possessing a viewing key does not allow burning Stealth Pool Notes or withdrawing balances. They can only be used to decrypt ciphertext data that was encrypted under the associated key — specifically the `pc_encrypted_*` (Poseidon stream cipher) fields on a note. They cannot decrypt the AES-GCM or Rescue ciphertexts.
 </Note>
 
 ## The Viewing Key Hierarchy
@@ -51,7 +51,7 @@ Each level of the hierarchy has a corresponding deriver factory function. Pass `
 ### Master Viewing Key
 
 ```typescript
-import { getMasterViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getMasterViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 
 // Derives the root of the hierarchy
 const deriveMvk = getMasterViewingKeyDeriver({ client });
@@ -68,7 +68,7 @@ The master viewing key gives unrestricted read access to all your mixer activity
 ### Mint Viewing Key
 
 ```typescript
-import { getMintViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getMintViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -83,7 +83,7 @@ console.log("USDC Viewing Key:", mintVk.toString());
 ### Yearly Viewing Key
 
 ```typescript
-import { getYearlyViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getYearlyViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 import type { Year } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -99,7 +99,7 @@ console.log("2025 USDC Viewing Key:", yearlyVk.toString());
 ### Monthly Viewing Key
 
 ```typescript
-import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 import type { Year, Month } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -115,7 +115,7 @@ console.log("Feb 2025 USDC Viewing Key:", monthlyVk.toString());
 ### Daily Viewing Key
 
 ```typescript
-import { getDailyViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getDailyViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 import type { Year, Month, Day } from "@umbra-privacy/sdk/types";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -157,7 +157,7 @@ function importViewingKeyHex(hex: string): bigint {
 ### Sharing Example
 
 ```typescript
-import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk";
+import { getMonthlyViewingKeyDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 import type { Year, Month } from "@umbra-privacy/sdk/types";
 
 // 1. Choose a scope - e.g., monthly key for an audit of Q1 2025
@@ -219,15 +219,16 @@ This structure means:
 ## What Auditors Can Do With a Viewing Key
 
 An auditor who holds a viewing key can:
-- Scan the mixer pool (Indexed Merkle Tree) for UTXOs that were encrypted under the corresponding key
-- Decrypt the UTXO payloads to learn the amount and recipient
-- Verify that specific transactions occurred within the defined scope
+- Scan the Stealth Pool (Indexed Merkle Tree) for notes that were encrypted under the corresponding key.
+- Decrypt the note `pc_encrypted_*` payloads (Poseidon stream cipher) to learn the amount and recipient.
+- Verify that specific transactions occurred within the defined scope.
 
 An auditor cannot:
-- Access any data outside the scope of the key they hold
-- Claim UTXOs (viewing keys are read-only, not spending keys)
-- Link the activity to any adjacent scope without the parent key
+- Access any data outside the scope of the key they hold.
+- Burn Stealth Pool Notes — viewing keys are read-only, not spending keys.
+- Link the activity to any adjacent scope without the parent key.
+- Decrypt the X25519 + AES-GCM ciphertext (`aes_encrypted_data`) or the Rescue ciphertext (`rc_encrypted_*`) — those use independent keys.
 
 <Note>
-SDK utilities for auditors to scan the mixer pool and decrypt UTXO ciphertexts using viewing keys are on the roadmap. The key generation and export functionality described on this page is available today.
+No opinionated `getViewingKey…NoteScannerFunction` factory is shipped — auditors compose one from the shipped primitives. Pattern (~50 lines): for each note, call `getSecondViewingKeyDeriver` for the granted scope, then call `getPoseidonDecryptor` with the Second Viewing Key as the cipher `key` to recover the plaintext. The decryptor takes only `(ciphertexts, key)` and generates the keystream internally.
 </Note>

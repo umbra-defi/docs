@@ -1,6 +1,6 @@
 ---
 title: "Branded Types"
-description: "Branded types with phantom symbol branding: createU64, createU128, createBn254FieldElement, createX25519PublicKey. Prevents silent bigint/Uint8Array misuse at compile time, zero runtime cost."
+description: "Branded types with phantom symbol branding: createU64, createU256, createBn254FieldElement, createCurve25519FieldElement. Prevents silent bigint/Uint8Array misuse at compile time, zero runtime cost."
 ---
 
 ## Why Branded Types Exist
@@ -15,8 +15,8 @@ function encryptBalance(key: bigint, plaintext: bigint) { ... }
 encryptBalance(myBalance, myKey); // Oops — args are swapped, no error
 
 // With branding — the compiler catches the swap:
-function encryptBalance(key: RcKey, plaintext: RcPlaintext) { ... }
-encryptBalance(myBalance, myKey); // Error: RcPlaintext is not assignable to RcKey
+function encryptBalance(key: RescueCipherKey, plaintext: RescueCipherPlaintext) { ... }
+encryptBalance(myBalance, myKey); // Error: RescueCipherPlaintext is not assignable to RescueCipherKey
 ```
 
 ---
@@ -28,7 +28,7 @@ The SDK's branded types form a hierarchy. A more specific type is always assigna
 **Integer types** (base: `bigint`):
 - `U64` — 64-bit unsigned integer (`0` to `2^64 - 1`). Used for token amounts and instruction parameters.
 - `U128` — 128-bit unsigned integer. Used for instruction seeds and generation indices.
-- `U256` — 256-bit unsigned integer. Used for UTXO commitment preimages and random generation seeds.
+- `U256` — 256-bit unsigned integer. Used for Stealth Pool Note commitment preimages and random generation seeds.
 
 **Cryptographic field elements** (base: `bigint`, extend `U256`):
 - `Bn254FieldElement` — BN254 scalar field element. Strict upper bound: the BN254 field prime.
@@ -37,14 +37,15 @@ The SDK's branded types form a hierarchy. A more specific type is always assigna
 **Poseidon types** (extend `Bn254FieldElement`):
 - `PoseidonKey` — Encryption key for the Poseidon cipher scheme. Derived from the user's master seed.
 
-**Rescue Cipher types** (extend `Curve25519FieldElement`):
-- `RcPlaintext` — An unencrypted balance value.
-- `RcCiphertext` — An encrypted balance value stored on-chain.
-- `RcKey` — A session encryption key derived from the Poseidon key and account nonce.
-- `RcEncryptionNonce` — The monotonically increasing counter (derived from `generationIndex`) that ensures each encryption produces a distinct ciphertext.
+**Rescue Cipher types** (extend `Curve25519FieldElement`, except the nonce):
+- `RescueCipherPlaintext` — An unencrypted balance value.
+- `RescueCipherCiphertext` — An encrypted balance value stored on-chain.
+- `RescueCipherKey` — A session encryption key derived from the Poseidon key and account nonce.
+- `RescueCipherCounter` — The Rescue CTR-mode counter, advanced once per block.
+- `RescueCipherEncryptionNonce` — The monotonically increasing 128-bit counter (a sub-brand of `U128`, **not** a field element) that initialises the cipher's CTR state so each encryption produces a distinct ciphertext.
 
 **Protocol types** (base: `Uint8Array` or `bigint`):
-- `OptionalData32` — A 32-byte opaque payload stored alongside deposits and claims.
+- `OptionalData32` — A 32-byte opaque payload stored alongside deposits and burns. Must be encrypted or hashed — never store plaintext identifiers.
 - `MicroLamportsPerAcu` — Priority fee in micro-lamports per Arcium Computation Unit.
 
 **Byte array types** (base: `Uint8Array`):
@@ -62,50 +63,43 @@ Each helper:
 2. **Brands** the value — returns it typed as the specific branded type.
 3. **Throws** a descriptive error (never silently returns `undefined`) if validation fails.
 
-Import helpers from `@umbra-privacy/sdk`:
+Import helpers from `@umbra-privacy/sdk/types`:
 
 ```typescript
 import {
   createU64,
-  createU128,
   createU256,
   createBn254FieldElement,
   createCurve25519FieldElement,
   createPoseidonKey,
-  createRcPlaintext,
-  createRcCiphertext,
-  createRcKey,
-  createRcEncryptionNonce,
-  createBase85Limb,
-  createOptionalData32,
-  createMicroLamportsPerAcu,
-} from "@umbra-privacy/sdk";
+  createRescueCipherPlaintext,
+} from "@umbra-privacy/sdk/types";
 ```
+
+<Note>
+These six are the only `create*` brand helpers the SDK exports. Other branded types (`U128`, `RescueCipherCiphertext`, `RescueCipherKey`, `OptionalData32`, etc.) have an `assert*` predicate but no `create*` wrapper — for those, call the matching `assert*` and re-type, or rely on the SDK functions that produce them.
+</Note>
 
 ### Mathematics Helpers
 
 These are the helpers you will use most often. Token amounts, offsets, and protocol-level integers all go through here.
 
+Every `create*` helper (except `createPoseidonKey`) takes a **single object argument** — `{ value, name? }`. The optional `name` is used only in the error message.
+
 ```typescript
 // createU64 — validate and brand a bigint as a 64-bit unsigned integer.
 // Use for token amounts, fee values, and any U64 parameter.
-const amount: U64 = createU64(1_000_000n, "amount");
+const amount: U64 = createU64({ value: 1_000_000n, name: "amount" });
 
-// Throws MathematicsAssertionError for negative or oversized values:
-createU64(-1n);          // MathematicsAssertionError
-createU64(2n ** 64n);    // MathematicsAssertionError
-```
-
-```typescript
-// createU128 — validate and brand a bigint as a 128-bit unsigned integer.
-// Use for instruction seeds and generation-index-derived values.
-const seed: U128 = createU128(340282366920938463463374607431768211455n, "seed");
+// Throws IntegerAssertionError for negative or oversized values:
+createU64({ value: -1n });          // IntegerAssertionError
+createU64({ value: 2n ** 64n });    // IntegerAssertionError
 ```
 
 ```typescript
 // createU256 — validate and brand a bigint as a 256-bit unsigned integer.
-// Use for UTXO commitment preimages, random generation seeds, and full-width scalars.
-const commitment: U256 = createU256(rawCommitmentBigint, "utxoCommitment");
+// Use for Stealth Pool Note commitment preimages, random generation seeds, and full-width scalars.
+const commitment: U256 = createU256({ value: rawCommitmentBigint, name: "noteCommitment" });
 ```
 
 ### Field Element Helpers
@@ -113,59 +107,67 @@ const commitment: U256 = createU256(rawCommitmentBigint, "utxoCommitment");
 ```typescript
 // createBn254FieldElement — validates that the value is in the BN254 scalar field.
 // Required for Groth16 ZK proof public inputs and Poseidon hash inputs.
-const publicInput: Bn254FieldElement = createBn254FieldElement(leafHash, "leafHash");
+const publicInput: Bn254FieldElement = createBn254FieldElement({ value: leafHash, name: "leafHash" });
 ```
 
 ```typescript
 // createCurve25519FieldElement — validates that the value is in the Curve25519 field.
 // Required for X25519 key derivation.
-const privKey: Curve25519FieldElement = createCurve25519FieldElement(rawKey, "x25519PrivateKey");
+const privKey: Curve25519FieldElement = createCurve25519FieldElement({ value: rawKey, name: "x25519PrivateKey" });
 ```
 
 ```typescript
 // createPoseidonKey — validates a BN254 field element as a Poseidon cipher key.
 // Keys are derived from the user's master seed; call this after derivation.
-const encKey: PoseidonKey = createPoseidonKey(derivedKeyBigint);
+// NOTE: this helper is positional, not object-form: createPoseidonKey(value, name?).
+const encKey: PoseidonKey = createPoseidonKey(derivedKeyBigint, "poseidonKey");
 ```
 
 ### Rescue Cipher Helpers
 
 The Rescue Cipher encrypts on-chain encrypted balances. Keeping plaintexts, ciphertexts, keys, and nonces as distinct types prevents the most dangerous class of encryption bug — passing a ciphertext where the decryptor expects a key.
 
+Only the **plaintext** brand ships a `create*` helper. The ciphertext, key, counter, and nonce brands are produced by the SDK's cipher functions (or, when you must brand a raw value yourself, by their `assert*` predicates: `assertRescueCipherCiphertext`, `assertRescueCipherKey`, `assertRescueCipherCounter`, `assertRescueCipherEncryptionNonce`).
+
 ```typescript
-// createRcPlaintext — the unencrypted balance value before encryption.
-const balance: RcPlaintext = createRcPlaintext(rawBalance, "mxeBalance");
-
-// createRcCiphertext — the encrypted balance stored on-chain.
-const ct: RcCiphertext = createRcCiphertext(rawCiphertext, "encryptedBalance");
-
-// createRcKey — the session key passed to the Rescue Cipher.
-const sessionKey: RcKey = createRcKey(derivedKey, "rcKey");
-
-// createRcEncryptionNonce — the per-account counter derived from generationIndex.
-const nonce: RcEncryptionNonce = createRcEncryptionNonce(generationIndex, "encryptionNonce");
+// createRescueCipherPlaintext — the unencrypted balance value before encryption.
+const balance: RescueCipherPlaintext = createRescueCipherPlaintext({ value: rawBalance, name: "mxeBalance" });
 ```
 
 ### Protocol Helpers
 
-```typescript
-// createOptionalData32 — validates a Uint8Array as a 32-byte optional metadata payload.
-// Used as the optionalData field in deposit, withdraw, and UTXO operations.
-const noData: OptionalData32 = createOptionalData32(new Uint8Array(32));
+`OptionalData32` and `MicroLamportsPerAcu` have **no `create*` wrapper** — they expose only an `assert*` predicate (positional `(value, name?)`). Assert, then the value is narrowed to the brand:
 
-// createMicroLamportsPerAcu — validates a bigint as a priority fee (>= 0).
-// Pass to priorityFees in operation options to speed up processing under load.
-const fee: MicroLamportsPerAcu = createMicroLamportsPerAcu(1000n);
+```typescript
+import { assertOptionalData32, assertMicroLamportsPerAcu } from "@umbra-privacy/sdk/types";
+
+// assertOptionalData32 — validates a Uint8Array as a 32-byte optional metadata payload.
+// Used as the optionalData field in deposit, withdraw, and Stealth Pool Note operations.
+// MUST be a pre-hashed or pre-encrypted 32-byte value — never a plaintext orderId or identifier.
+const noData = new Uint8Array(32);
+assertOptionalData32(noData, "optionalData"); // noData is now OptionalData32
+
+// assertMicroLamportsPerAcu — validates a bigint as a priority fee (a U64, so >= 0).
+// Pass as the `microLamportsPerAcu` option on operation calls to speed up processing under network load.
+const fee = 1000n;
+assertMicroLamportsPerAcu(fee, "microLamportsPerAcu"); // fee is now MicroLamportsPerAcu
 ```
 
 ### Limb Helper
 
+`Base85Limb` likewise has only an `assert*` predicate (positional `(value, name?)`), no `create*` wrapper:
+
 ```typescript
-// createBase85Limb — validates a bigint as a 85-bit limb (0 to 2^85 - 1).
+import { assertBase85Limb } from "@umbra-privacy/sdk/types";
+
+// assertBase85Limb — validates a bigint as an 85-bit limb (0 to 2^85 - 1).
 // Used internally when decomposing 256-bit values into three limbs for ZK circuit inputs.
-const limb0: Base85Limb = createBase85Limb(value & ((1n << 85n) - 1n), "limb0");
-const limb1: Base85Limb = createBase85Limb((value >> 85n) & ((1n << 85n) - 1n), "limb1");
-const limb2: Base85Limb = createBase85Limb(value >> 170n, "limb2");
+const limb0 = value & ((1n << 85n) - 1n);
+const limb1 = (value >> 85n) & ((1n << 85n) - 1n);
+const limb2 = value >> 170n;
+assertBase85Limb(limb0, "limb0");
+assertBase85Limb(limb1, "limb1");
+assertBase85Limb(limb2, "limb2");
 ```
 
 ---
@@ -177,11 +179,11 @@ const limb2: Base85Limb = createBase85Limb(value >> 170n, "limb2");
 User-facing forms and external APIs often produce plain `number` or `string`. Always validate before passing to the SDK:
 
 ```typescript
-import { createU64 } from "@umbra-privacy/sdk";
+import { createU64 } from "@umbra-privacy/sdk/types";
 
 // User input from a form field (string)
 const rawInput = "1000000"; // 1 USDC (6 decimals)
-const amount: U64 = createU64(BigInt(rawInput), "depositAmount");
+const amount: U64 = createU64({ value: BigInt(rawInput), name: "depositAmount" });
 
 // Call the SDK function — amount is now type-safe
 const signature = await deposit("DestinationAddress", mint, amount);
@@ -189,16 +191,15 @@ const signature = await deposit("DestinationAddress", mint, amount);
 
 ### Reading on-chain data and re-branding
 
-Account data fetched via RPC arrives as raw `bigint`. Validate before any cryptographic operation:
+Account data fetched via RPC arrives as raw `bigint`. Validate before any cryptographic operation. `RescueCipherCiphertext` has no `create*` wrapper, so use its `assert*` predicate:
 
 ```typescript
-import { createRcCiphertext } from "@umbra-privacy/sdk";
+import { assertRescueCipherCiphertext } from "@umbra-privacy/sdk/types";
 
 // rawAccount.ciphertext is bigint from on-chain deserialization
-const ciphertext: RcCiphertext = createRcCiphertext(
-  rawAccount.ciphertext,
-  "onChainCiphertext",
-);
+const ciphertext = rawAccount.ciphertext;
+assertRescueCipherCiphertext(ciphertext, "onChainCiphertext");
+// ciphertext is now RescueCipherCiphertext
 ```
 
 ### The `assert*` vs `create*` distinction
@@ -211,7 +212,7 @@ assertU64(rawAmount, "amount");
 const amount = rawAmount as unknown as U64;
 
 // ✓ Concise — validates and brands in a single expression
-const amount = createU64(rawAmount, "amount");
+const amount = createU64({ value: rawAmount, name: "amount" });
 ```
 
 ### Error handling
@@ -219,13 +220,14 @@ const amount = createU64(rawAmount, "amount");
 All helpers throw a typed error on failure. Catch at the boundary where you receive external input:
 
 ```typescript
-import { createU64, MathematicsAssertionError } from "@umbra-privacy/sdk";
+import { createU64 } from "@umbra-privacy/sdk/types";
+import { IntegerAssertionError } from "@umbra-privacy/sdk/errors";
 
 try {
-  const amount = createU64(BigInt(userInput), "amount");
+  const amount = createU64({ value: BigInt(userInput), name: "amount" });
   await deposit(destination, mint, amount);
 } catch (err) {
-  if (err instanceof MathematicsAssertionError) {
+  if (err instanceof IntegerAssertionError) {
     // Show a validation message to the user
     setError(`Invalid amount: ${err.message}`);
   } else {
@@ -239,13 +241,13 @@ try {
 Once a value is branded, you can pass it directly to any SDK function that accepts that type — no additional wrapping needed:
 
 ```typescript
-import { createU64, createU256 } from "@umbra-privacy/sdk";
+import { createU64, createU256 } from "@umbra-privacy/sdk/types";
 
-const amount: U64 = createU64(depositAmountBigint, "amount");
-const seed: U256 = createU256(randomSeedBigint, "randomSeed");
+const amount: U64 = createU64({ value: depositAmountBigint, name: "amount" });
+const seed: U256 = createU256({ value: randomSeedBigint, name: "randomSeed" });
 
 // Both are now type-safe for use in SDK operations
-const signature = await createSelfClaimableUtxo(amount, seed);
+const signature = await createSelfBurnableNote({ amount, mint, destinationAddress }, { generationIndex: seed });
 ```
 
 ---
@@ -261,7 +263,7 @@ const raw: bigint = 1_000_000n;
 await deposit(destination, mint, raw);
 
 // Correct:
-await deposit(destination, mint, createU64(raw, "amount"));
+await deposit(destination, mint, createU64({ value: raw, name: "amount" }));
 ```
 
 This is intentional. The validation the `create*` helpers perform is not optional — it is the mechanism that guarantees protocol invariants hold before values reach the on-chain program.

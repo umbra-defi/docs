@@ -1,27 +1,31 @@
 ---
 title: "Relayer Overview"
-description: "Claim relay at relayer.api.umbraprivacy.com and relayer.api-devnet.umbraprivacy.com. Async POST /v1/claims, poll GET /v1/claims/{id}. Lifecycle: received to completed. SDK uses via getUmbraRelayer."
+description: "Burn relay at relayer.api.umbraprivacy.com and relayer.api-devnet.umbraprivacy.com. Async POST /v1/claims, poll GET /v1/claims/{id}. Lifecycle: received → completed. SDK uses via getUmbraRelayer."
 ---
 
 ## What is the Relayer?
 
-The Umbra relayer is a transaction submission service that builds, signs, and submits claim transactions for users. When you claim a UTXO from the mixer, the relayer pays the Solana transaction fees and submits the claim on your behalf — ensuring your wallet address never appears as the fee payer in the transaction, preserving your privacy.
+The Umbra relayer is a transaction submission service that builds, signs, and submits burn transactions for users. When you burn a Stealth Pool Note, the relayer pays the Solana transaction fees and submits the burn on your behalf — ensuring your wallet address never appears as the fee payer, preserving your privacy.
 
-The relayer is used internally by the SDK's claim functions. You do not need to interact with the relayer API directly unless you are building a custom integration.
+The relayer is used internally by the SDK's burner factories. You do not need to interact with the relayer API directly unless you are building a custom integration.
+
+<Note>
+The wire protocol retains the legacy `claim` noun: the endpoint is `/v1/claims`, the JSON shape is `{ request_id, status, … }`, and the SDK's relayer client method names are `submitClaim` / `pollClaimStatus`. The burner factory's `relayer` dep uses the renamed property names `submitBurn` / `pollBurnStatus`, which are TypeScript aliases of the claim equivalents — the relayer client's existing methods plug in directly. **There is no breaking wire change.**
+</Note>
 
 ## Base URL
 
-- **Mainnet:** `https://relayer.api.umbraprivacy.com`
-- **Devnet:** `https://relayer.api-devnet.umbraprivacy.com`
+- **Mainnet:** `https://relayer.api.umbraprivacy.com`.
+- **Devnet:** `https://relayer.api-devnet.umbraprivacy.com`.
 
 ## How It Works
 
-1. You call a claim function in the SDK (e.g., `getSelfClaimableUtxoToEncryptedBalanceClaimerFunction`)
-2. The SDK constructs the claim proof data and UTXO slot data locally
-3. The SDK submits a claim request to the relayer via `POST /v1/claims`
-4. The relayer validates the request, builds the on-chain transactions, and submits them
-5. The SDK polls `GET /v1/claims/{request_id}` until the claim reaches a terminal status
-6. The claimed tokens appear in your encrypted balance or public ATA
+1. You call a burner factory in the SDK (e.g. `getSelfBurnableStealthPoolNoteIntoETABurnerFunction`).
+2. The SDK fetches per-batch Merkle proofs, generates the Groth16 proof, and constructs the burn-request payload locally.
+3. The SDK submits the request to the relayer via `POST /v1/claims`.
+4. The relayer validates, builds the on-chain transactions, and submits them.
+5. The SDK polls `GET /v1/claims/{request_id}` until the request reaches a terminal status.
+6. The burned tokens appear in the destination ETA or ATA.
 
 ## SDK Integration
 
@@ -33,34 +37,47 @@ const relayer = getUmbraRelayer({
 });
 ```
 
-The relayer object is passed as a dependency to claim factory functions:
+The relayer client is wrapped into the burner factory's `relayer` dep:
 
 ```typescript
-const claim = getSelfClaimableUtxoToEncryptedBalanceClaimerFunction(
+const burn = getSelfBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
-  { zkProver, relayer },
+  {
+    fetchBatchMerkleProof: client.fetchBatchMerkleProof!,
+    zkProver,
+    relayer: {
+      submitBurn:        relayer.submitClaim,         // alias: BurnSubmitter ≡ ClaimSubmitter
+      pollBurnStatus:    relayer.pollClaimStatus,     // alias: BurnStatusPoller ≡ ClaimStatusPoller
+      getRelayerAddress: relayer.getRelayerAddress,
+    },
+  },
 );
 ```
 
-## Claim Lifecycle
+## Burn Request Lifecycle
 
-A claim request progresses through these statuses:
+A burn request progresses through these statuses (terminal values are bolded in the SDK's `BurnBatchOutcome.status`):
 
-- `received` — Accepted by the relayer API
-- `validating` — Preflight checks running (Merkle root, nullifiers, account state)
-- `offsets_reserved` — Nullifier offsets reserved for deduplication
-- `building_tx` — Transactions being constructed
-- `tx_built` — Transactions ready
-- `submitting` — Sending to Solana
-- `submitted` — Confirmed on-chain
-- `awaiting_callback` — Waiting for Arcium MPC callback
-- `callback_received` — MPC callback detected
-- `finalizing` — Running cleanup transactions
-- `completed` — Claim successful
-- `failed` — Error occurred (see `failure_reason`)
-- `timed_out` — MPC callback deadline exceeded
+- `received` — accepted by the relayer API.
+- `validating` — preflight checks running (Merkle root, nullifiers, account state).
+- `offsets_reserved` — nullifier offsets reserved for deduplication.
+- `building_tx` — transactions being constructed.
+- `tx_built` — transactions ready.
+- `submitting` — sending to Solana.
+- `submitted` — confirmed on-chain.
+- `awaiting_callback` — waiting for Arcium MPC callback.
+- `callback_received` — MPC callback detected.
+- `finalizing` — running cleanup transactions.
+- **`completed`** — burn successful.
+- **`failed`** — error occurred (see `failure_reason`).
+- **`timed_out`** — MPC callback deadline exceeded.
+- **`refunded`** — terminal recovery state. The MPC callback did not finalise and the relayer reclaimed any staged funds back to the user.
 
-Terminal statuses: `completed`, `failed`, `timed_out`
+A `failure_reason` containing `NullifierAlreadyBurnt` is **idempotent success** — the SDK's burner factory surfaces it as such and returns a clean status.
+
+## Idempotency
+
+If the relayer's callback drops, re-submitting the same `request_id` while the nullifier is still reserved upstream returns **HTTP 409 with code `DUPLICATE_OFFSET`**. The burner factory polls to terminal state and verifies on-chain before retry; custom pipelines must implement the same contract.
 
 ## Response Format
 

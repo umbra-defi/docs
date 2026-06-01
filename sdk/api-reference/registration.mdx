@@ -6,7 +6,7 @@ description: "Complete reference for user registration factory functions."
 ## `getUserRegistrationFunction`
 
 ```typescript
-import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
 
 function getUserRegistrationFunction(args: GetUserRegistrationFunctionArgs): UserRegistrationFunction
 ```
@@ -25,30 +25,30 @@ Factory function that returns a callable registration function.
 async function register(options?: UserRegistrationOptions): Promise<TransactionSignature[]>
 ```
 
-Performs up to three on-chain registration steps. Checks current state before each step and skips any already completed. Idempotent and safe to call on every app startup.
+Performs up to two on-chain registration sub-steps (V5 collapsed account init into both sub-steps via `init_if_needed`). Checks current state before each and skips any already completed. Idempotent and safe to call on every app startup.
 
-Returns an array of transaction signatures - one per step that was executed. An empty array means all steps were already complete.
+Returns an array of transaction signatures — one per sub-step that was executed. An empty array means everything was already in place.
 
 ### `UserRegistrationOptions`
 
 <ParamField path="confidential" type="boolean" default="true">
-  Register the X25519 public key for Shared encryption mode. Required to receive deposits where the balance is also encrypted under your key (enabling local balance queries in the future).
+  Register the X25519 token-encryption key for Shared-mode ETAs. Without this, deposits stay in MXE-only mode and balances cannot be queried locally.
 </ParamField>
 
 <ParamField path="anonymous" type="boolean" default="true">
-  Register the Poseidon user commitment and master viewing key for mixer / anonymous transfer support. Requires `confidential: true`.
+  Register the Poseidon user commitment via MPC + ZK. Required to receive **receiver-burnable** Stealth Pool Notes. Can be used independently of `confidential`.
 </ParamField>
 
-<ParamField path="callbacks.userAccountInitialisation" type="TransactionCallbacks">
-  `pre(tx)` is called before the account init transaction is sent. `post(tx, sig)` is called after it confirms.
+<ParamField path="hooks.initUserAccount" type="SkippableDirectTransactionStepHooks">
+  Lifecycle hooks for the synchronous account-init sub-step. Slots: `onPreSend`, `onPostSend`, `onSkipped` (fires when the account already exists).
 </ParamField>
 
-<ParamField path="callbacks.registerX25519PublicKey" type="TransactionCallbacks">
-  `pre(tx)` is called before the X25519 key registration transaction is sent. `post(tx, sig)` is called after it confirms.
+<ParamField path="hooks.registerX25519PublicKey" type="SkippableDirectTransactionStepHooks">
+  Lifecycle hooks for the `register_user_for_confidential_usage` sub-step (X25519 key + account init combined via `init_if_needed`). Slots: `onPreSend`, `onPostSend`, `onSkipped`.
 </ParamField>
 
-<ParamField path="callbacks.registerUserForAnonymousUsage" type="TransactionCallbacks">
-  `pre(tx)` is called before the user commitment registration transaction is sent. `post(tx, sig)` is called after it confirms.
+<ParamField path="hooks.registerAnonymousUsage" type="SkippableMpcTransactionStepHooks">
+  Lifecycle hooks for the MPC + ZK `register_user_for_anonymous_usage_v17` sub-step (user-commitment registration). Slots: `onPreSend`, `onPostSend`, `onSkipped`, plus MPC progress slots (`onMonitorStarted`, `onProgress`, `onFinalized`).
 </ParamField>
 
 ---
@@ -56,11 +56,11 @@ Returns an array of transaction signatures - one per step that was executed. An 
 ## `getUserAccountQuerierFunction`
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 function getUserAccountQuerierFunction(args: {
-  accountInfoProvider: AccountInfoProviderFunction;
-}): UserAccountQuerierFunction
+  client: IUmbraClient;
+}): QueryUserAccountFunction
 ```
 
 Factory function that returns a read-only account state query.
@@ -70,7 +70,6 @@ Factory function that returns a read-only account state query.
 ```typescript
 async function queryUserAccount(
   userAddress: Address,
-  options?: { commitment?: Commitment },
 ): Promise<QueryUserAccountResult>
 ```
 
@@ -110,22 +109,21 @@ type QueryUserAccountResult =
 
 ---
 
-## Registration Flow
+## V5 registration flow
 
 ```
-Step 1: initializeAccount
-  └─ Creates EncryptedUserAccount PDA
-  └─ Always required
-
-Step 2: registerX25519Key  [if confidential: true]
+Sub-step A: register_user_for_confidential_usage   [if confidential: true]
+  └─ init_if_needed: EncryptedUserAccount PDA
   └─ Derives X25519 public key from master seed
   └─ Stores on-chain in EncryptedUserAccount
+  └─ Synchronous, no MPC
 
-Step 3: registerUserCommitment  [if anonymous: true]
+Sub-step B: register_user_for_anonymous_usage_v17  [if anonymous: true]
+  └─ init_if_needed: EncryptedUserAccount PDA
   └─ Derives Poseidon commitment from master seed
-  └─ Encrypts master viewing key
-  └─ Submits Groth16 ZK proof on-chain
-  └─ Requires step 2 to be complete
+  └─ Stages master viewing key material
+  └─ Runs Fiat-Shamir + Groth16, queues Arcium MPC
+  └─ MPC + ZK
 ```
 
-All three steps require the master seed. The wallet signing prompt fires on step 1 if the seed has not been derived yet.
+Both sub-steps `init_if_needed` the user account, so either may run first. Both require the master seed; the wallet signing prompt fires the first time a sub-step needs it.

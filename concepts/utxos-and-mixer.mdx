@@ -1,91 +1,118 @@
 ---
-title: "UTXOs and the Mixer"
-description: "UTXO mixer internals: Indexed Merkle Tree for commitments, nullifier treap for double-spend prevention, X25519 ciphertext discovery, and Groth16 ZK proof verification on claim."
+title: "Stealth Pool Notes"
+description: "Stealth Pool internals: Indexed Merkle Tree of note commitments, nullifier treap for double-spend prevention, X25519 ciphertext discovery, and Groth16 ZK proof verification on burn."
 ---
 
-## What is a UTXO?
+## What is a Stealth Pool Note?
 
-A **[UTXO](https://bitcoin.org/bitcoin.pdf) (Unspent Transaction Output)** in Umbra is a cryptographic commitment to a token deposit. It represents the right to claim a specific amount of tokens - without publicly linking that right to who created it.
+A **Stealth Pool Note** is a [UTXO](https://bitcoin.org/bitcoin.pdf)-style commitment leaf stored in the mixer's Indexed Merkle Tree. Senders **create** notes; receivers (or the original sender) **burn** them later to discharge the value into a destination balance — with no on-chain link between the create and the burn.
 
-A UTXO encodes:
+A note encodes:
 
-- **Amount** - how many tokens are locked
-- **Recipient address** - who is authorized to claim
-- **Secret randomness** - private entropy known only to the depositor
+- **Amount** — how many tokens are locked.
+- **Destination address** — who is authorised to burn.
+- **Secret randomness** — private entropy known only to the writer (and, for receiver-burnable notes, the recipient).
 
 Only the **[Poseidon](https://eprint.iacr.org/2019/458.pdf) hash** of these values (the *commitment*) is stored on-chain. The inputs remain private.
 
-## The Mixer: How It Works
+## The Stealth Pool: How It Works
 
-The mixer is a shared **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** stored on-chain. Each leaf in the tree is a UTXO commitment.
+The Stealth Pool is a shared **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** stored on-chain. Each leaf in the tree is a note commitment.
 
 <Steps>
-  <Step title="Create a UTXO (deposit)">
-    You call one of the `createUtxo` functions. The SDK computes a commitment from `(amount, recipient, randomness)` and inserts it as a new leaf into the tree. Your tokens are locked in the shielded pool.
+  <Step title="Write a note">
+    You call one of the four `…StealthPoolNote…Creator` factory functions (see below). The SDK computes a commitment from `(amount, destination, randomness)` and inserts it as a new leaf into the tree. Your tokens are locked in the pool custody account.
 
-    At this point, anyone can see that *a deposit happened* and *the tree grew by one leaf* - but cannot see the amount, recipient, or any other detail.
+    At this point, anyone can see that *a note was written* and *the tree grew by one leaf* — but cannot see the amount, destination, or any other detail.
   </Step>
   <Step title="Build the anonymity set">
-    As more users deposit into the same tree, your commitment becomes one of many. The larger the set, the harder it is to link your deposit to your eventual withdrawal. Trees hold up to **1,048,576 leaves** (depth-20 tree).
+    As more users write notes into the same tree, your commitment becomes one of many. The larger the set, the harder it is to link the write to the eventual burn. Trees hold up to **1,048,576 leaves** (depth-20 Indexed Merkle Tree).
   </Step>
-  <Step title="Fetch your UTXO">
-    The SDK queries the indexer to find UTXO ciphertexts addressed to your [X25519](https://www.rfc-editor.org/rfc/rfc7748) key, decrypts them locally, and fetches the Merkle inclusion proof for each one. See [Fetching UTXOs](/sdk/mixer/fetching-utxos).
+  <Step title="Scan">
+    The SDK queries the indexer for note ciphertexts, attempts to decrypt each with your viewing keys, and groups successful decrypts by `(burn kind, source)`. The scanner is **zero-arg** — it walks every active tree and tracks its own cursor in `client.utxoDataStore`. See [Scanning](/sdk/mixer/fetching-utxos).
   </Step>
-  <Step title="Claim your UTXO">
+  <Step title="Burn">
     You present a **[zero-knowledge proof](https://dl.acm.org/doi/10.1145/22145.22178)** that proves:
-    - You know the secret inputs behind a commitment that exists in the tree
-    - You haven't claimed it before (nullifier is unspent)
+    - You know the secret inputs behind a commitment that exists in the tree.
+    - You haven't burnt it before (nullifier is unspent).
 
-    Without revealing *which* commitment it is. The on-chain program verifies the proof, burns the nullifier, and releases the tokens to your wallet.
+    Without revealing *which* commitment it is. The on-chain program verifies the proof, burns the nullifier, and releases the tokens to the destination ETA or ATA.
   </Step>
 </Steps>
 
-## UTXO Types
+## The Four Note Variants
 
-Umbra supports four kinds of UTXOs depending on who can claim them and where the funds come from:
+A note is parameterised on two axes — **unlocker** (who can burn it) × **source** (where the funds came from):
 
-- **Self-claimable (ephemeral)** - funded from your encrypted balance or public ATA. Claimable only by you (same wallet).
-- **Receiver-claimable** - funded from another user's ATA. Claimable by a specified recipient address.
+- **Self-burnable from ATA** — `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — sender keeps the unlocker; funded from the writer's ATA. Single tx, no MPC.
+- **Self-burnable from ETA** — `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — sender keeps the unlocker; funded from the writer's ETA. Two-tx MPC pipeline.
+- **Receiver-burnable from ATA** — `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — unlocker encrypted against the recipient's `userCommitment`; funded from the writer's ATA.
+- **Receiver-burnable from ETA** — `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — same recipient model, funded from the writer's ETA. Two-tx MPC pipeline.
 
-The "self-claimable" pattern is useful when you want to move funds through the mixer yourself. The "receiver-claimable" pattern lets you *send* tokens anonymously - you deposit for a recipient, and they claim without you having direct access.
+The "self-burnable" pattern is useful when you want to move funds through the pool yourself. The "receiver-burnable" pattern lets you send tokens anonymously — you write for a recipient, and they burn the note without you having direct access.
+
+## Registration prerequisites differ by variant
+
+This is one of the most common integration footguns.
+
+- **Self-burnable creates** encrypt the unlocker against the **sender's** master-seed-derived key. Sender needs only `isUserAccountX25519KeyRegistered`. Recipient needs nothing.
+- **Receiver-burnable creates** encrypt against the **recipient's** `userCommitment`. The recipient **must** have completed **all three** registration sub-steps on-chain (account init, X25519 key, user commitment). Otherwise the create simulation fails before any tx is broadcast.
+
+**Always pre-check the recipient before a receiver-burnable create.** Run `getUserAccountQuerierFunction` on the recipient address; if any flag is missing, either abort with a clear "ask the recipient to register on Umbra" error, **or** fall back to a self-burnable create (the sender stays the unlocker; recipient needs zero on-chain state — useful for one-shot transfers).
+
+```typescript
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
+
+const query = getUserAccountQuerierFunction({ client });
+const r = await query(recipient);
+
+const ready = r.state === "exists"
+  && r.data?.isInitialised
+  && r.data?.isUserAccountX25519KeyRegistered
+  && r.data?.isUserCommitmentRegistered;
+
+if (!ready) {
+  // Fall back to a self-burnable note, or ask the recipient to register.
+}
+```
 
 ## Nullifiers: Preventing Double-Spends
 
-Each UTXO has a corresponding **[nullifier](https://eprint.iacr.org/2014/349.pdf)** - a deterministic hash derived from its private inputs. When a UTXO is claimed, its nullifier is stored in an on-chain **[treap](https://dl.acm.org/doi/10.1145/324133.324247)** (a self-balancing sorted tree).
+Each note has a corresponding **[nullifier](https://eprint.iacr.org/2014/349.pdf)** — a deterministic hash derived from its private inputs. When a note is burnt, its nullifier is stored in an on-chain **[treap](https://dl.acm.org/doi/10.1145/324133.324247)** (a self-balancing sorted tree).
 
-Before allowing a claim, the on-chain program checks that:
-- The nullifier has not been seen before
-- The ZK proof is valid for a commitment in the current Merkle tree
+Before allowing a burn, the on-chain program checks that:
+- The nullifier has not been seen before.
+- The ZK proof is valid for a commitment in the current Merkle tree.
 
-This prevents any UTXO from being claimed twice, even if the claim transaction is replayed.
+This prevents any note from being burnt twice, even if the burn transaction is replayed. The relayer reports `NullifierAlreadyBurnt` in the failure reason if you re-submit a burn that has already landed — the SDK's burner factory treats this as success and surfaces a clean "Note already burnt" string.
 
 ## Ciphertext Discovery
 
-After you create a UTXO, the SDK publishes an **encrypted ciphertext** on-chain. This ciphertext is addressed to the recipient's X25519 public key - only the recipient can decrypt it to learn the commitment's secret inputs (amount, randomness, etc.).
+After a note is written, an **X25519 + AES-GCM ciphertext** is published on-chain (and indexed off-chain). For self-burnable notes the ciphertext is addressed to the writer; for receiver-burnable notes it is addressed to the recipient.
 
 The ciphertext payload contains:
-- Amount (8 bytes)
-- Recipient address (32 bytes)
-- Generation index (16 bytes)
-- Domain separator identifying the UTXO type (12 bytes)
+- Amount (8 bytes).
+- Destination address (32 bytes).
+- Generation index (16 bytes).
+- Domain separator identifying the note variant (12 bytes).
 
-The Umbra indexer stores all ciphertexts and serves them for efficient querying. Your X25519 private key is used locally to try decrypting each one - successful decryptions are your claimable UTXOs.
+The Umbra indexer stores all ciphertexts and serves them for efficient querying. Your X25519 private key is used locally by the scanner to try decrypting each one — successful decryptions are your burnable notes.
 
 <Note>
-Your private key never leaves your device. Decryption happens in the SDK using your locally derived X25519 key.
+Your private key never leaves your device. Decryption happens in the SDK using locally derived X25519 keys.
 </Note>
 
 ## Anonymity Set Size
 
-The privacy guarantee of the mixer depends on how many other UTXOs exist in the same tree at the time you claim. A tree with only one leaf offers no privacy - it's obvious which commitment is being claimed.
+The privacy guarantee of the pool depends on how many other notes exist in the same tree at the time you burn. A tree with only one leaf offers no privacy — it's obvious which commitment is being burnt.
 
 In practice:
-- Wait for more users to deposit before claiming
-- Claiming into a different address from your deposit address increases privacy
-- Combining mixer withdrawals with encrypted balances hides the final destination further
+- Wait for more users to write notes before burning.
+- Burning into a different address from the write address increases privacy.
+- Combining a burn into an ETA (rather than an ATA) hides the destination amount further.
 
 ## Trees Fill Up
 
-Each Merkle tree has a maximum of 1,048,576 leaves. When a tree is full, the write service starts a new tree at the next sequential index. UTXOs from different trees have separate anonymity sets.
+Each Merkle tree has a maximum of 1,048,576 leaves. When a tree is full, the on-chain write service starts a new tree at the next sequential index. Notes from different trees have separate anonymity sets.
 
-You specify the tree index when [fetching](/sdk/mixer/fetching-utxos) and [claiming](/sdk/mixer/claiming-utxos) UTXOs.
+The scanner walks every active tree automatically — you do not need to specify a tree index. Cursor state lives in `client.utxoDataStore` and is per-tree under the hood.

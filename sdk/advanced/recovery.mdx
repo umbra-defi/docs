@@ -1,6 +1,6 @@
 ---
 title: "Recovery"
-description: "Deterministic recovery: same wallet + same network recreates all keys. UTXO rescan via getClaimableUtxoScannerFunction(0, 0). Master seed persistence patterns."
+description: "Deterministic recovery: same wallet + same network recreates all keys. Re-scan via zero-arg getBurnableStealthPoolNoteScannerFunction. Master seed persistence patterns. Dropped MPC callback recovery via getStagedSpl/SolRecovererFunction."
 ---
 
 ## Overview
@@ -9,30 +9,41 @@ Because all Umbra cryptographic keys are derived deterministically from a wallet
 
 No seed phrases, no backup files, no recovery codes. The wallet is the single source of truth.
 
-## What "Recovery" Means
+## What "recovery" means
 
 When a user loses access to a session (page refresh, browser restart, new device), the following state is lost:
 
-- **Master seed** - cached in memory. Must be re-derived.
-- **Derived keys** - computed on demand from the master seed. Automatically re-derived.
-- **UTXO data** - the list of claimable UTXOs the SDK has previously decrypted.
+- **Master seed** — cached in memory. Must be re-derived.
+- **Derived keys** — computed on demand from the master seed. Automatically re-derived.
+- **`utxoDataStore` cursor** — cached locally (IndexedDB or whatever backend you wired). Lost if you didn't persist.
 
 The following state is **never lost** (stored on-chain):
 
-- Registered user account (`EncryptedUserAccount` PDA)
-- Registered X25519 public key
-- Registered user commitment
-- Encrypted token account balances
-- UTXO commitments in the Merkle tree
-- Active compliance grants
+- Registered user account (`EncryptedUserAccount` PDA).
+- Registered X25519 public key.
+- Registered user commitment.
+- ETA balances.
+- Stealth Pool Note commitments in the Indexed Merkle Tree.
+- Active compliance grants.
 
-## Re-Deriving Keys
+## Re-deriving keys
 
 Re-creating the client from the same wallet automatically re-derives the same master seed and all keys:
 
 ```typescript
-// On a new session, device, or after a refresh
-const signer = createSignerFromWalletAccount(wallet, account);
+import { getUmbraClient, createSignerFromWalletAccount } from "@umbra-privacy/sdk";
+import {
+  createBrowserStorageBackend,
+  createShardedUtxoDataStore,
+  createShardedNullifierStore,
+} from "@umbra-privacy/sdk/store-adapters";
+
+// On a new session, device, or after a refresh.
+const signer = createSignerFromWalletAccount({ wallet, account });
+
+const storageBackend = createBrowserStorageBackend({ dbName: "umbra" });
+const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
+const nullifierStore = createShardedNullifierStore({ storageBackend });
 
 const client = await getUmbraClient({
   signer,
@@ -40,61 +51,75 @@ const client = await getUmbraClient({
   rpcUrl,
   rpcSubscriptionsUrl,
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
-  deferMasterSeedSignature: false, // prompt wallet immediately
+  utxoDataStore,
+  nullifierStore,
+  deferMasterSeedSignature: false, // prompt the wallet immediately.
 });
-
-// All keys are now restored
-// Encrypted balances remain accessible
-// UTXOs can be re-fetched from the indexer
 ```
 
-The user will be prompted once for the master seed derivation signature. After that, all keys are available for the session lifetime.
+All keys are now restored. ETA balances remain accessible. Stealth Pool Notes can be re-discovered via the scanner.
 
-## Re-Fetching UTXOs
+The user is prompted once for the master seed derivation signature. After that, all keys are available for the session lifetime.
 
-The indexer stores all UTXO ciphertexts permanently. After recovery, rescan from insertion index 0 to find all claimable UTXOs:
+## Re-scanning Stealth Pool Notes
+
+The indexer stores all note ciphertexts permanently. After recovery, run the zero-arg scanner — it walks every active tree and persists progress in `client.utxoDataStore`:
 
 ```typescript
-import { getClaimableUtxoScannerFunction } from "@umbra-privacy/sdk";
+import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/burn";
 
-const fetch = getClaimableUtxoScannerFunction({ client });
+const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
+const result = await scan();
 
-// Scan tree 0 from the beginning
-const result = await fetch(0, 0);
-
-console.log("Recovered self-burnable UTXOs:", result.selfBurnable.length);
-console.log("Recovered received UTXOs:", result.received.length);
+console.log("Recovered self-burnable from ETA:        ", result.etaToStealthPoolSelfBurnable.length);
+console.log("Recovered receiver-burnable from ETA:    ", result.etaToStealthPoolReceiverBurnable.length);
+console.log("Recovered self-burnable from ATA:       ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Recovered receiver-burnable from ATA:   ", result.ataToStealthPoolReceiverBurnable.length);
 ```
 
-For users with many UTXOs or large trees, use paginated scanning:
+If `utxoDataStore` was not persisted (e.g. you didn't wire `createBrowserStorageBackend`), the first post-recovery scan walks every active tree from genesis. On mainnet this can be slow but is one-shot — subsequent scans are incremental.
+
+## Dropped MPC callback recovery
+
+When a deposit, withdrawal, or conversion handler succeeds but the Arcium MPC callback never lands (network partition, compute budget, Arcium outage), tokens stay **staged** in the pool ATA. Two recoverer factories reclaim them — both synchronous, no MPC, no ZK proof:
 
 ```typescript
-async function recoverAllUtxos(treeIndex: number) {
-  const fetch = getClaimableUtxoScannerFunction({ client });
-  const allUtxos = [];
-  const CHUNK_SIZE = 10_000;
-  let cursor = 0;
+import {
+  getStagedSplRecovererFunction,
+  getStagedSolRecovererFunction,
+} from "@umbra-privacy/sdk/account";
 
-  while (true) {
-    const result = await fetch(treeIndex, cursor, cursor + CHUNK_SIZE - 1);
-    allUtxos.push(...result.selfBurnable, ...result.received);
+// SPL token recovery.
+const recoverSpl = getStagedSplRecovererFunction({ client });
+await recoverSpl({ mint });
 
-    if (result.selfBurnable.length === 0 && result.received.length === 0) {
-      break; // No more UTXOs in this range
-    }
-    cursor += CHUNK_SIZE;
-  }
-
-  return allUtxos;
-}
+// wSOL recovery.
+const recoverSol = getStagedSolRecovererFunction({ client });
+await recoverSol({ mint: WSOL_MINT });
 ```
 
-## Persisting the Master Seed to Avoid Re-Prompting
+## Failed note-create recovery
 
-If you want to avoid the wallet signing prompt on every page load, persist the master seed using the `masterSeedStorage` override. The seed should be treated with the same care as a private key:
+A failed Stealth Pool Note create can leave two kinds of orphans:
+
+**(a) Proof-account orphan** — every variant. The pipeline's first step is the `closeProofAccount` hook (built-in), which auto-detects and closes a pre-existing proof account from a previous attempt. **Just re-run the create.**
+
+**(b) Input-buffer orphan** — MPC variants only (ETA-source creates). The input buffer at `(generationIndex, depositor)` holds ~4.85M lamports until closed. The SDK only detects it if you retry with the **same** `generationIndex`. You must persist `generationIndex` before signing and pass it back via `options.generationIndex` on retry. See [pitfalls — failed UTXO creates](/sdk/mixer/creating-utxos#error-handling).
+
+## Idempotent burn retry
+
+The relayer's MPC callback can drop. The burner factory polls the relayer to terminal state and treats `NullifierAlreadyBurnt` as idempotent success. If you build a custom pipeline that bypasses the orchestrator, the contract is:
+
+1. Poll `GET /v1/claims/{request_id}` to terminal state.
+2. Verify on-chain that the nullifier is **not** already burnt.
+3. Re-submit only if still unspent.
+4. On `HTTP 409 DUPLICATE_OFFSET`, wait, re-check, retry only if still unspent.
+
+## Persisting the master seed to avoid re-prompting
+
+If you want to avoid the wallet signing prompt on every page load, persist the master seed using `masterSeedStorage`. The seed is equivalent in sensitivity to a private key.
 
 ```typescript
-// Session storage: cleared when the tab closes
 const client = await getUmbraClient(
   { signer, network: "mainnet", rpcUrl, rpcSubscriptionsUrl },
   {
@@ -108,7 +133,7 @@ const client = await getUmbraClient(
         sessionStorage.setItem("umbra:seed", JSON.stringify(Array.from(seed)));
       },
     },
-  }
+  },
 );
 ```
 
@@ -130,20 +155,21 @@ const client = await getUmbraClient(
         await SecureStore.setItemAsync("umbra:seed", JSON.stringify(Array.from(seed)));
       },
     },
-  }
+  },
 );
 ```
 
 <Warning>
-The master seed is a 64-byte root secret - the root of your entire key hierarchy. Storing it insecurely is equivalent to storing a private key in plaintext. Only use platform-recommended secure storage APIs, and never store it in `localStorage`.
+Production storage requires **encrypted-at-rest** with a key the user controls (WebAuthn-derived, password-derived via Argon2id, or wallet-signed challenge) — and **scoped per-wallet** (key includes the wallet pubkey). A wallet swap MUST NOT load the previous wallet's seed. Plaintext `localStorage` / `IndexedDB` is unacceptable. The SDK scaffold defaults to re-derive every session.
 </Warning>
 
 ## Key Rotation
 
-If you suspect a key may be compromised, rotate it by incrementing its offset and re-registering on-chain:
+If you suspect a key may be compromised, rotate it. Two mechanisms exist:
+
+**(a) Offset rotation** — increment the relevant offset at client construction time. The resulting derived key is completely different. Re-register on-chain to publish the new key. Existing on-chain state encrypted under the old key becomes inaccessible.
 
 ```typescript
-// Rotate the X25519 encryption key
 const client = await getUmbraClient({
   signer,
   network: "mainnet",
@@ -154,17 +180,27 @@ const client = await getUmbraClient({
   },
 });
 
-// Re-register the new X25519 public key on-chain
 const register = getUserRegistrationFunction({ client });
 await register({ confidential: true, anonymous: false });
 ```
 
+**(b) Active on-chain rotation** — the factories in `@umbra-privacy/sdk/account` issue a new key and re-encrypt existing on-chain state under it. Use these when you want to preserve current balances:
+
+- `getMintEncryptionKeyRotatorFunction({ client })` — MPC; rotates a per-mint ETA key and re-encrypts the balance.
+- `getMasterViewingKeyRotatorFunction({ client })` — MPC + ZK; rotates the MVK X25519 + user commitment.
+- `getUserEncryptionKeyRotatorFunction({ client })` — synchronous, no MPC; rotates the user-account X25519 token-encryption key.
+
+Maintenance (subpath `@umbra-privacy/sdk/account`):
+
+- `getUserEntropySeedRotatorFunction({ client })` — rotate the user-account random generation seed.
+- `getTokenEntropySeedRotatorFunction({ client })` — rotate a per-mint random generation seed.
+
 <Warning>
-After rotating the X25519 key, existing encrypted token accounts that were created with the old key will no longer be decryptable with the new key. You must withdraw any remaining balance first, or use the old key offset to do so. Conversion to Shared mode (if balances were in MXE mode) will also need to be re-done with the new key.
+Offset rotation does NOT migrate on-chain state. Funds in an old-key ETA must be withdrawn (or rotated via the active rotator) before the old offset is retired. Compliance grants tied to the old MVK X25519 must be revoked and re-issued under the new key.
 </Warning>
 
-## Multi-Device Access
+## Multi-device access
 
-Because all keys are derived from the wallet, the same wallet on any device will produce the same keys. There is no special sync protocol - just connect the same wallet on the new device and create a client.
+Because all keys are derived from the wallet, the same wallet on any device produces the same keys. There is no special sync protocol — just connect the same wallet on the new device and create a client.
 
-The only exception is persisted state like the master seed in session/secure storage, which is device-local by design. On a new device, the user will be prompted once to re-derive the seed.
+The only exceptions are device-local: the `masterSeed` cache and the `utxoDataStore` / `nullifierStore` shards. On a new device the user is prompted once to re-derive the seed, then the first scan rebuilds the local state from the indexer.

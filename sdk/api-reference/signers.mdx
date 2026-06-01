@@ -82,7 +82,7 @@ const signer = createSignerFromKeyPair(kps);
 import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
 
-function createSignerFromWalletAccount(wallet: Wallet, account: WalletAccount): IUmbraSigner
+function createSignerFromWalletAccount(args: { wallet: Wallet; account: WalletAccount }): IUmbraSigner
 ```
 
 Adapts a [Wallet Standard](https://github.com/wallet-standard/wallet-standard) `WalletAccount` to `IUmbraSigner`. Compatible with Phantom, Backpack, Solflare, and any wallet implementing the standard.
@@ -106,7 +106,7 @@ import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
 const { get } = getWallets();
 const wallet = get().find((w) => w.name === "Phantom");
 const { accounts } = await wallet.features[StandardConnect].connect();
-const signer = createSignerFromWalletAccount(wallet, accounts[0]);
+const signer = createSignerFromWalletAccount({ wallet, account: accounts[0] });
 ```
 
 
@@ -118,39 +118,6 @@ const signer = createSignerFromWalletAccount(wallet, accounts[0]);
 
 ---
 
-### `createWalletAdapterSigner` (Deprecated)
-
-<Warning>
-This function is deprecated. Use `createSignerFromWalletAccount` with the Wallet Standard API instead. All modern Solana wallets (Phantom, Solflare, Backpack) implement the Wallet Standard directly.
-</Warning>
-
-```typescript
-import { createWalletAdapterSigner } from "@umbra-privacy/sdk";
-import type { WalletAdapterShape } from "@umbra-privacy/sdk";
-
-function createWalletAdapterSigner(adapter: WalletAdapterShape): IUmbraSigner
-```
-
-Adapts a `@solana/wallet-adapter-base`-style `StandardWalletAdapter` to `IUmbraSigner`. Only use this if your app is locked to the legacy `@solana/wallet-adapter-react` ecosystem and cannot migrate to Wallet Standard.
-
-<ParamField path="adapter" type="WalletAdapterShape" required>
-  The raw adapter object from `@solana/wallet-adapter-react`'s `useWallet().wallet.adapter`. The adapter must expose a `wallet` property (the underlying Wallet Standard object).
-</ParamField>
-
----
-
-## `WalletAdapterShape` Interface (Deprecated)
-
-```typescript
-import type { WalletAdapterShape } from "@umbra-privacy/sdk";
-
-interface WalletAdapterShape {
-  readonly publicKey: { toBase58: () => string } | null;
-  readonly signTransaction?: (tx: unknown) => Promise<unknown>;
-  readonly signAllTransactions?: (txs: unknown[]) => Promise<unknown[]>;
-  readonly signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
-  readonly wallet?: StandardWalletShape;
-}
-```
-
-If `wallet` is present and supports `solana:signTransaction`, the SDK uses the wire-format signing path. If absent, it falls back to the adapter's `signTransaction` method (legacy path).
+<Note>
+**Removed in V5:** the legacy `createWalletAdapterSigner` factory and the `WalletAdapterShape` interface (adapters from `@solana/wallet-adapter-react`) are no longer exported by `@umbra-privacy/sdk`. Use `createSignerFromWalletAccount` with the Wallet Standard API — Phantom, Solflare, and Backpack all implement it directly.
+</Note>

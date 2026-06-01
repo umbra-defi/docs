@@ -32,17 +32,17 @@ Once a re-encryption instruction is executed, the grantee receives a ciphertext 
 
 For user-granted compliance grants, the `granterX25519` parameter is **your MVK (master viewing key) X25519 public key** - the Curve25519 key derived from your master seed's MVK X25519 keypair. This is distinct from the user account X25519 key used for encrypting token balances.
 
-The MVK X25519 key is used to prove ownership of the master viewing key during grant creation. The SDK derives it internally via the `masterViewingKeyX25519KeypairGenerator` dependency.
+The MVK X25519 key is used to prove ownership of the master viewing key during grant creation. The SDK derives it internally via the `getMasterViewingKeyX25519KeypairDeriver` dependency.
 
 You can derive and read your MVK X25519 public key from the client:
 
 ```typescript
-import { getMasterViewingKeyX25519KeypairGenerator } from "@umbra-privacy/sdk";
+import { getMasterViewingKeyX25519KeypairDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
 
 // The SDK derives this internally during grant creation.
 // You can also derive it explicitly if you need to share it with a grantee
 // so they can look up the grant PDA.
-const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client });
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairDeriver({ client });
 const mvkKeypairResult = await generateMvkKeypair();
 const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
 ```
@@ -54,7 +54,7 @@ The `receiverX25519` is the grantee's X25519 public key. This is the key that Ar
 The receiver can share their X25519 public key with you out-of-band, or you can look it up from their registered user account:
 
 ```typescript
-import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const queryAccount = getUserAccountQuerierFunction({ client });
 
@@ -77,7 +77,7 @@ The nonce is also part of the on-chain PDA seed, so multiple independent grants 
 Generate a random nonce using the SDK's utility:
 
 ```typescript
-import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+import { generateRandomNonce } from "@umbra-privacy/sdk/arcium";
 
 const nonce = generateRandomNonce(); // Random u128 bigint
 ```
@@ -95,14 +95,14 @@ Because Rescue is a stream cipher, a grantee who obtains a re-encrypted cipherte
 ```typescript
 import {
   getComplianceGrantIssuerFunction,
-  getMasterViewingKeyX25519KeypairGenerator,
-} from "@umbra-privacy/sdk";
-import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+} from "@umbra-privacy/sdk/compliance";
+import { getMasterViewingKeyX25519KeypairDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
+import { generateRandomNonce } from "@umbra-privacy/sdk/arcium";
 
 const createGrant = getComplianceGrantIssuerFunction({ client });
 
 // Gather required keys
-const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client });
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairDeriver({ client });
 const mvkKeypairResult = await generateMvkKeypair();
 const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
 const nonce = generateRandomNonce();
@@ -112,7 +112,7 @@ const signature = await createGrant(
   receiver,       // Address - receiver's wallet address
   granterX25519,  // X25519PublicKey - your MVK X25519 public key
   receiverX25519, // X25519PublicKey - receiver's X25519 public key
-  nonce,          // RcEncryptionNonce - 16-byte u128
+  nonce,          // RescueCipherEncryptionNonce - u128 bigint
 );
 
 console.log("Grant created:", signature);
@@ -128,13 +128,13 @@ The transaction includes an Ed25519 signature over the grant parameters, produce
 Check whether a grant is active before attempting re-encryption:
 
 ```typescript
-import { getUserComplianceGrantQuerierFunction } from "@umbra-privacy/sdk";
+import { getUserComplianceGrantQuerierFunction } from "@umbra-privacy/sdk/compliance";
 
 const queryGrant = getUserComplianceGrantQuerierFunction({ client });
 
 const result = await queryGrant(
   granterX25519,  // X25519PublicKey - granter's MVK X25519 key
-  nonce,          // RcEncryptionNonce - the same nonce used at creation
+  nonce,          // RescueCipherEncryptionNonce - the same nonce used at creation
   receiverX25519, // X25519PublicKey - receiver's X25519 key
 );
 
@@ -154,7 +154,7 @@ The grant PDA is derived deterministically from these three values, so the query
 Once the grant is active, the **grantee** calls the re-encryption function. This triggers an Arcium MPC computation that decrypts the granter's Shared-mode ciphertexts and re-encrypts them under the receiver's X25519 key.
 
 ```typescript
-import { getSharedCiphertextReencryptorForUserGrantFunction } from "@umbra-privacy/sdk";
+import { getSharedCiphertextReencryptorForUserGrantFunction } from "@umbra-privacy/sdk/compliance";
 
 // The grantee calls this (using their own client, not the granter's)
 const reencrypt = getSharedCiphertextReencryptorForUserGrantFunction({ client: granteeClient });
@@ -162,8 +162,8 @@ const reencrypt = getSharedCiphertextReencryptorForUserGrantFunction({ client: g
 const signature = await reencrypt(
   granterX25519Key,     // X25519PublicKey - granter's MVK X25519 key
   receiverX25519Key,    // X25519PublicKey - receiver's (grantee's own) X25519 key
-  nonce,                // RcEncryptionNonce - the nonce used when creating the grant
-  inputEncryptionNonce, // RcEncryptionNonce - the nonce of the ciphertext to re-encrypt
+  nonce,                // RescueCipherEncryptionNonce - the nonce used when creating the grant
+  inputEncryptionNonce, // RescueCipherEncryptionNonce - the nonce of the ciphertext to re-encrypt
   ciphertexts,          // readonly Uint8Array[] - 1 to 6 ciphertexts (32 bytes each)
 );
 
@@ -180,11 +180,11 @@ console.log("Re-encryption triggered:", signature);
   The receiver's (grantee's) X25519 public key. Arcium MPC will re-encrypt the output under this key.
 </ParamField>
 
-<ParamField path="nonce" type="RcEncryptionNonce" required>
-  The 128-bit nonce from the grant creation. Used to locate the grant PDA on-chain.
+<ParamField path="nonce" type="RescueCipherEncryptionNonce" required>
+  The `u128` bigint nonce from the grant creation. Used to locate the grant PDA on-chain.
 </ParamField>
 
-<ParamField path="inputEncryptionNonce" type="RcEncryptionNonce" required>
+<ParamField path="inputEncryptionNonce" type="RescueCipherEncryptionNonce" required>
   The nonce of the specific ciphertext you want re-encrypted. This is the nonce associated with the encrypted token account state at a specific point in time.
 </ParamField>
 
@@ -203,7 +203,7 @@ Re-encryption follows the [dual-instruction pattern](/concepts/how-umbra-works#t
 Delete the grant PDA to prevent future re-encryption requests. The grant parameters must exactly match the original creation.
 
 ```typescript
-import { getComplianceGrantRevokerFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantRevokerFunction } from "@umbra-privacy/sdk/compliance";
 
 const deleteGrant = getComplianceGrantRevokerFunction({ client });
 
@@ -211,7 +211,7 @@ const signature = await deleteGrant(
   receiver,       // Address - receiver's wallet address
   granterX25519,  // X25519PublicKey - your MVK X25519 key
   receiverX25519, // X25519PublicKey - receiver's X25519 key
-  nonce,          // RcEncryptionNonce - must be the original nonce
+  nonce,          // RescueCipherEncryptionNonce - must be the original nonce
 );
 
 console.log("Grant revoked:", signature);
@@ -232,15 +232,15 @@ import {
   getComplianceGrantIssuerFunction,
   getComplianceGrantRevokerFunction,
   getUserComplianceGrantQuerierFunction,
-  getUserAccountQuerierFunction,
-  getMasterViewingKeyX25519KeypairGenerator,
-} from "@umbra-privacy/sdk";
-import { generateRandomNonce } from "@umbra-privacy/sdk/utils";
+} from "@umbra-privacy/sdk/compliance";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
+import { getMasterViewingKeyX25519KeypairDeriver } from "@umbra-privacy/sdk/crypto/key-derivation";
+import { generateRandomNonce } from "@umbra-privacy/sdk/arcium";
 
 // === GRANTER SIDE ===
 
 // 1. Derive your MVK X25519 public key
-const generateMvkKeypair = getMasterViewingKeyX25519KeypairGenerator({ client: granterClient });
+const generateMvkKeypair = getMasterViewingKeyX25519KeypairDeriver({ client: granterClient });
 const mvkKeypairResult = await generateMvkKeypair();
 const granterX25519 = mvkKeypairResult.x25519Keypair.publicKey;
 

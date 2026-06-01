@@ -1,17 +1,21 @@
 ---
-title: "Tree UTXOs"
+title: "Tree Notes"
 openapi: "GET /v1/trees/{tree_index}/utxos"
-description: "Returns a paginated list of UTXO records for a specific Merkle tree, ordered by insertion index ascending."
+description: "Returns a paginated list of Stealth Pool Note records for a specific Merkle tree, ordered by insertion index ascending."
 ---
 
-Use this endpoint when you know which tree you want to scan. For global scans across all trees, use [Global UTXOs](/indexer/api-reference/utxos).
+Use this endpoint when you know which tree you want to scan. For global scans across all trees, use [Global Notes](/indexer/api-reference/utxos).
+
+<Note>
+The path retains the legacy `/v1/trees/{tree_index}/utxos` segment. The records are Stealth Pool Notes.
+</Note>
 
 ## Response Layouts
 
 The `X-Response-Layout` header controls how records are packed in the protobuf response:
 
-- **Row-oriented** (default, omit header): Each UTXO is a self-contained `UtxoDataItem`. Easy to iterate record by record.
-- **Columnar** (set header to `"columnar"`): All fields across UTXOs are packed into parallel arrays. Significantly smaller on the wire -- preferred for data pipelines and bulk processing.
+- **Row-oriented** (default, omit header): each note is a self-contained `UtxoDataItem`. Easy to iterate record by record.
+- **Columnar** (set header to `"columnar"`): all fields across notes are packed into parallel arrays. Significantly smaller on the wire — preferred for data pipelines and bulk processing.
 
 <Note>
 The Umbra SDK uses row-oriented layout internally. Use columnar layout only if you are building a custom bulk processing pipeline.
@@ -19,12 +23,12 @@ The Umbra SDK uses row-oriented layout internally. Use columnar layout only if y
 
 ## Pagination
 
-Initialize with `cursor = tree_index x 1,048,576`. Each response includes a `next_cursor` field. Repeat requests using `cursor = next_cursor` until the response contains fewer records than `limit`.
+Initialise with `cursor = tree_index × 1,048,576`. Each response includes a `next_cursor` field. Repeat requests using `cursor = next_cursor` until the response contains fewer records than `limit`.
 
 ```bash
-# First page of tree 0
+# First page of tree 0.
 curl "https://utxo-indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=0&limit=1000"
 
-# Next page (using next_cursor from previous response)
+# Next page (using next_cursor from previous response).
 curl "https://utxo-indexer.api.umbraprivacy.com/v1/trees/0/utxos?cursor=1000&limit=1000"
 ```

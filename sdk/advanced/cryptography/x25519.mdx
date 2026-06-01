@@ -1,15 +1,15 @@
 ---
 title: "X25519 Key Exchange"
-description: "Diffie-Hellman over Curve25519 for token account encryption and UTXO ciphertext addressing."
+description: "Diffie-Hellman over Curve25519 for EncryptedTokenAccount encryption and Stealth Pool Note ciphertext addressing."
 ---
 
 [X25519](https://www.rfc-editor.org/rfc/rfc7748) is the Diffie-Hellman function over Curve25519, standardised in [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748). See the [X25519 Keypair architecture page](https://docs.umbraprivacy.com/docs/key-architecture/x25519-keypair) for a full breakdown of how this key fits into Umbra's key hierarchy.
 
 ## Uses in Umbra
 
-**[Encrypted token accounts](https://docs.umbraprivacy.com/docs/core-concepts/encrypted-token-accounts) (Shared mode)**: Each user's X25519 public key is registered on-chain. When a deposit arrives, the balance is encrypted under both the Arcium MPC key and the user's X25519 key. This allows the user to independently decrypt their balance without relying on Arcium.
+**[EncryptedTokenAccounts](https://docs.umbraprivacy.com/docs/core-concepts/encrypted-token-accounts) (Shared mode)**: each user's X25519 public key is registered on-chain. When a deposit arrives, the balance is encrypted under both the Arcium MPC key and the user's X25519 key. This allows the user to independently decrypt their balance without relying on Arcium.
 
-**UTXO ciphertext addressing**: When creating a UTXO for a recipient, the SDK generates an ephemeral X25519 keypair, performs ECDH with the recipient's registered public key, and derives an AES-GCM key from the shared secret. The 68-byte UTXO payload (amount + recipient + type tag) is encrypted and stored on-chain. Only the intended recipient - who holds the matching X25519 private key - can decrypt it.
+**Stealth Pool Note ciphertext addressing**: when writing a note for a recipient, the SDK generates an ephemeral X25519 keypair, performs ECDH with the recipient's registered public key, and derives an AES-GCM key from the shared secret. The 68-byte note payload (amount + recipient + type tag) is encrypted and stored on-chain. Only the intended recipient — who holds the matching X25519 private key — can decrypt it.
 
 ## Key Security
 

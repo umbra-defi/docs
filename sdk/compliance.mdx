@@ -1,6 +1,6 @@
 ---
 title: "Compliance"
-description: "Two independent compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for mixer UTXOs, and X25519 compliance grants for encrypted balance re-encryption."
+description: "Two independent compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for Stealth Pool Notes, and X25519 compliance grants for EncryptedTokenAccount re-encryption."
 ---
 
 ## Overview
@@ -8,71 +8,108 @@ description: "Two independent compliance mechanisms: hierarchical viewing keys (
 Umbra's compliance system is entirely voluntary and user-initiated. Two independent mechanisms cover different parts of the protocol:
 
 <CardGroup cols={2}>
-  <Card title="Mixer Pool Viewing Keys" icon="key" href="/sdk/compliance-viewing-keys">
-    Derive scoped cryptographic keys from your master viewing key and share them with auditors. Viewing keys give read access to mixer pool (UTXO) activity within a specific time window or token scope - without exposing anything outside that scope.
+  <Card title="Stealth Pool Viewing Keys" icon="key" href="/sdk/compliance-viewing-keys">
+    Derive scoped cryptographic keys from your master viewing key and share them with auditors. Viewing keys give read access to Stealth Pool Note activity within a specific time window or token scope — without exposing anything outside that scope. Pure off-chain Poseidon hierarchy.
   </Card>
   <Card title="X25519 Compliance Grants" icon="lock-open" href="/sdk/compliance-x25519-grants">
-    Create on-chain grants that authorize Arcium MPC to re-encrypt your encrypted token account balances under a grantee's X25519 key. The grantee can then decrypt and read the re-encrypted ciphertexts using their own private key.
+    Create on-chain grants that authorise Arcium MPC to re-encrypt your EncryptedTokenAccount balances under a grantee's X25519 key. The grantee then decrypts the re-encrypted ciphertexts with their own private key.
   </Card>
 </CardGroup>
 
+<Warning>
+The two mechanisms cover **different data**. Stealth Pool viewing keys only decrypt the Poseidon `pc_encrypted_*` fields on a note (the mixer pool ciphertext). X25519 grants only cover the Rescue `rc_encrypted_*` ciphertext on an ETA. **Viewing keys cannot decrypt ETA balances; X25519 grants cannot decrypt notes.** Pick the right tool for the data you are auditing.
+</Warning>
+
 <Note>
-No party can access your data without your explicit action. Neither mechanism is reversible for data the grantee has already received - revoking a grant prevents future access but does not invalidate ciphertexts already re-encrypted.
+No party can access your data without your explicit action. Neither mechanism is reversible for data the grantee has already received — revoking a grant prevents future access but does not invalidate ciphertexts already re-encrypted.
 </Note>
 
 ---
 
-## Mixer Pool Viewing Keys
+## Stealth Pool viewing keys
 
-The **master viewing key** (MVK) is a BN254 field element derived from your master seed. It is the root of a key hierarchy you can share selectively:
+The **master viewing key (MVK)** is a BN254 field element derived from your master seed. It is the root of an off-chain key hierarchy you can share selectively:
 
 ```
 Master Viewing Key
-├── Mint Viewing Key  { mint }
-│   ├── Yearly Viewing Key  { year }
-│   │   ├── Monthly Viewing Key  { year, month }
-│   │   │   └── Daily Viewing Key  { year, month, day }
+└── Mint Viewing Key      { mint }
+    └── Yearly Viewing Key   { year }
+        └── Monthly Viewing Key  { month }
+            └── Daily Viewing Key    { day }
+                └── Hourly Viewing Key   { hour }
+                    └── Minute Viewing Key   { minute }
+                        └── Second Viewing Key   { second } ← decrypts pc_encrypted_*
 ```
 
-Each level of the hierarchy is derived from the level above using the Poseidon hash function. Sharing a key at any level grants read access to all UTXO activity within that scope - and nothing outside it.
+Each level is derived from the level above using a Poseidon hash. Sharing a key at any level grants read access to all note activity within that scope and nothing outside it. The Second Viewing Key (a.k.a. the transaction viewing key — TVK) is the one that actually decrypts a note's Poseidon stream cipher (`pc_encrypted_*`).
+
+Eight derivers ship, all from the SDK's key-derivation primitives:
 
 ```typescript
-// Derive and share a monthly viewing key for February 2025
-const monthlyVk = await client.monthlyViewingKey.generate(2025, 2);
+import {
+  getMasterViewingKeyDeriver,
+  getMintViewingKeyDeriver,
+  getYearlyViewingKeyDeriver,
+  getMonthlyViewingKeyDeriver,
+  getDailyViewingKeyDeriver,
+  getHourlyViewingKeyDeriver,
+  getMinuteViewingKeyDeriver,
+  getSecondViewingKeyDeriver,
+} from "@umbra-privacy/sdk/crypto/key-derivation";
 
-// Export as hex for out-of-band sharing
-const hex = Buffer.from(monthlyVk).toString("hex");
+const mintVk = await getMintViewingKeyDeriver({ client })(MINT);
+// Export to hex for out-of-band sharing with auditors:
+const hex = mintVk.toString(16);
 ```
 
-See [Mixer Pool Viewing Keys](/sdk/compliance-viewing-keys) for full derivation details, export formats, and how auditors use these keys.
+There is no shipped `getViewingKeyClaimableStealthPoolNoteScannerFunction` factory — compose one from the shipped primitives (~50 lines). See [Stealth Pool Viewing Keys](/sdk/compliance-viewing-keys) for the canonical recipe.
 
 ---
 
-## X25519 Based Compliance Grants
+## X25519 compliance grants
 
-X25519 compliance grants use on-chain PDAs to authorize Arcium MPC to re-encrypt your encrypted token account ciphertexts under a grantee's X25519 key. You create the grant voluntarily, choose the receiver and a unique nonce, and can revoke it at any time by deleting the PDA.
+X25519 compliance grants use on-chain PDAs to authorise Arcium MPC to re-encrypt your ETA ciphertexts under a grantee's X25519 key. You create the grant voluntarily, choose the receiver and a unique nonce, and can revoke it at any time.
 
 ```typescript
-import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk";
+import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk/compliance";
 
 const createGrant = getComplianceGrantIssuerFunction({ client });
 
-// Create a grant allowing `receiver` to re-encrypt your shared ciphertexts
-const signature = await createGrant(
-  receiver,       // receiver's wallet address (Address)
-  granterX25519,  // your MVK X25519 public key (X25519PublicKey)
-  receiverX25519, // receiver's X25519 public key (X25519PublicKey)
-  nonce,          // u128 nonce (RcEncryptionNonce)
+// Create a grant allowing `receiver` to re-encrypt your shared ETA ciphertexts.
+// Arguments are positional: (receiver, granterX25519, receiverX25519, nonce, optionalData?, hooks?)
+const result = await createGrant(
+  receiver,        // receiver's wallet address (Address)
+  granterX25519,   // your MVK X25519 public key (X25519PublicKey)
+  receiverX25519,  // receiver's X25519 public key (X25519PublicKey)
+  nonce,           // u128 bigint nonce (RescueCipherEncryptionNonce)
 );
 ```
 
-See [X25519 Compliance Grants](/sdk/compliance-x25519-grants) for the complete workflow including how to derive the required keys, generate nonces, re-encrypt ciphertexts, and query grant status.
+See [X25519 Compliance Grants](/sdk/compliance-x25519-grants) for the complete workflow — deriving the granter's MVK X25519 keypair, generating a random nonce, re-encrypting ciphertexts under the grant, and querying grant status.
 
 ---
 
+## Compliance factory inventory
+
+All under `@umbra-privacy/sdk/compliance`:
+
+- `getComplianceGrantIssuerFunction` — create a grant.
+- `getComplianceGrantRevokerFunction` — revoke (deletes the grant PDA).
+- `getUserComplianceGrantQuerierFunction` — query a user-issued grant.
+- `getNetworkComplianceGrantQuerierFunction` — query a network-issued grant.
+- `getSharedComplianceGrantQuerierFunction` — query a Shared-balance grant.
+- `getSharedCiphertextReencryptorForUserGrantFunction` — re-encrypt under a user grant.
+- `getNetworkCiphertextReencryptorForNetworkGrantFunction` — re-encrypt under a network grant.
+- `getSharedCiphertextReencryptorForNetworkGrantFunction` — re-encrypt a Shared-mode ciphertext for a network grantee.
+
+
 ## Privacy and Trust Model
 
-- Compliance grants are stored on-chain as marker PDAs - their existence is transparent and auditable
-- A viewing key at scope X gives access only to data within scope X - no access to anything outside that scope
-- Revoking a compliance grant (deleting the PDA) prevents future re-encryption requests, but does not invalidate ciphertexts the grantee has already obtained
-- The master viewing key and master seed are never shared directly through either mechanism
+- Compliance grants are stored on-chain as marker PDAs — their existence is transparent and auditable.
+- A viewing key at scope X gives access only to data within scope X — no access to anything outside that scope.
+- Revoking a compliance grant (deleting the PDA) prevents future re-encryption requests, but does not invalidate ciphertexts the grantee has already obtained.
+- The master viewing key and master seed are never shared directly through either mechanism.
+
+<Warning>
+Rescue is a **stream cipher**. Never reuse a grant nonce — doing so leaks the XOR of two plaintexts. Use `generateRandomNonce` from `@umbra-privacy/sdk/arcium` for fresh nonces, and persist them per `(granter, receiver, mint)` if you need to re-issue with the same parameters.
+</Warning>

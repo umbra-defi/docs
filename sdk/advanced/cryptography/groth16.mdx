@@ -1,6 +1,6 @@
 ---
 title: "Groth16 ZK Proofs"
-description: "Succinct non-interactive zero-knowledge proofs for commitment registration and UTXO claiming."
+description: "Succinct non-interactive zero-knowledge proofs for commitment registration and Stealth Pool Note burning."
 ---
 
 [Groth16](https://eprint.iacr.org/2016/260.pdf) is a succinct non-interactive zero-knowledge proof system (zk-SNARK) that produces constant-size proofs verifiable in constant time, regardless of the complexity of the statement being proved. It is one of the most widely deployed zk-SNARK constructions in production systems.
@@ -9,7 +9,7 @@ description: "Succinct non-interactive zero-knowledge proofs for commitment regi
 
 **User commitment registration**: Proves that the on-chain user commitment was constructed correctly from the user's Poseidon private key and X25519 public key - without revealing either input. This is required once during [registration](/sdk/registration) with `anonymous: true`.
 
-**UTXO claiming**: Proves knowledge of the secret inputs to a specific Merkle tree leaf (the UTXO commitment), that the Merkle inclusion path is valid and reaches the current root, and that the nullifier produced is correct. This is the proof that entitles the unlocker to receive the tokens.
+**Stealth Pool Note burning**: proves knowledge of the secret inputs to a specific Merkle tree leaf (the note commitment), that the Merkle inclusion path is valid and reaches the current root, and that the nullifier produced is correct. This is the proof that entitles the unlocker to receive the tokens.
 
 ## Verification
 

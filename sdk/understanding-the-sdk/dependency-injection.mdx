@@ -16,6 +16,7 @@ const client = await getUmbraClient(
     network: "mainnet",
     rpcUrl,
     rpcSubscriptionsUrl,
+    indexerApiEndpoint,   // optional but required for scanning + burning
   },
   {
     accountInfoProvider,    // override RPC account fetching
@@ -27,12 +28,14 @@ const client = await getUmbraClient(
       store,
       generate,
     },
+    utxoDataStore,          // optional but strongly recommended on browser
+    nullifierStore,         // optional but strongly recommended on browser
   },
 );
 ```
 
 ```typescript
-interface GetUmbraClientFromSignerDeps {
+interface GetUmbraClientDeps {
   readonly accountInfoProvider?: AccountInfoProviderFunction;
   readonly blockhashProvider?: GetLatestBlockhash;
   readonly transactionForwarder?: TransactionForwarder;
@@ -42,6 +45,8 @@ interface GetUmbraClientFromSignerDeps {
     readonly store?: MasterSeedStorerFunction;
     readonly generate?: MasterSeedGeneratorFunction;
   };
+  readonly utxoDataStore?: UtxoDataStore;
+  readonly nullifierStore?: NullifierStore;
 }
 ```
 
@@ -70,10 +75,14 @@ Override for: unit tests (no live node), custom RPC middleware, account caching,
 Returns the latest confirmed [blockhash](https://solana.com/docs/terminology#blockhash) and last valid block height for transaction construction.
 
 ```typescript
-type GetLatestBlockhash = () => Promise<{
-  blockhash: string;
-  lastValidBlockHeight: number;
-}>;
+type GetLatestBlockhash = (options?: {
+  readonly commitment?: Commitment;
+}) => Promise<LatestBlockhashResult>;
+
+interface LatestBlockhashResult {
+  readonly blockhash: Blockhash;
+  readonly lastValidBlockHeight: bigint;
+}
 ```
 
 Default: RPC call via `rpcUrl`.
@@ -86,8 +95,10 @@ Handles transaction broadcast and confirmation. Used by every function that subm
 
 ```typescript
 interface TransactionForwarder {
-  forwardSequentially(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
-  forwardInParallel(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
+  forwardSequentially(txs: readonly SignedTransaction[]): Promise<readonly TransactionSignature[]>;
+  forwardInParallel(txs: readonly SignedTransaction[]): Promise<readonly TransactionSignature[]>;
+  // Sends a single tx without awaiting confirmation (e.g. best-effort rent reclaim).
+  fireAndForget(tx: SignedTransaction): Promise<TransactionSignature>;
 }
 ```
 
@@ -99,6 +110,7 @@ Override for [Jito](https://www.jito.network/) bundle submission, priority fee m
 const jitoForwarder: TransactionForwarder = {
   forwardSequentially: async (txs) => submitToJitoBundleEndpoint(txs),
   forwardInParallel: async (txs) => submitToJitoBundleEndpoint(txs),
+  fireAndForget: async (tx) => (await submitToJitoBundleEndpoint([tx]))[0],
 };
 ```
 
@@ -107,7 +119,9 @@ const jitoForwarder: TransactionForwarder = {
 Returns current Solana epoch information. Used for [Token-2022 transfer fee](/advanced/token-2022) schedule selection.
 
 ```typescript
-type GetEpochInfo = () => Promise<EpochInfoResult>;
+type GetEpochInfo = (options?: {
+  readonly commitment?: Commitment;
+}) => Promise<EpochInfoResult>;
 ```
 
 Default: RPC call via `rpcUrl`.
@@ -126,28 +140,19 @@ interface MasterSeedStorage {
 }
 ```
 
-Default: in-memory (no persistence across page loads).
+Default: re-derive from `signer.signMessage(UMBRA_MESSAGE_TO_SIGN)` on every client construction. No persistence across page loads.
 
 ```typescript
-// CI - fixed deterministic seed, no wallet prompt
+// CI — fixed deterministic seed, no wallet prompt.
 const client = await getUmbraClient(args, {
   masterSeedStorage: {
     generate: async () => FIXED_TEST_SEED,
   },
 });
-
-// Production - persist across refreshes in encrypted sessionStorage
-const client = await getUmbraClient(args, {
-  masterSeedStorage: {
-    load: async () => {
-      const raw = sessionStorage.getItem("umbra_seed");
-      return raw ? { exists: true, seed: hexToBytes(raw) } : { exists: false };
-    },
-    store: async (seed) => {
-      sessionStorage.setItem("umbra_seed", bytesToHex(seed));
-    },
-  },
-});
 ```
+
+<Warning>
+Never persist the master seed in plaintext `localStorage` / `IndexedDB`. The seed is equivalent in sensitivity to a private key. Production persistence requires encrypted-at-rest storage keyed by a user-controlled secret (WebAuthn-derived, password-derived via Argon2id, or wallet-signed challenge) **and** scoped per-wallet (key includes the wallet pubkey). The scaffold defaults to re-derive every session.
+</Warning>
 
 See [Key Derivation](/sdk/advanced/key-derivation) for how the master seed is structured and derived from the wallet signature.

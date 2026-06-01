@@ -1,27 +1,31 @@
 ---
 title: "Indexer Overview"
-description: "UTXO indexer REST API at utxo-indexer.api.umbraprivacy.com. Protobuf responses, paginated UTXOs, Merkle proofs, batch proofs. Used by getClaimableUtxoScannerFunction."
+description: "Stealth Pool Note indexer REST API at utxo-indexer.api.umbraprivacy.com. Protobuf responses, paginated notes, Merkle proofs, batch proofs. Used by getBurnableStealthPoolNoteScannerFunction."
 ---
 
 ## What is the Indexer?
 
-The Umbra indexer is an off-chain service that continuously watches the Solana chain for Umbra program transactions, extracts UTXO commitments and encrypted ciphertexts, and stores them in a queryable database. It acts as the data layer that bridges on-chain Merkle tree state with the SDK and any other client that needs to interact with the mixer.
+The Umbra indexer is an off-chain service that continuously watches the Solana chain for Umbra program transactions, extracts Stealth Pool Note commitments and encrypted ciphertexts, and stores them in a queryable database. It acts as the data layer that bridges on-chain Merkle tree state with the SDK and any other client that needs to interact with the pool.
 
 It exposes two primary capabilities:
 
-- **UTXO data** - fetch encrypted UTXO ciphertexts by tree or absolute index. The SDK uses this to scan for UTXOs addressed to your [X25519](https://www.rfc-editor.org/rfc/rfc7748) key by trying to decrypt each ciphertext.
-- **Merkle proofs** - generate a Merkle inclusion proof (authentication path) for any leaf. This is required to construct a valid claim transaction on-chain.
+- **Note data** — fetch encrypted note ciphertexts by tree or absolute index. The SDK uses this to scan for notes addressable by your [X25519](https://www.rfc-editor.org/rfc/rfc7748) + viewing keys by trying to decrypt each ciphertext.
+- **Merkle proofs** — generate a Merkle inclusion proof (authentication path) for any leaf. Required to construct a valid burn transaction on-chain. The burner factories fetch a **per-batch** proof immediately before submission, so the scanner does not pre-bundle proofs.
 
 Beyond the SDK, the indexer is useful for analytics, monitoring, and custom integrations such as building your own wallet or scanning pipeline.
 
+<Note>
+The service is named `utxo-indexer` for historical reasons. The records it serves are Stealth Pool Notes; the on-chain commitments are still called UTXOs at the protocol level.
+</Note>
+
 ## Base URLs
 
-- **Mainnet** - `https://utxo-indexer.api.umbraprivacy.com`
-- **Devnet** - `https://utxo-indexer.api-devnet.umbraprivacy.com`
+- **Mainnet** — `https://utxo-indexer.api.umbraprivacy.com`.
+- **Devnet** — `https://utxo-indexer.api-devnet.umbraprivacy.com`.
 
 ## Response Format
 
-All endpoints return **[Protobuf](https://protobuf.dev/)** (`application/x-protobuf`) regardless of the `Accept` header. Protobuf is used by design - binary data like 32-byte hash arrays and ciphertext payloads compress significantly better than JSON.
+All endpoints return **[Protobuf](https://protobuf.dev/)** (`application/x-protobuf`) regardless of the `Accept` header. Protobuf is used by design — binary data like 32-byte hash arrays and ciphertext payloads compress significantly better than JSON.
 
 The health endpoints are the exception: they support both JSON (default) and Protobuf via `Accept` header negotiation.
 
@@ -31,58 +35,60 @@ All endpoints are subject to rate limiting. Exceeded limits return `429 Too Many
 
 ## Tree Structure
 
-UTXO commitments are organized into **Indexed Merkle Trees**, each holding up to **1,048,576 leaves** (depth-20). When a tree is full, the indexer begins a new tree at the next sequential index.
+Note commitments are organised into **Indexed Merkle Trees**, each holding up to **1,048,576 leaves** (depth-20). When a tree is full, the indexer begins a new tree at the next sequential index.
 
-- Tree 0 holds leaves at absolute indices `0` to `1,048,575`
-- Tree 1 holds leaves at absolute indices `1,048,576` to `2,097,151`
-- And so on
+- Tree 0 holds leaves at absolute indices `0` to `1,048,575`.
+- Tree 1 holds leaves at absolute indices `1,048,576` to `2,097,151`.
+- And so on.
 
 The absolute index of any leaf is:
 
 ```
-absolute_index = tree_index x 1_048_576 + insertion_index
+absolute_index = tree_index × 1_048_576 + insertion_index
 ```
 
 ## SDK Integration
 
-When you pass `indexerApiEndpoint` to `getUmbraClient`, the SDK automatically constructs two internal providers:
+When you pass `indexerApiEndpoint` to `getUmbraClient`, the SDK automatically constructs four internal providers on the client:
 
-- `client.fetchUtxoData` - calls `GET /v1/utxos` to retrieve ciphertext batches for decryption
-- `client.fetchMerkleProof` - calls `GET /v1/trees/{tree_index}/proof/{insertion_index}` for each claimable UTXO
+- `client.fetchMerkleProof` — single-leaf Merkle proof fetcher (`GET /v1/trees/{tree_index}/proof/{insertion_index}`).
+- `client.fetchBatchMerkleProof` — per-batch Merkle proof fetcher (`POST /v1/trees/{tree_index}/proofs`). Pass to burner factories.
+- `client.fetchUtxoData` — Stealth Pool Note data fetcher (`GET /v1/utxos/...`). Field name retains the legacy spelling; the scanner deps override is `fetchStealthPoolNoteData`.
+- `client.fetchTreeSummary` — tree summary fetcher.
 
-Both are consumed internally by `getClaimableUtxoScannerFunction`. You do not need to call the indexer directly when using the SDK.
+The scanner factory reads `client.fetchUtxoData` and `client.fetchTreeSummary` internally. The burner factories consume `fetchBatchMerkleProof` (pass it via `deps.fetchBatchMerkleProof = client.fetchBatchMerkleProof!`). You do not need to call the indexer directly when using the SDK.
 
 ## Planned Improvements
 
 <Info>
-The SDK currently calls the indexer directly using the `indexerApiEndpoint` you provide. We are planning to migrate this to an **IP Obfuscation Service** that will proxy indexer requests through an anonymizing relay, so that fetching your UTXOs does not leak your IP address to the indexer. This will be a transparent upgrade -- the SDK interface will not change.
+The SDK currently calls the indexer directly using the `indexerApiEndpoint` you provide. We are planning to migrate this to an **IP Obfuscation Service** that will proxy indexer requests through an anonymising relay, so that fetching your notes does not leak your IP address to the indexer. This will be a transparent upgrade — the SDK interface will not change.
 </Info>
 
 ## API Reference
 
 <CardGroup cols={2}>
   <Card title="Stats" icon="chart-bar" href="/indexer/api-reference/stats">
-    Aggregate statistics for the entire UTXO index.
+    Aggregate statistics for the entire Stealth Pool Note index.
   </Card>
   <Card title="Health" icon="heart-pulse" href="/indexer/api-reference/health/basic">
     Basic, detailed, liveness, and readiness health checks.
   </Card>
   <Card title="Tree Metadata" icon="tree" href="/indexer/api-reference/tree-metadata">
-    Current root hash, leaf count, and UTXO count for a specific tree.
+    Current root hash, leaf count, and note count for a specific tree.
   </Card>
-  <Card title="Tree UTXOs" icon="database" href="/indexer/api-reference/tree-utxos">
-    Paginated UTXO records for a specific tree.
+  <Card title="Tree Notes" icon="database" href="/indexer/api-reference/tree-utxos">
+    Paginated Stealth Pool Note records for a specific tree.
   </Card>
   <Card title="Merkle Proof" icon="shield-check" href="/indexer/api-reference/merkle-proofs">
     Generate an inclusion proof for a specific leaf.
   </Card>
   <Card title="Batch Merkle Proofs" icon="layer-group" href="/indexer/api-reference/batch-proofs">
-    Retrieve multiple proofs atomically under the same tree root.
+    Retrieve multiple proofs atomically under the same tree root — what the burner factory uses.
   </Card>
-  <Card title="Global UTXOs" icon="list" href="/indexer/api-reference/utxos">
-    Paginated UTXO queries spanning all trees.
+  <Card title="Global Notes" icon="list" href="/indexer/api-reference/utxos">
+    Paginated note queries spanning all trees.
   </Card>
-  <Card title="Single UTXO" icon="magnifying-glass" href="/indexer/api-reference/utxo-single">
-    Fetch a single UTXO by absolute index.
+  <Card title="Single Note" icon="magnifying-glass" href="/indexer/api-reference/utxo-single">
+    Fetch a single note by absolute index.
   </Card>
 </CardGroup>

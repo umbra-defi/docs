@@ -1,11 +1,11 @@
 ---
 title: "How Umbra Works"
-description: "How Umbra works: encrypted balances via Arcium MPC dual-instruction pattern (queue_computation + arcium_callback), UTXO mixer with Indexed Merkle Tree, and compliance grants."
+description: "How Umbra works: EncryptedTokenAccounts via Arcium MPC dual-instruction pattern (queue_computation + arcium_callback), a Stealth Pool with an Indexed Merkle Tree, and compliance grants."
 ---
 
 ## The Problem with Public Blockchains
 
-Every transaction on Solana is publicly readable. Anyone can look up your wallet address and see exactly how much of any token you hold and every transfer you've ever made. For many use cases - payroll, business payments, personal finance - this is unacceptable.
+Every transaction on Solana is publicly readable. Anyone can look up your wallet address and see exactly how much of any token you hold and every transfer you've ever made. For many use cases — payroll, business payments, personal finance — this is unacceptable.
 
 Umbra fixes this without requiring you to move your tokens off Solana or trust a centralized custodian.
 
@@ -14,25 +14,25 @@ Umbra fixes this without requiring you to move your tokens off Solana or trust a
 Umbra provides two distinct privacy tools that can be used independently or together:
 
 <CardGroup cols={2}>
-  <Card title="Encrypted Balances" icon="shield">
-    Your token balance is stored on-chain, but the amount is encrypted. Transfers still happen on-chain - what's hidden is *how much*.
+  <Card title="EncryptedTokenAccount (ETA)" icon="shield">
+    Your token balance is stored on-chain, but the amount is encrypted. Transfers still happen on-chain — what's hidden is *how much*.
   </Card>
-  <Card title="Mixer" icon="shuffle">
-    Tokens are deposited into a shared pool and withdrawn separately, with no on-chain link between the deposit and withdrawal addresses. *Who transferred to whom* is hidden.
+  <Card title="Stealth Pool" icon="shuffle">
+    Tokens are written as **Stealth Pool Notes** into a shared mixer tree, then **burned** from any wallet with no on-chain link between sender and recipient. *Who paid whom* is hidden.
   </Card>
 </CardGroup>
 
-You can use encrypted balances alone (hide amounts), the mixer alone (hide the transfer path), or both together for the strongest privacy guarantees.
+You can use the EncryptedTokenAccount alone (hide amounts), the Stealth Pool alone (hide the transfer path), or both together for the strongest privacy guarantees.
 
-## How Encrypted Balances Work
+## How EncryptedTokenAccounts Work
 
-When you deposit tokens into an encrypted balance:
+When you deposit tokens into your ETA:
 
-1. Your tokens move from your public SPL or Token-2022 account to the **shielded pool** - still on-chain, still real tokens, locked in the program
-2. The program creates an **Encrypted Token Account (ETA)** for your `(wallet, mint)` pair
-3. Your balance is encrypted and stored in that ETA using **Arcium MPC**
+1. Your tokens move from your **AssociatedTokenAccount (ATA)** to the on-chain pool custody account.
+2. The program initialises an `EncryptedTokenAccount` PDA for your `(wallet, mint)` pair if one does not already exist.
+3. The balance is encrypted and stored in that ETA using **Arcium MPC**.
 
-The encryption means no one - not Umbra, not Arcium, not Solana validators - can read your balance without the decryption key.
+The encryption means no one — not Umbra, not Arcium, not Solana validators — can read your balance without the decryption key.
 
 ### What is Arcium MPC?
 
@@ -46,57 +46,64 @@ From a developer's perspective: Arcium is the computation backend. The SDK handl
 
 When your balance is encrypted, it can be in one of two modes:
 
-- **MXE-only** - Only the Arcium MPC network can decrypt it. Withdrawals require MPC to perform the decryption. You cannot decrypt it locally.
-- **Shared** - Encrypted under both the Arcium MPC key *and* your personal [X25519](https://www.rfc-editor.org/rfc/rfc7748) key. You can decrypt your own balance client-side without MPC. Available after you register your X25519 key.
+- **MXE-only** — Only the Arcium MPC network can decrypt it. Withdrawals require MPC to perform the decryption. You cannot decrypt it locally.
+- **Shared** — Encrypted under both the Arcium MPC key *and* your personal [X25519](https://www.rfc-editor.org/rfc/rfc7748) key. You can decrypt your own balance client-side without MPC. Available after you register your X25519 key.
 
 <Note>
 After [registering](/sdk/registration) with `confidential: true`, your deposits automatically use Shared mode so you can query your balance locally.
 </Note>
 
-## How the Mixer Works
+## How the Stealth Pool Works
 
-The mixer uses a cryptographic structure called an **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** combined with **[zero-knowledge proofs](https://dl.acm.org/doi/10.1145/22145.22178)**.
+The Stealth Pool uses a cryptographic structure called an **[Indexed Merkle Tree](https://link.springer.com/chapter/10.1007/3-540-48184-2_32)** combined with **[zero-knowledge proofs](https://dl.acm.org/doi/10.1145/22145.22178)**.
 
 Here's the simplified version:
 
 <Steps>
-  <Step title="Deposit into the pool">
-    You create a **commitment** - a cryptographic hash of `(amount, recipient, secret)` - and insert it as a leaf into the Merkle tree. The commitment is public; the contents are not.
+  <Step title="Write a Stealth Pool Note">
+    You create a **commitment** — a cryptographic hash of `(amount, recipient, secret)` — and insert it as a leaf into the Merkle tree. The commitment is public; the contents are not.
   </Step>
   <Step title="Wait">
-    More users deposit into the same tree. Your commitment is now one of many thousands of leaves. The larger the set, the stronger the anonymity.
+    More users write notes into the same tree. Your commitment is now one of many thousands of leaves. The larger the set, the stronger the anonymity.
   </Step>
-  <Step title="Claim to any address">
-    You present a **zero-knowledge proof** that you know the secret behind one of the leaves in the tree without revealing *which* leaf. The proof is verified on-chain, the nullifier is burned to prevent double-spending, and the tokens are released.
+  <Step title="Burn to any address">
+    You present a **zero-knowledge proof** that you know the secret behind one of the leaves in the tree without revealing *which* leaf. The proof is verified on-chain, the **nullifier** is burned to prevent double-spending, and the tokens are released to the destination balance.
   </Step>
 </Steps>
 
-The deposit address and the claim address need not be related. An observer sees a deposit and a withdrawal happening, but cannot link them.
+The deposit address and the burn destination need not be related. An observer sees a note being written and a burn happening, but cannot link them.
+
+### Self-burnable vs receiver-burnable
+
+There are two ways to write a Stealth Pool Note:
+
+- **Self-burnable** — the writer keeps the unlocker. Useful for "stage funds in the pool, burn them out later from a fresh wallet" patterns. Requires zero on-chain state from the destination.
+- **Receiver-burnable** — the writer encrypts the unlocker against the **recipient's** `userCommitment`. The recipient scans, decrypts, and burns. Requires the recipient to have completed all three registration sub-steps on-chain (account init, X25519 key, user commitment).
 
 ## The Dual-Instruction Pattern
 
-Every confidential operation in Umbra involves two on-chain transactions:
+Every confidential MPC operation in Umbra involves two on-chain transactions:
 
-1. **Handler** - your wallet signs a transaction that validates inputs and queues a computation request with Arcium
-2. **Callback** - Arcium completes the off-chain computation and posts the result back on-chain, triggering the program's callback instruction to update state
+1. **Handler** — your wallet signs a transaction that validates inputs and queues a computation request with Arcium.
+2. **Callback** — Arcium completes the off-chain computation and posts the result back on-chain, triggering the program's callback instruction to update state.
 
 The SDK waits for both transactions to confirm before returning. You don't need to manage this yourself.
 
 <Note>
-This is why Umbra operations take a few seconds longer than a standard token transfer - there is an off-chain MPC round-trip between the two on-chain instructions.
+This is why Umbra MPC operations take a few seconds longer than a standard token transfer — there is an off-chain MPC round-trip between the two on-chain instructions. Pure ZK operations (e.g. an ATA-source note write) are single-tx and finish in normal Solana confirmation time.
 </Note>
 
 ## Privacy Guarantees Summary
 
-- **Token balance amount** - hidden by Encrypted Balances. Encrypted with MPC; auditors can be granted selective access.
-- **Transfer counterparty** - hidden by the Mixer. Requires a sufficient anonymity set (other users in the same tree).
-- **Transaction history** - strongest guarantees when mixer + encrypted balances are used together.
+- **Token balance amount** — hidden by EncryptedTokenAccounts. Encrypted with MPC; auditors can be granted selective access via compliance grants.
+- **Transfer counterparty** — hidden by the Stealth Pool. Requires a sufficient anonymity set (other notes in the same tree at the same denomination).
+- **Transaction history** — strongest guarantees when the Stealth Pool and EncryptedTokenAccounts are used together.
 
 ## What is NOT Hidden
 
-- **That you are using Umbra** - on-chain interactions with the Umbra program are visible
-- **Deposit and withdrawal amounts** when using the mixer - the amount is committed at deposit and revealed at claim
-- **Timing** - if you deposit and immediately withdraw, temporal analysis can correlate them
+- **That you are using Umbra** — on-chain interactions with the Umbra program are visible.
+- **Note amounts** — the amount is committed at note creation and revealed at burn.
+- **Timing** — if you write a note and immediately burn it from a fresh wallet, temporal analysis can correlate them.
 
 ## Compliance
 

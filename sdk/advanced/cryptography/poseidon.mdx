@@ -1,6 +1,6 @@
 ---
 title: "Poseidon Hash"
-description: "ZK-friendly hash function over BN254 used for UTXO commitments, nullifiers, and user identity."
+description: "ZK-friendly hash function over BN254 used for Stealth Pool Note commitments, nullifiers, and user identity."
 ---
 
 [Poseidon](https://eprint.iacr.org/2019/458.pdf) is a ZK-friendly hash function designed to be efficient inside R1CS and Plonk circuits. Unlike general-purpose hashes, Poseidon is defined natively over prime fields, making it orders of magnitude cheaper to evaluate inside a zero-knowledge proof circuit than SHA-256 or Keccak.
@@ -11,9 +11,9 @@ See the [Poseidon Cipher](https://docs.umbraprivacy.com/docs/security-cryptograp
 
 ## Uses in Umbra
 
-**UTXO commitments**: Each UTXO inserts a Poseidon commitment into the Indexed Merkle Tree. The commitment hides the UTXO inputs on-chain while binding the creator to them for the ZK proof.
+**Stealth Pool Note commitments**: each note inserts a Poseidon commitment into the Indexed Merkle Tree. The commitment hides the note inputs on-chain while binding the writer to them for the ZK proof.
 
-**Nullifiers**: Each UTXO has a corresponding Poseidon nullifier derived from the holder's private key. Burning the nullifier on-chain prevents double-spending, and only the key holder can produce the correct nullifier for a given commitment.
+**Nullifiers**: each note has a corresponding Poseidon nullifier derived from the holder's private key. Burning the nullifier on-chain prevents double-spending, and only the key holder can produce the correct nullifier for a given commitment.
 
 **User commitment**: Each registered user has a Poseidon commitment stored on-chain that links their ZK identity to their encryption key without revealing either in plaintext.
 
