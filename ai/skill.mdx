@@ -1,0 +1,68 @@
+---
+title: "Agent Skill"
+description: "The Umbra skill teaches Claude how to drive the Payments MCP correctly — the right flow, the jobId/poll pattern, and how to handle Umbra's typed errors."
+---
+
+The **Umbra skill** is a small package of instructions for Claude (and other
+skill-aware agents). The [Payments MCP](/ai/mcp) gives the agent the `umbra_*`
+*tools*; the skill gives it the *know-how* to use them well:
+
+- The correct order of operations (orient → register → shield → pay → claim).
+- The **jobId / poll** pattern for slow MPC operations (so the agent doesn't
+  blind-retry a 30–60s transaction).
+- How to read balances (native SOL vs wSOL, public vs private, MXE-locked).
+- How to react to the typed errors (`RECIPIENT_NOT_REGISTERED`, `MXE_LOCKED`,
+  `CAP_EXCEEDED`, …) instead of looping.
+- The unregistered-recipient decision (mainnet private payout vs devnet
+  `publicFallback`) and what to tell the recipient.
+
+<Note>
+The skill is optional but recommended. The MCP works without it, but the skill
+makes the agent noticeably more reliable and reduces wasted tool calls.
+</Note>
+
+## Install
+
+The skill ships independently of the npm packages, from one repo —
+[`umbra-defi/umbra-copilot`](https://github.com/umbra-defi/umbra-copilot) — which
+publishes two plugins: **`umbra-payments-mcp`** (drive the Payments MCP) and
+**`umbra-sdk`** (SDK reference + scaffolder).
+
+<Tabs>
+  <Tab title="Claude Code (plugin)">
+    Add the marketplace once, then install the plugin(s):
+
+    ```bash
+    /plugin marketplace add umbra-defi/umbra-copilot
+    /plugin install umbra-payments-mcp@umbra-copilot
+    # optional: the SDK reference + scaffolder skill
+    /plugin install umbra-sdk@umbra-copilot
+    ```
+  </Tab>
+  <Tab title="skills.sh">
+    Pull the skill via the cross-agent [skills.sh](https://skills.sh) CLI:
+
+    ```bash
+    npx skills add umbra-defi/umbra-copilot --skill umbra-payments-mcp
+    ```
+  </Tab>
+  <Tab title="Manual">
+    Clone the repo and copy the skill folder into your skills directory:
+
+    ```bash
+    git clone https://github.com/umbra-defi/umbra-copilot
+    cp -r umbra-copilot/plugins/umbra-payments-mcp/skills/umbra-payments-mcp ~/.claude/skills/
+    # or project scope: .claude/skills/
+    ```
+  </Tab>
+</Tabs>
+
+## How it pairs with the MCP
+
+1. Install the [Payments MCP](/ai/mcp) (gives the agent the tools).
+2. Install the skill (gives the agent the playbook).
+3. Ask in plain language — *"pay alice 10 USDC privately"* — and the agent runs
+   the right sequence, polls the job, and reports the result.
+
+The skill carries no keys and no funds — it is pure instruction text. All signing
+and proving still happen locally through the MCP / agent-kit.
