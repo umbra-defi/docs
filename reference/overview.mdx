@@ -1,39 +1,42 @@
 ---
 title: "SDK Reference"
-description: "Complete SDK reference index: all factory functions and the subpath each lives under (registration, deposit, withdrawal, burn, query, conversion, compliance, account, zk-prover, store-adapters)."
+description: "Complete V14 SDK reference index: all factory functions and the subpath each lives under (registration, deposit, withdrawal, burn, query, conversion, compliance, account, zk-prover, store-adapters)."
 ---
 
-This reference covers the full public API surface of `@umbra-privacy/sdk@5.x`. Pages are organised by feature area — each section documents factory functions alongside their parameter types, result types, and associated errors.
+This reference covers the full public API surface of `@umbra-privacy/sdk@5.x` (V14). Pages are organised by feature area — each section documents factory functions alongside their parameter types, result types, and associated errors.
 
 ## Main barrel + subpaths
 
 The main `@umbra-privacy/sdk` barrel re-exports a small, stable surface — `getUmbraClient`, the four signer factories, the full error hierarchy, the `Result<T,E>` helpers, and everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}`. **Operation factories require named subpath imports.**
 
-- `@umbra-privacy/sdk` — `getUmbraClient`, signers, errors, `Result<T,E>`, indexer + relayer + zk-prover + solana + arcium infra
-- `@umbra-privacy/sdk/client` — `IUmbraClient`, `IUmbraSigner` interfaces
-- `@umbra-privacy/sdk/shared` — `UMBRA_MESSAGE_TO_SIGN`, `BPS_DIVISOR`, and protocol-wide constants
-- `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction`, executors, build helpers
-- `@umbra-privacy/sdk/deposit` — Direct ATA→ETA deposit + 4 Stealth Pool Note creators (ATA/ETA × self/receiver)
-- `@umbra-privacy/sdk/withdrawal` — ETA→ATA withdrawer
-- `@umbra-privacy/sdk/transfer` — `getTransferorFunction` — ETA-to-ETA direct transfer, 8 variants
-- `@umbra-privacy/sdk/burn` — Note scanner + 3 burner factories + `enrichWithMerkleProof`
-- `@umbra-privacy/sdk/query` — Encrypted-balance + user-account queriers
-- `@umbra-privacy/sdk/conversion` — MXE-only → Shared converter
-- `@umbra-privacy/sdk/compliance` — Grant issuer / revoker / 3 reencryptors / 3 queriers
-- `@umbra-privacy/sdk/account` — Staged-token recoverers, key rotators, maintenance
-- `@umbra-privacy/sdk/zk-prover` — One factory per Groth16 circuit
-- `@umbra-privacy/sdk/zk-prover/cdn` — `getCdnZkAssetProvider`
-- `@umbra-privacy/sdk/store-adapters` — `createBrowserStorageBackend`, `createFileStorageBackend`, sharded + in-memory UTXO + nullifier stores
-- `@umbra-privacy/sdk/store` — Base store interfaces
-- `@umbra-privacy/sdk/indexer`, `…/indexer/utxo`, `…/indexer/nullifier` — Typed indexer clients
-- `@umbra-privacy/sdk/errors` — Error classes + `is*` type guards
-- `@umbra-privacy/sdk/types` — Branded primitives (U64, Address, …) + `create*` helpers
-- `@umbra-privacy/sdk/constants` — mint lists, domain separators, network configs
-- `@umbra-privacy/sdk/crypto`, `…/crypto/poseidon`, `…/crypto/rescue`, `…/crypto/aes`, `…/crypto/key-derivation`, `…/crypto/challenges`, `…/crypto/commitment` — Cryptographic primitives
-- `@umbra-privacy/sdk/converters` — Encoding / byte-conversion utilities
-- `@umbra-privacy/sdk/arcium` — Arcium MPC types + helpers + `generateRandomNonce` (also re-exported from main barrel)
-- `@umbra-privacy/sdk/temporal`, `…/validation`, `…/hooks`, `…/pipeline`, `…/fee-provider`, `…/math` — Utilities
-- `@umbra-privacy/sdk/pda`, `…/solana`, `…/token` — Solana / PDA / token helpers
+| Subpath | Contents |
+|---------|----------|
+| `@umbra-privacy/sdk` | `getUmbraClient`, signers, errors, `Result<T,E>`, indexer + relayer + zk-prover + solana + arcium infra |
+| `@umbra-privacy/sdk/client` | `IUmbraClient`, `IUmbraSigner` interfaces |
+| `@umbra-privacy/sdk/shared` | `UMBRA_MESSAGE_TO_SIGN` and protocol-wide constants |
+| `@umbra-privacy/sdk/registration` | `getUserRegistrationFunction`, executors, build helpers |
+| `@umbra-privacy/sdk/deposit` | Direct PATA→ETA deposit + 4 Stealth Pool Note creators (PATA/ETA × self/receiver) |
+| `@umbra-privacy/sdk/withdrawal` | ETA→PATA withdrawer |
+| `@umbra-privacy/sdk/transfer` | `getTransferorFunction` — ETA-to-ETA direct transfer, 8 variants |
+| `@umbra-privacy/sdk/burn` | Note scanner + 3 burner factories + `enrichWithMerkleProof` |
+| `@umbra-privacy/sdk/query` | Encrypted-balance + user-account queriers |
+| `@umbra-privacy/sdk/conversion` | MXE-only → Shared converter |
+| `@umbra-privacy/sdk/compliance` | Grant issuer / revoker / 3 reencryptors / 3 queriers |
+| `@umbra-privacy/sdk/account` | Staged-token recoverers, key rotators, maintenance |
+| `@umbra-privacy/sdk/zk-prover` | One factory per Groth16 circuit |
+| `@umbra-privacy/sdk/zk-prover/cdn` | `getCdnZkAssetProvider` |
+| `@umbra-privacy/sdk/store-adapters` | `createBrowserStorageBackend`, `createFileStorageBackend`, sharded + in-memory UTXO + nullifier stores |
+| `@umbra-privacy/sdk/store` | Base store interfaces |
+| `@umbra-privacy/sdk/indexer`, `…/indexer/utxo`, `…/indexer/nullifier` | Typed indexer clients |
+| `@umbra-privacy/sdk/errors` | Error classes + `is*` type guards |
+| `@umbra-privacy/sdk/types` | Branded primitives (U64, Address, …) + `create*` helpers |
+| `@umbra-privacy/sdk/constants` | `BPS_DIVISOR`, mint lists, domain separators |
+| `@umbra-privacy/sdk/crypto`, `…/crypto/poseidon`, `…/crypto/rescue`, `…/crypto/aes`, `…/crypto/key-derivation`, `…/crypto/challenges`, `…/crypto/commitment` | Cryptographic primitives |
+| `@umbra-privacy/sdk/converters` | Encoding / byte-conversion utilities |
+| `@umbra-privacy/sdk/arcium` | Arcium MPC types + helpers + `generateRandomNonce` (also re-exported from main barrel) |
+| `@umbra-privacy/sdk/temporal`, `…/validation`, `…/hooks`, `…/pipeline`, `…/fee-provider`, `…/math` | Utilities |
+| `@umbra-privacy/sdk/pda`, `…/solana`, `…/token` | Solana / PDA / token helpers |
+| `@umbra-privacy/sdk/arcium` | Arcium types + helpers |
 
 ---
 
@@ -77,8 +80,8 @@ Types referenced across all pages:
 
 - [Client](/reference/client) — `getUmbraClient`, `IUmbraClient`, `IUmbraSigner`.
 - [Registration](/reference/registration) — `getUserRegistrationFunction`, sub-step executors.
-- [Deposit](/reference/deposit) — Direct ATA→ETA deposit + 4 Stealth Pool Note creators.
-- [Withdrawal](/reference/withdraw) — Direct ETA→ATA withdrawal.
+- [Deposit](/reference/deposit) — Direct PATA→ETA deposit + 4 Stealth Pool Note creators.
+- [Withdrawal](/reference/withdraw) — Direct ETA→PATA withdrawal.
 - [Query](/reference/query) — User-account and encrypted-balance queriers.
 - [Conversion](/reference/conversion) — MXE-only → Shared converter.
 - [Stealth Pool (Mixer)](/reference/mixer) — Note scanner + 3 burner factories.

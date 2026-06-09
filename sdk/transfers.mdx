@@ -1,6 +1,6 @@
 ---
 title: "Transfers"
-description: "An overview of the transfer models in Umbra — unlinkable transfers via Stealth Pool Notes, confidential direct transfers via getTransferorFunction (ETA-to-ETA), and amount-hiding ETA operations."
+description: "An overview of the transfer models in Umbra V14 — unlinkable transfers via Stealth Pool Notes, confidential direct transfers via getTransferorFunction (ETA-to-ETA), and amount-hiding ETA operations."
 ---
 
 ## Overview
@@ -15,7 +15,7 @@ Tokens enter the pool as a **Stealth Pool Note** commitment inserted into an on-
 
 Note writes have four variants — `(source × unlocker)`:
 
-- **From an ATA** — tokens enter the pool directly from a `AssociatedTokenAccount`. Single tx, no MPC.
+- **From a PATA** — tokens enter the pool directly from a `PublicAssociatedTokenAccount`. Single tx, no MPC.
 - **From an ETA** — tokens are drawn from an `EncryptedTokenAccount` before entering the pool. Two-tx pipeline (proof account → note write), MPC under the hood.
 
 Each source has both a **self-burnable** variant (sender keeps the unlocker; useful for "stage funds and burn out from a fresh wallet" flows — recipient needs no on-chain state) and a **receiver-burnable** variant (unlocker encrypted against the recipient's `userCommitment` — recipient must have completed all three registration sub-steps).
@@ -24,9 +24,9 @@ Burns have three shipped variants:
 
 - **Receiver-burnable → ETA** — anonymous payment into the recipient's encrypted balance.
 - **Self-burnable → ETA** — write a note, then burn it back into an encrypted balance from any wallet.
-- **Self-burnable → ATA** — write a note, then burn it out to a plaintext ATA from any wallet.
+- **Self-burnable → PATA** — write a note, then burn it out to a plaintext PATA from any wallet.
 
-(Receiver-burnable → ATA exists on-chain but is not yet exposed in the SDK.)
+(Receiver-burnable → PATA exists on-chain but is not yet exposed in the SDK.)
 
 See the [Stealth Pool](/sdk/mixer/overview) section for the full API and per-variant pre-checks.
 
@@ -40,7 +40,7 @@ A lighter-weight privacy model that hides token amounts and balances on-chain, b
 
 This covers scenarios where amount privacy is the goal and linkability is an acceptable trade-off: for example, moving tokens between accounts you control without exposing the amounts, or settling a payment where both parties know each other but want the value hidden.
 
-The on-chain program supports several confidential-transfer variants. For direct ETA-to-ETA transfers, use `getTransferorFunction` documented below. For moving funds between ATAs and your own ETAs, use [deposit](/sdk/deposit) / [withdraw](/sdk/withdraw) / [convert](/sdk/conversion).
+The on-chain program supports several confidential-transfer variants. For direct ETA-to-ETA transfers, use `getTransferorFunction` documented below. For moving funds between PATAs and your own ETAs, use [deposit](/sdk/deposit) / [withdraw](/sdk/withdraw) / [convert](/sdk/conversion).
 
 ## ETA-to-ETA Direct Transfer
 

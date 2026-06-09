@@ -1,22 +1,42 @@
 ---
 title: "Migration: V4 → V5"
-description: "Step-by-step migration from @umbra-privacy/sdk@4.x to @umbra-privacy/sdk@5.x: package consolidation, subpath imports, factory renames, zero-arg scanner, burner relayer-dep shape, store adapters."
+description: "Step-by-step migration from @umbra-privacy/sdk@4.x (V13) to @umbra-privacy/sdk@5.x (V14): package consolidation, subpath imports, factory renames, zero-arg scanner, burner relayer-dep shape, store adapters."
 ---
 
 V5 is a vocabulary + ergonomics overhaul. The on-chain protocol and wire formats are **unchanged** — relayer paths are still `/v1/claims`, the on-chain instruction is still `burn_*` under the hood, and a handful of TypeScript aliases bridge the two namespaces so most callers can rename without rewriting logic.
 
 This page walks you through every breaking change. Work top-to-bottom; nothing later depends on something earlier you skipped.
 
+<Warning>
+**Current release: `@umbra-privacy/sdk@5.0.0-rc.4`.** It resolves
+`@umbra-privacy/umbra-codama@3.0.0-rc.3`, which has a PDA-derivation bug that makes
+deposits fail on-chain with `ConstraintSeeds (2006)`. Pin the codama client to its
+fixed release until the next SDK release bumps it:
+
+```jsonc
+// package.json
+{
+  "pnpm": { "overrides": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" } }
+  // npm: "overrides": { ... }   ·   yarn: "resolutions": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" }
+}
+```
+
+There is also a known `scan()` bug in `rc.3`–`rc.4` (a `BigInt()` call on a base64
+field throws on the columnar fetch path). Until it's fixed upstream, apply a
+one-file dist patch (`scripts/patch-sdk.mjs`, wired as a `postinstall` hook) that
+rewrites the two lines to decode the bytes correctly.
+</Warning>
+
 ## TL;DR
 
-1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.3`. Pin an **exact** version.
+1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.4`. Pin an **exact** version, and add the `@umbra-privacy/umbra-codama@3.0.0-rc.4` override (see the warning above).
 2. Delete `@umbra-privacy/web-zk-prover` from `package.json`. The prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
 3. Move every operation factory import from the main barrel to its **named subpath** (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`).
-4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, ATA → ATA, encrypted balance → ETA).
+4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, ATA → PATA, encrypted balance → ETA).
 5. Rewrite the scanner call: zero-arg in V5, results bucketed by `(kind, source)` under long-form keys.
 6. Burner factories take a new `relayer` dep — `{ submitBurn, pollBurnStatus, getRelayerAddress }` — these are TypeScript aliases of the relayer client's existing `submitClaim` / `pollClaimStatus` / `getRelayerAddress`, so plug in the same client unchanged.
 7. (Browser) Wire `utxoDataStore` + `nullifierStore` from `@umbra-privacy/sdk/store-adapters`. Without them every `scan()` walks every active tree from genesis.
-8. (Mainnet) Mint list adds `CASH`. (Devnet) Mint list: wSOL, dUSDC, dUSDT, STREAMFLOW.
+8. (Mainnet) Mint list adds `CASH`. (Devnet) Mint list drops to wSOL only.
 
 The rest of this page expands each step with before/after code.
 
@@ -47,8 +67,9 @@ import { getCdnZkAssetProvider } from "@umbra-privacy/web-zk-prover/cdn";
 ```jsonc
 {
   "dependencies": {
-    "@umbra-privacy/sdk": "5.0.0-rc.3"
-  }
+    "@umbra-privacy/sdk": "5.0.0-rc.4"
+  },
+  "pnpm": { "overrides": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" } }
 }
 ```
 
@@ -82,7 +103,7 @@ transpilePackages: ["@umbra-privacy/sdk"]
 The V5 main barrel re-exports only:
 
 - `getUmbraClient`, the four signer factories, the error hierarchy, `Result<T,E>` helpers.
-- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, RPC providers, transaction forwarders.
+- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, `getUmbraIndexer`, RPC providers, transaction forwarders.
 
 **Every operation factory now lives behind a named subpath.**
 
@@ -105,8 +126,7 @@ The V5 main barrel re-exports only:
 | `generateRandomNonce` | `@umbra-privacy/sdk/utils` | `@umbra-privacy/sdk/arcium` (also re-exported from the main barrel) |
 | Function-type aliases | `@umbra-privacy/sdk/interfaces` | the same subpath as the factory |
 | Error classes + `is*` guards | `@umbra-privacy/sdk/errors` | `@umbra-privacy/sdk/errors` (unchanged) |
-| `BPS_DIVISOR` | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/shared` |
-| mint lists | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/constants` |
+| `BPS_DIVISOR`, mint lists | `@umbra-privacy/sdk` | `@umbra-privacy/sdk/constants` |
 
 There is no `@umbra-privacy/sdk/interfaces` re-export in V5. Function-type aliases (`SelfBurnableStealthPoolNoteFromEncryptedTokenAccountCreatorFunction`, etc.) ship alongside their factories — import them from the same subpath.
 
@@ -118,7 +138,7 @@ Names lengthened to spell out the data flow end-to-end. The vocabulary swap:
 
 - **`UTXO`** → **`Stealth Pool Note`** (in factory names + result types; on-chain commitments and the indexer route are still called UTXOs).
 - **`Claim`** → **`Burn`** (in factory names + lifecycle hooks; the wire endpoint is still `/v1/claims`).
-- **`ATA` / `PublicBalance`** → **`AssociatedTokenAccount` (ATA)** in factory names.
+- **`ATA` / `PublicBalance`** → **`PublicAssociatedTokenAccount` (PATA)** in factory names.
 - **`EncryptedBalance`** → **`EncryptedTokenAccount` (ETA)** in factory names.
 
 ### Deposits
@@ -198,8 +218,8 @@ const result = await scan(0, 0); // (treeIndex, startInsertionIndex, endInsertio
 
 console.log("Self-burnable from ETA:", result.selfBurnable.length);
 console.log("Receiver from ETA:",      result.received.length);
-console.log("Self-burnable from ATA:", result.publicSelfBurnable.length);
-console.log("Receiver from ATA:",      result.publicReceived.length);
+console.log("Self-burnable from PATA:", result.publicSelfBurnable.length);
+console.log("Receiver from PATA:",      result.publicReceived.length);
 
 // Pass directly to a V4 claimer — the UTXOs come with Merkle proofs attached.
 await claim(result.received);
@@ -215,8 +235,8 @@ const result = await scan(); // zero-arg
 
 console.log("Self-burnable from ETA:    ", result.etaToStealthPoolSelfBurnable.length);
 console.log("Receiver from ETA:         ", result.etaToStealthPoolReceiverBurnable.length);
-console.log("Self-burnable from ATA:   ", result.ataToStealthPoolSelfBurnable.length);
-console.log("Receiver from ATA:        ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Self-burnable from PATA:   ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Receiver from PATA:        ", result.ataToStealthPoolReceiverBurnable.length);
 console.log("Scanned trees:             ", result.scannedTrees.length);
 
 // Pass directly to a V5 burner — it fetches per-batch proofs internally.
@@ -293,7 +313,7 @@ Two new required deps to be aware of:
 
 ### Burn result shape
 
-V4 claimers returned `{ signatures: Record<number, TransactionSignature[]> }`. V5 burners return `BurnStealthPoolNoteIntoETAResult` (or `…IntoAssociatedTokenAccountResult` for the ATA variant):
+V4 claimers returned `{ signatures: Record<number, TransactionSignature[]> }`. V5 burners return `BurnStealthPoolNoteIntoETAResult` (or `…IntoPublicAssociatedTokenAccountResult` for the PATA variant):
 
 ```typescript
 interface BurnStealthPoolNoteIntoETAResult {
@@ -306,7 +326,7 @@ interface BurnBatchResult {
   readonly status: BurnStatus;
   readonly txSignature?: string;               // on-chain burn tx (when landed)
   readonly callbackSignature?: string;         // MPC callback tx (when finalised)
-  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v17"
+  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v18"
   readonly failureReason?: string | null;
   readonly stealthPoolNoteIds?: readonly string[]; // "treeIndex:leafIndex" pairs
 }
@@ -333,8 +353,8 @@ type ReceiverBurnerFn = (
 
 ### Batching is unchanged conceptually
 
-- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤4 per proof (`MAX_STEALTH_POOL_NOTES_PER_PROOF = 4`). Pass the whole array.
-- **Self-burnable → ETA / ATA** has `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array.
+- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤5 per proof. Pass the whole array.
+- **Self-burnable → ETA / PATA** has `MAX_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array.
 
 ---
 
@@ -362,6 +382,7 @@ const client = await getUmbraClient({
   rpcUrl,
   rpcSubscriptionsUrl,
   indexerApiEndpoint,
+  relayerApiEndpoint,
   utxoDataStore,   // NEW in V5
   nullifierStore,  // NEW in V5
 });
@@ -376,7 +397,7 @@ On Node.js or short-lived scripts, you can omit the stores — the scanner falls
 ## 7. Mint list changes
 
 - **Mainnet** gained `CASH` (`CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`). Mainnet list (5): wSOL, USDC, USDT, UMBRA, CASH.
-- **Devnet** mint list: wSOL, dUSDC, dUSDT, STREAMFLOW (dUSDC / dUSDT from [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/)).
+- **Devnet** dropped to **wSOL only**.
 - **Localnet** stayed wSOL only.
 
 If your code hard-codes a mint allowlist, update it. The authoritative source at runtime is `relayer.getSupportedMints()` — call it once at app boot and cache for the session.
@@ -589,6 +610,7 @@ const client = await getUmbraClient({
   rpcUrl,
   rpcSubscriptionsUrl,
   indexerApiEndpoint,
+  relayerApiEndpoint,
   utxoDataStore,
   nullifierStore,
 });
@@ -596,8 +618,7 @@ const client = await getUmbraClient({
 const scan   = getBurnableStealthPoolNoteScannerFunction({ client });
 const result = await scan();
 
-// The relayer is constructed separately — it is not a getUmbraClient argument.
-const r    = getUmbraRelayer({ apiEndpoint: "https://relayer.api.umbraprivacy.com" });
+const r    = getUmbraRelayer({ apiEndpoint: relayerApiEndpoint });
 const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   { client },
   {
@@ -635,10 +656,10 @@ After migrating, verify each:
 - [ ] No imports from `@umbra-privacy/web-zk-prover` (replaced with `@umbra-privacy/sdk/zk-prover`).
 - [ ] No imports of `@umbra-privacy/sdk/interfaces` or `@umbra-privacy/sdk/utils` (V4-only subpaths).
 - [ ] Every V4 factory name above has been renamed to its V5 counterpart.
-- [ ] `getUmbraClient(...)` includes `indexerApiEndpoint` and, on browser, `utxoDataStore` + `nullifierStore`. The relayer is built separately via `getUmbraRelayer({ apiEndpoint })`.
+- [ ] `getUmbraClient(...)` includes `relayerApiEndpoint` and, on browser, `utxoDataStore` + `nullifierStore`.
 - [ ] Scanner is invoked with no arguments and result keys are dereferenced with the long-form names.
 - [ ] Burner factories receive `fetchBatchMerkleProof: client.fetchBatchMerkleProof!` and a `relayer: { submitBurn, pollBurnStatus, getRelayerAddress }` adapter.
-- [ ] Mainnet mint allowlist includes `CASH`; devnet allowlist includes wSOL, dUSDC, dUSDT, STREAMFLOW.
+- [ ] Mainnet mint allowlist includes `CASH`; devnet allowlist is wSOL-only.
 - [ ] `UMBRA_MESSAGE_TO_SIGN` is imported from `@umbra-privacy/sdk/shared`.
 - [ ] `getEncryptedBalanceQuerierFunction` result `switch` covers the discriminator strings `"shared"`, `"mxe"`, `"uninitialized"`, `"non_existent"` (was `{ state: "exists", data: { mode } }` in V4 — flattened in V5).
 - [ ] Removed `callbacks: { pre, post }` from every call site. Deposits / withdrawals / conversions use `options.hooks` (typed per-operation hooks interface); registration uses `options.hooks: RegistrationHooks` with `{ onPreSend, onPostSend, onSkipped }` per-step slots.
@@ -650,4 +671,4 @@ After migrating, verify each:
 
 ## Forward-compatibility note
 
-The V5 surface is the **target shape** going forward. Future minor releases will add factories (e.g. receiver-burnable → ATA), additional store backends, and ergonomic helpers — but the existing V5 factory names, subpath layout, and `relayer` dep shape are stable.
+The V5 surface is the **target shape** going forward. Future minor releases will add factories (e.g. receiver-burnable → PATA), additional store backends, and ergonomic helpers — but the existing V5 factory names, subpath layout, and `relayer` dep shape are stable.

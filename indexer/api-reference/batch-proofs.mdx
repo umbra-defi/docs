@@ -7,7 +7,7 @@ description: "Retrieve multiple Merkle inclusion proofs atomically under the sam
 
 `POST /v1/trees/{tree_index}/proofs`
 
-Returns multiple Merkle inclusion proofs for the specified insertion indices, all guaranteed to be computed against the same tree root. This is what the burner factory calls per batch — burns that bundle multiple Stealth Pool Notes need all proofs to share a root.
+Returns multiple Merkle inclusion proofs for the specified insertion indices, all guaranteed to be computed against the same tree root. This is what the V14 burner factory calls per batch — burns that bundle multiple Stealth Pool Notes need all proofs to share a root.
 
 ## Path Parameters
 
@@ -42,5 +42,5 @@ Protobuf `BatchProofResponse` containing an array of proof objects. Each proof h
 Single proof requests (`GET /v1/trees/{tree_index}/proof/{insertion_index}`) do not guarantee a consistent root across multiple calls — the tree may grow between requests. The batch endpoint acquires a read lock on the tree, ensuring all returned proofs share the same root. This is required for Groth16 ZK proofs that reference multiple note commitments.
 
 <Note>
-The SDK's burner factories call this endpoint internally per batch. Receiver-burnable → ETA burns chunk to ≤4 notes per proof; self-burnable burners loop one note at a time.
+The SDK's burner factories call this endpoint internally per batch. Receiver-burnable → ETA burns chunk to ≤5 notes per proof; self-burnable burners loop one note at a time.
 </Note>

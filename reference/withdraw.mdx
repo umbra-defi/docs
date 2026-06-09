@@ -1,6 +1,6 @@
 ---
 title: "Withdrawal"
-description: "API reference: getETAIntoATAWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
+description: "V14 API reference: getETAIntoATAWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
 ---
 
 ## getETAIntoATAWithdrawerFunction
@@ -10,38 +10,24 @@ description: "API reference: getETAIntoATAWithdrawerFunction returns WithdrawRes
 ```typescript
 function getETAIntoATAWithdrawerFunction(
   args: { client: IUmbraClient },
-  deps?: GetETAIntoATAWithdrawerFunctionDeps,
-): ETAIntoATAWithdrawerFunction;
+  deps?: GetFromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunctionDeps,
+): FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunction;
 ```
 
-Withdraws tokens from the caller's ETA to a destination ATA. This is the primary withdrawal path — no ZK proof required. The withdrawal queues an Arcium MPC computation; the network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
+Withdraws tokens from the caller's ETA to a destination PATA. This is the primary withdrawal path — no ZK proof required. The withdrawal queues an Arcium MPC computation; the network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
 ### Deps
 
-All optional — each category falls back to the corresponding provider on `client`.
+All fields are optional.
 
-```typescript
-interface GetETAIntoATAWithdrawerFunctionDeps {
-  readonly rpc?: {
-    readonly accountInfoProvider?: AccountInfoProviderFunction;
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-  readonly arcium?: {
-    readonly microLamportsPerAcu?: MicroLamportsPerAcu;                // default 0n (no priority fees)
-    readonly awaitComputationFinalization?: AwaitComputationFinalizationConfig | false;
-  };
-  readonly random?: {
-    readonly generateRandomU64?: () => U64;                            // default `computationOffset`
-    readonly generateRandomU128?: () => U128;                          // default `mpcCallbackDataOffset` / `feeVaultOffset`
-  };
-}
-```
+- `accountInfoProvider?: AccountInfoProviderFunction`.
+- `getLatestBlockhash?: GetLatestBlockhash`.
+- `transactionForwarder?: TransactionForwarder`.
 
 ### Returns
 
 ```typescript
-type ETAIntoATAWithdrawerFunction = (
+type FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunction = (
   destinationAddress: Address,
   mint: Address,
   withdrawalAmount: U64,
@@ -49,21 +35,21 @@ type ETAIntoATAWithdrawerFunction = (
 ) => Promise<WithdrawResult>;
 ```
 
-- `destinationAddress: Address` — wallet whose ATA receives the tokens.
+- `destinationAddress: Address` — wallet whose PATA receives the tokens.
 - `mint: Address` — token mint address.
 - `withdrawalAmount: U64` — amount in base token units to withdraw from the ETA.
 
-### Options (`ETAIntoATAWithdrawerOptions`)
+### Options (`FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerOptions`)
 
 ```typescript
-interface ETAIntoATAWithdrawerOptions {
+interface FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerOptions {
   readonly optionalData?: OptionalData32;
   readonly accountInfoCommitment?: Commitment;
   readonly computationOffset?: U64;
   readonly mpcCallbackDataOffset?: U128;
   readonly feeVaultOffset?: U128;                  // default 0n (sentinel: no fee-vault interaction)
   readonly destinationProgram?: Address;           // default System Program (sentinel: no observer CPI)
-  // plus observer-CPI passthrough accounts and a `hooks?: WithdrawalHooks`
+  // plus observer-CPI passthrough accounts and a `hooks?: FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawHooks`
 }
 ```
 
@@ -73,7 +59,7 @@ interface ETAIntoATAWithdrawerOptions {
 - `feeVaultOffset`, `destinationProgram` — observer-forward CPI configuration. Leave at defaults unless you are intentionally routing post-callback into another program.
 - `hooks` — per-phase lifecycle hooks (`onValidationStart`, `onAccountFetchComplete`, `queueComputation`, `onComplete`, `onError`, etc.).
 
-There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the withdrawer.
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the V14 withdrawer.
 
 ### WithdrawResult
 
@@ -107,7 +93,7 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
 const result = await withdraw(
-  destinationWallet,   // tokens land in this wallet's ATA
+  destinationWallet,   // tokens land in this wallet's PATA
   mintAddress,
   500_000n,
 );

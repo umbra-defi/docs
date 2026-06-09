@@ -9,7 +9,7 @@ description: "API reference: getUserRegistrationFunction (3-step: account init, 
 
 ```typescript
 function getUserRegistrationFunction(
-  args: GetUserRegisrationFunctionArgs,
+  args: GetUserRegistrationFunctionArgs,
   deps?: GetUserRegistrationFunctionDeps,
 ): UserRegistrationFunction
 ```
@@ -18,9 +18,7 @@ Registers the caller on-chain. Registration is a multi-step idempotent flow that
 
 ---
 
-### GetUserRegisrationFunctionArgs
-
-(name carries a known typo in the current RC — the second "t" is missing in the exported symbol)
+### GetUserRegistrationFunctionArgs
 
 - `client: IUmbraClient` - The configured client.
 
@@ -28,36 +26,44 @@ Registers the caller on-chain. Registration is a multi-step idempotent flow that
 
 ### GetUserRegistrationFunctionDeps
 
-All fields are optional. Categories fall back to provider equivalents on `client`.
+All fields are optional overrides for SDK defaults.
 
-```typescript
-interface GetUserRegistrationFunctionDeps {
-  readonly rpc?: {
-    readonly accountInfoProvider?: AccountInfoProviderFunction;
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-  readonly keys?: {
-    readonly tokenEncryptionX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
-    readonly masterViewingKeyEncryptingX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
-    readonly masterViewingKeyGenerator?: MasterViewingKeyDeriverFunction;
-    readonly masterViewingKeyBlindingFactorGenerator?: MasterViewingKeyBlindingFactorDeriverFunction;
-    readonly poseidonPrivateKeyGenerator?: PoseidonPrivateKeyDeriverFunction;
-    readonly poseidonBlindingFactorGenerator?: PoseidonBlindingFactorDeriverFunction;
-  };
-  readonly crypto?: {
-    readonly userCommitmentGenerator?: UserCommitmentGeneratorFunction;
-  };
-  /** Required when `anonymous: true`. Use `getUserRegistrationProver()` from `@umbra-privacy/sdk/zk-prover`. */
-  readonly zkProver?: IZkProverForUserRegistration;
-  /** Deeper overrides forwarded to the confidential-usage step executor. */
-  readonly confidentialExecutorDeps?: GetRegisterUserForConfidentialUsageExecutorDeps;
-  /** Deeper overrides forwarded to the anonymous-usage step executor (Rescue, Fiat-Shamir, polynomial commitments, etc.). */
-  readonly anonymousExecutorDeps?: GetRegisterUserForAnonymousUsageV17ExecutorDeps;
-}
-```
+RPC overrides:
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
 
-The Rescue cipher / Fiat-Shamir / polynomial-commitment overrides live inside `anonymousExecutorDeps` — they are not top-level on `GetUserRegistrationFunctionDeps`. See `@umbra-privacy/sdk/registration` source for the exact `*ExecutorDeps` shapes.
+Key derivation overrides:
+- `userAccountX25519KeypairGenerator?: Curve25519KeypairGeneratorFunction`
+- `masterViewingKeyEncryptingX25519KeypairGenerator?: Curve25519KeypairGeneratorFunction`
+- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction`
+- `masterViewingKeyGenerator?: MasterViewingKeyGeneratorFunction`
+- `masterViewingKeyBlindingFactorGenerator?: MasterViewingKeyBlindingFactorGeneratorFunction`
+- `poseidonPrivateKeyGenerator?: PoseidonPrivateKeyGeneratorFunction`
+- `poseidonBlindingFactorGenerator?: PoseidonBlindingFactorGeneratorFunction`
+- `rescueCommitmentBlindingFactorGenerator?: RescueEncryptionCommitmentBlindingFactorGeneratorFunction`
+- `randomFactorGenerator?: RandomFactorForPolynomialCommitmentGeneratorFunction`
+
+Rescue cipher overrides:
+- `getRcKeyGenerator?: (privateKey: X25519PrivateKey) => RcKeyGeneratorFunction`
+- `getRcEncryptor?: (privateKey: X25519PrivateKey) => RcEncryptorWithNonceFunction`
+- `rescueCommitmentGenerator?: RescueEncryptionCommitmentGeneratorFunction`
+
+Commitment overrides:
+- `userCommitmentGenerator?: UserCommitmentGeneratorFunction`
+
+Challenge / polynomial overrides:
+- `fiatShamirChallengeGenerator?: FiatShamirChallengeGeneratorFunction`
+- `challengePowersFunction?: ChallengePowersFunction`
+- `polynomialEvaluator?: PolynomialEvaluatorFunction`
+
+Poseidon / BN254 overrides:
+- `poseidonAggregator?: PoseidonAggregatorHashFunction`
+- `bn254ModInverter?: ModuleInvFunction`
+- `computeLimbwiseSumInverse?: (limbs: Base85LimbTuple) => Bn254FieldElement`
+
+ZK prover:
+- `zkProver?: IZkProverForUserRegistration` — ZK proof generator for the anonymous registration sub-step. Required only when `options.anonymous` is `true`. Use `getUserRegistrationProver()` from `@umbra-privacy/sdk/zk-prover` — see [ZK Provers](/sdk/advanced/zk-provers).
 
 ---
 
@@ -78,7 +84,7 @@ Returns the signatures of all transactions submitted during the registration flo
 - `confidential?: boolean` - Register for confidential (encrypted) token account usage. Default: `true`.
 - `anonymous?: boolean` - Register for anonymous (mixer) usage. Requires a ZK proof. Default: `true`.
 - `hooks?: RegistrationHooks` - Per-step lifecycle hooks. Slots: `initUserAccount`, `registerX25519PublicKey`, `registerAnonymousUsage` (each `SkippableDirectTransactionStepHooks` or `SkippableMpcTransactionStepHooks`), plus top-level `onValidationStart/Complete`, `onAccountFetchStart/Complete`, `onKeyDerivationStart/Complete`, `onComplete`, `onError`.
-- `optionalData?: UserRegistrationOptionalData` - Per-step 32-byte caller metadata. An **object** (not a single 32-byte value) with optional `OptionalData32` sub-fields, one per registration instruction: `accountInitialisation`, `registerX25519PublicKey`, `registerUserForAnonymousUsage`. Any omitted field defaults to 32 zero bytes.
+- `optionalData?: OptionalData32` - 32-byte caller metadata attached to on-chain instructions.
 
 ---
 
@@ -89,7 +95,7 @@ Throws `RegistrationError`. See [Errors](./errors#registrationerror) for all sta
 ### Example
 
 ```typescript
-import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
 import { getUserRegistrationProver } from "@umbra-privacy/sdk/zk-prover";
 
 const zkProver = getUserRegistrationProver();
@@ -107,21 +113,13 @@ const signatures = await register({ confidential: true, anonymous: true });
 ```typescript
 function getUserEncryptionKeyRotatorFunction(
   args: { client: IUmbraClient },
-  deps?: GetUserEncryptionKeyRotatorFunctionDeps,
-): RotateUserEncryptionKeyFunction;
+  deps?: GetUserRegistrationFunctionDeps,
+): () => Promise<TransactionSignature[]>;
 ```
 
-Rotates the X25519 public key stored in the on-chain user account. Synchronous, no MPC. Use this when the existing key may have been compromised.
+Rotates the X25519 public key stored in the on-chain user account. Synchronous, no MPC. Use this when the existing key may have been compromised. Accepts the same shape `args` / `deps` as `getUserRegistrationFunction`.
 
-### Returns
-
-```typescript
-type RotateUserEncryptionKeyFunction = (
-  options?: RotateUserEncryptionKeyOptions,
-) => Promise<TransactionSignature>;
-```
-
-Returns a single `TransactionSignature`. The returned function takes an optional `RotateUserEncryptionKeyOptions` (`optionalData?: OptionalData32`, `accountInfoCommitment?: "processed" | "confirmed" | "finalized"`, `hooks?: SimpleOperationHooks`).
+Returns a zero-argument function. Call it with no arguments to execute the rotation.
 
 ---
 
@@ -132,21 +130,13 @@ Returns a single `TransactionSignature`. The returned function takes an optional
 ```typescript
 function getMasterViewingKeyRotatorFunction(
   args: { client: IUmbraClient },
-  deps: GetMasterViewingKeyRotatorFunctionDeps,
-): RotateMasterViewingKeyFunction;
+  deps?: GetUserRegistrationFunctionDeps,
+): () => Promise<TransactionSignature[]>;
 ```
 
-Rotates the Master Viewing Key (MVK) X25519 encryption key. **MPC + ZK** — also rotates the on-chain user commitment. `deps` is **required**: `GetMasterViewingKeyRotatorFunctionDeps` carries a required `zkProver: IZkProverForUserRegistration` (rotation cannot run without it), plus optional `rpc` overrides.
+Rotates the Master Viewing Key (MVK) X25519 encryption key. **MPC + ZK** — also rotates the on-chain user commitment. Accepts the same `args` / `deps` shape as `getUserRegistrationFunction`.
 
-### Returns
-
-```typescript
-type RotateMasterViewingKeyFunction = (
-  options?: RotateMasterViewingKeyOptions,
-) => Promise<TransactionSignature>;
-```
-
-Returns a single `TransactionSignature`. The returned function takes an optional `RotateMasterViewingKeyOptions` (`optionalData?: OptionalData32`, `accountInfoCommitment?: "processed" | "confirmed" | "finalized"`, `microLamportsPerAcu?: MicroLamportsPerAcu`, `hooks?: SimpleOperationHooks`).
+Returns a zero-argument function. Call it with no arguments to execute the rotation.
 
 ---
 
@@ -157,27 +147,26 @@ Returns a single `TransactionSignature`. The returned function takes an optional
 ```typescript
 function getUserEntropySeedRotatorFunction(
   args: { client: IUmbraClient },
-  deps?: GetUpdateRandomGenerationSeedFunctionDeps,
-): UpdateRandomGenerationSeedFunction;
+  deps?: GetUserEntropySeedRotatorFunctionDeps,
+): UserEntropySeedRotatorFunction;
 ```
 
 Rotates the random generation seed stored in the on-chain user account. This seed contributes to commitment randomness in Stealth Pool Note operations. Synchronous, no MPC.
 
 ### Deps
 
-`GetUpdateRandomGenerationSeedFunctionDeps` — optional `rpc` overrides: `blockhashProvider?: GetLatestBlockhash`, `transactionForwarder?: TransactionForwarder`.
+- `accountInfoProvider?: AccountInfoProviderFunction`.
+- `getLatestBlockhash?: GetLatestBlockhash`.
+- `transactionForwarder?: TransactionForwarder`.
 
 ### Returns
 
 ```typescript
-type UpdateRandomGenerationSeedFunction = (
-  newSeed: Uint8Array,
-  optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
-) => Promise<TransactionSignature>;
+type UserEntropySeedRotatorFunction = (args: {
+  newSeed: Uint8Array;
+  optionalData?: OptionalData32;
+}) => Promise<SimpleOperationResult>;
 ```
-
-Positional arguments (not a single options object). Returns a single `TransactionSignature`.
 
 - `newSeed: Uint8Array` — the 32-byte replacement seed.
 
@@ -190,28 +179,28 @@ Positional arguments (not a single options object). Returns a single `Transactio
 ```typescript
 function getTokenEntropySeedRotatorFunction(
   args: { client: IUmbraClient },
-  deps?: GetUpdateTokenAccountRandomGenerationSeedFunctionDeps,
-): UpdateTokenAccountRandomGenerationSeedFunction;
+  deps?: GetTokenEntropySeedRotatorFunctionDeps,
+): TokenEntropySeedRotatorFunction;
 ```
 
 Rotates the random generation seed on a per-mint EncryptedTokenAccount. Synchronous, no MPC.
 
 ### Deps
 
-`GetUpdateTokenAccountRandomGenerationSeedFunctionDeps` — optional `rpc` overrides: `blockhashProvider?: GetLatestBlockhash`, `transactionForwarder?: TransactionForwarder`.
+- `accountInfoProvider?: AccountInfoProviderFunction`.
+- `getLatestBlockhash?: GetLatestBlockhash`.
+- `transactionForwarder?: TransactionForwarder`.
 
 ### Returns
 
 ```typescript
-type UpdateTokenAccountRandomGenerationSeedFunction = (
-  mint: Address,
-  newSeed: Uint8Array,
-  optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
-) => Promise<TransactionSignature>;
+type TokenEntropySeedRotatorFunction = (args: {
+  mint: Address;
+  newSeed: Uint8Array;
+  optionalData?: OptionalData32;
+  hooks?: DirectTransactionStepHooks;
+}) => Promise<SimpleOperationResult>;
 ```
-
-Positional arguments. Returns a single `TransactionSignature`.
 
 - `mint: Address` — the token mint whose account seed to rotate.
 - `newSeed: Uint8Array` — the 32-byte replacement seed.
@@ -225,33 +214,29 @@ Positional arguments. Returns a single `TransactionSignature`.
 ```typescript
 function getStagedSolRecovererFunction(
   args: { client: IUmbraClient },
-  deps?: GetClaimStagedSolFromPoolFunctionDeps,
-): ClaimStagedSolFromPoolFunction;
+  deps?: GetStagedSolRecovererFunctionDeps,
+): StagedSolRecovererFunction;
 ```
 
 Recovers wSOL that was staged in the protocol's pool custody during a failed MPC callback. Call this if a deposit / withdraw / convert callback never landed and you need to reclaim the staged SOL. Synchronous — no MPC, no ZK proof.
 
 ### Deps
 
-`GetClaimStagedSolFromPoolFunctionDeps` — optional `rpc` overrides: `blockhashProvider?: GetLatestBlockhash`, `transactionForwarder?: TransactionForwarder`.
+- `accountInfoProvider?: AccountInfoProviderFunction`.
+- `getLatestBlockhash?: GetLatestBlockhash`.
+- `transactionForwarder?: TransactionForwarder`.
 
 ### Returns
 
 ```typescript
-type ClaimStagedSolFromPoolFunction = (
-  mint: Address,
-  amount: U64,
-  destination: Address,
-  optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
-) => Promise<TransactionSignature>;
+type StagedSolRecovererFunction = (args: {
+  mint: Address;
+  optionalData?: OptionalData32;
+  hooks?: DirectTransactionStepHooks;
+}) => Promise<SimpleOperationResult>;
 ```
 
-Positional arguments. Returns a single `TransactionSignature`.
-
 - `mint: Address` — the mint of the failed operation (typically the wSOL mint).
-- `amount: U64` — the staged amount to reclaim.
-- `destination: Address` — the account to receive the recovered SOL.
 
 ---
 
@@ -262,33 +247,29 @@ Positional arguments. Returns a single `TransactionSignature`.
 ```typescript
 function getStagedSplRecovererFunction(
   args: { client: IUmbraClient },
-  deps?: GetClaimStagedSplFromPoolFunctionDeps,
-): ClaimStagedSplFromPoolFunction;
+  deps?: GetStagedSplRecovererFunctionDeps,
+): StagedSplRecovererFunction;
 ```
 
 Recovers SPL tokens that were staged in the protocol's pool custody during a failed MPC callback. Synchronous — no MPC, no ZK proof.
 
 ### Deps
 
-`GetClaimStagedSplFromPoolFunctionDeps` — optional `rpc` overrides: `blockhashProvider?: GetLatestBlockhash`, `transactionForwarder?: TransactionForwarder`.
+- `accountInfoProvider?: AccountInfoProviderFunction`.
+- `getLatestBlockhash?: GetLatestBlockhash`.
+- `transactionForwarder?: TransactionForwarder`.
 
 ### Returns
 
 ```typescript
-type ClaimStagedSplFromPoolFunction = (
-  mint: Address,
-  amount: U64,
-  destinationAta: Address,
-  optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
-) => Promise<TransactionSignature>;
+type StagedSplRecovererFunction = (args: {
+  mint: Address;
+  optionalData?: OptionalData32;
+  hooks?: DirectTransactionStepHooks;
+}) => Promise<SimpleOperationResult>;
 ```
 
-Positional arguments. Returns a single `TransactionSignature`.
-
 - `mint: Address` — the token mint of the staged SPL tokens.
-- `amount: U64` — the staged amount to reclaim.
-- `destinationAta: Address` — the associated token account to receive the recovered tokens.
 
 ---
 

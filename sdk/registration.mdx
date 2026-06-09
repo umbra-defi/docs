@@ -23,7 +23,7 @@ const signatures = await register({
 
 console.log(`Completed ${signatures.length} registration transaction(s)`);
 // 0 if already fully registered.
-// 1–2 depending on which sub-steps were needed (the SDK splits into two independent on-chain instructions).
+// 1–2 depending on which sub-steps were needed (V14 splits into two independent on-chain instructions).
 ```
 
 ## Options
@@ -76,12 +76,12 @@ console.log(`Completed ${signatures.length} registration transaction(s)`);
 </ParamField>
 
 <Note>
-The hook slot names are **`initUserAccount`**, **`registerX25519PublicKey`**, **`registerAnonymousUsage`**. Each is `SkippableDirectTransactionStepHooks` or `SkippableMpcTransactionStepHooks` — slots: `{ onPreSend, onPostSend, onSkipped }`.
+The V14 hook slot names are **`initUserAccount`, `registerX25519PublicKey`, `registerAnonymousUsage`** (not `userAccountInitialisation` / `registerUserForAnonymousUsage` from V13). Each is `SkippableDirectTransactionStepHooks` or `SkippableMpcTransactionStepHooks` — `{ onPreSend, onPostSend, onSkipped }` — not the V13 `{ pre, post }` shape.
 </Note>
 
-## The registration flow
+## The V14 registration flow
 
-Registration is split into **two independent on-chain instructions**. Both `init_if_needed` the `EncryptedUserAccount` PDA, so either can run first.
+V14 split the legacy 3-step registration into **two independent on-chain instructions**. Both `init_if_needed` the `EncryptedUserAccount` PDA, so either can run first.
 
 <Steps>
   <Step title="register_user_for_confidential_usage">
@@ -89,7 +89,7 @@ Registration is split into **two independent on-chain instructions**. Both `init
 
     Run when `confidential: true`.
   </Step>
-  <Step title="register_user_for_anonymous_usage_v17">
+  <Step title="register_user_for_anonymous_usage_v18">
     MPC + ZK. Initialises the user account (if needed), stages master-viewing-key material, runs Fiat-Shamir + [Groth16](https://eprint.iacr.org/2016/260.pdf), queues the Arcium MPC computation, and on callback stores the on-chain user commitment. Enables you to **receive** receiver-burnable Stealth Pool Notes.
 
     Run when `anonymous: true`.
@@ -161,6 +161,6 @@ try {
 }
 ```
 
-**Partial completion**: Registration submits up to two separate transactions. If the second transaction fails or is cancelled, the first is already confirmed on-chain. Call `register()` again — it checks on-chain state and skips the sub-step that already completed.
+**Partial completion**: Registration submits up to two separate transactions (V14 dropped the third). If the second transaction fails or is cancelled, the first is already confirmed on-chain. Call `register()` again — it checks on-chain state and skips the sub-step that already completed.
 
 See [Error Handling](/reference/errors) for a full reference of all error types.

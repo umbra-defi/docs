@@ -29,7 +29,7 @@ Umbra uses a power-of-two BPS divisor (`2^14 = 16,384`) rather than the traditio
 protocol_fee = floor(amount × 35 / 16_384)
 ```
 
-### Example — 1,000 USDC ETA → ATA withdrawal
+### Example — 1,000 USDC ETA → PATA withdrawal
 
 ```
 1,000 USDC = 1,000,000,000 µUSDC
@@ -42,7 +42,7 @@ net received = 1,000,000,000 - 2,136,230 = 997,863,770 µUSDC ≈ 997.86 USDC
 ### Estimating programmatically
 
 ```typescript
-import { BPS_DIVISOR } from "@umbra-privacy/sdk/shared";
+import { BPS_DIVISOR } from "@umbra-privacy/sdk/constants";
 
 const bps = 35n;
 
@@ -91,15 +91,15 @@ The Stealth Pool SOL fee is denominated in SOL (lamports), not in the token bein
 ## Which Operations Carry Which Fees
 
 **EncryptedTokenAccount operations:**
-- Self-deposit (ATA → own ETA): 0 protocol fee for standard self-shielding.
-- Withdrawal (ETA → ATA): protocol fee applies.
+- Self-deposit (PATA → own ETA): 0 protocol fee for standard self-shielding.
+- Withdrawal (ETA → PATA): protocol fee applies.
 - Conversion (MXE-only → Shared): protocol fee applies on the converted balance.
 
 **Stealth Pool operations:**
 - Note creation (ETA → Stealth Pool Note): protocol fee on SPL amount + Stealth Pool SOL fee.
-- Note creation (ATA → Stealth Pool Note): protocol fee on SPL amount + Stealth Pool SOL fee.
+- Note creation (PATA → Stealth Pool Note): protocol fee on SPL amount + Stealth Pool SOL fee.
 - Burn (note → ETA): protocol fee applies, relayer fee applies (currently 0).
-- Burn (note → ATA): protocol fee applies, relayer fee applies (currently 0). (Only the self-burnable → ATA variant is shipped; receiver-burnable → ATA is on-chain but not yet exposed in the SDK.)
+- Burn (note → PATA): protocol fee applies, relayer fee applies (currently 0). (Only the self-burnable → PATA variant is shipped in V14; receiver-burnable → PATA is on-chain but not yet exposed in the SDK.)
 
 ---
 

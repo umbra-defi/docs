@@ -1,15 +1,15 @@
 ---
 title: "Supported Tokens"
-description: "Mint list: wSOL, USDC, USDT, UMBRA, CASH on mainnet; wSOL, dUSDC, dUSDT, STREAMFLOW on devnet. CASH is Token-2022. Each pool supports both EncryptedTokenAccount operations and the Stealth Pool mixer."
+description: "V14 mint list: wSOL, USDC, USDT, UMBRA, CASH on mainnet; wSOL only on devnet. Each pool supports both EncryptedTokenAccount operations and the Stealth Pool mixer, including Token-2022 transfer fees."
 ---
 
 ## Overview
 
-Each Umbra pool is deployed per token mint. A pool supports both the **EncryptedTokenAccount** flow (deposit / withdraw / convert / transfer) and the **Stealth Pool** flow (Stealth Pool Note create + burn).
+Each Umbra pool is deployed per token mint. A pool supports both the **EncryptedTokenAccount** flow (deposit / withdraw / convert) and the **Stealth Pool** flow (Stealth Pool Note create + burn).
 
-Both SPL Token and Token-2022 mints are supported. For Token-2022 mints with the transfer-fee extension (e.g. **CASH** on mainnet), the SDK accounts for the transfer fee before applying protocol fees. See [Token-2022 Support](/advanced/token-2022).
+Token-2022 mints with a transfer fee extension are fully supported — the SDK accounts for the transfer fee before applying protocol fees. See [Token-2022 Support](/advanced/token-2022).
 
-The lists below are a snapshot. **The authoritative source at runtime is the relayer's `getSupportedMints()` endpoint** — it returns only mints with deployed token-pool and fee-schedule PDAs, so it doubles as a "pool deployed" check.
+The list below is a snapshot. **The authoritative source at runtime is the relayer's `getSupportedMints()` endpoint** — it returns only mints with deployed token-pool and fee-schedule PDAs, so it doubles as a "pool deployed" check.
 
 ```typescript
 import { getUmbraRelayer } from "@umbra-privacy/sdk";
@@ -25,65 +25,74 @@ const live    = await relayer.getSupportedMints();
 - **wSOL** (Wrapped SOL)
   - Mint: `So11111111111111111111111111111111111111112`
   - Decimals: 9
-  - Token program: SPL Token
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
 - **USDC**
   - Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
   - Decimals: 6
-  - Token program: SPL Token
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
 - **USDT**
   - Mint: `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`
   - Decimals: 6
-  - Token program: SPL Token
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
 - **UMBRA**
   - Mint: `PRVT6TB7uss3FrUd2D9xs2zqDBsa3GbMJMwCQsgmeta`
   - Decimals: 6
-  - Token program: SPL Token
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
 - **CASH**
   - Mint: `CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`
   - Decimals: 6
-  - Token program: Token-2022
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
 ---
 
 ## Devnet
 
-Get **dUSDC** / **dUSDT** from the faucet at [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/). wSOL is obtained via a standard Solana airdrop and wrapped.
-
 - **wSOL** (Wrapped SOL)
   - Mint: `So11111111111111111111111111111111111111112`
   - Decimals: 9
-  - Token program: SPL Token
-  - Faucet: standard Solana airdrop + wrap
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
-- **dUSDC** (devnet test USDC)
+- **dUSDC** (Dummy USDC — mock of the USD Coin standard)
   - Mint: `4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7`
   - Decimals: 6
-  - Token program: SPL Token
-  - Faucet: yes — faucet.umbraprivacy.com
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
-- **dUSDT** (devnet test USDT)
+- **dUSDT** (Dummy USDT — mock of Tether USD)
   - Mint: `DXQwBNGgyQ2BzGWxEriJPVmXYFQBsQbXvfvfSNTaJkL6`
   - Decimals: 6
-  - Token program: SPL Token
-  - Faucet: yes — faucet.umbraprivacy.com
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
 
-- **STREAMFLOW** (devnet partner test mint)
-  - Mint: `Gssm3vfi8s65R31SBdmQRq6cKeYojGgup7whkw4VCiQj`
-  - Decimals: 9
-  - Token program: SPL Token
-  - Faucet: no
+Mints outside this list will fail at the account-fetch stage with `error 3012` (pool missing).
 
-Mints outside the deployed set fail at the account-fetch stage with `error 3012` (pool missing).
+### Devnet Faucet
+
+Get test tokens at **[faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/)**. The faucet distributes 1,000 tokens per wallet every 60 minutes for each of dUSDC and dUSDT — no signup, no KYC, just paste a Solana devnet wallet address. For devnet wSOL, use any standard Solana airdrop faucet (e.g. `solana airdrop`) and wrap it with the SDK.
 
 ---
 
 ## Localnet
 
-Localnet runs against a local Solana validator with a locally-spun-up indexer/relayer stack. The mint set is whatever you configure when bringing the validator up — wSOL is the typical default.
+Localnet uses the same configuration as devnet — wSOL only — and runs against a local Solana validator + a locally-spun-up indexer/relayer stack.
 
 ---
 
@@ -97,11 +106,11 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-// Deposit: ATA → ETA
+// Deposit: PATA → ETA
 const deposit = getATAIntoETADirectDepositorFunction({ client });
 await deposit(client.signer.address, USDC, 1_000_000n);
 
-// Withdraw: ETA → ATA
+// Withdraw: ETA → PATA
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 await withdraw(client.signer.address, USDC, 1_000_000n);
 ```

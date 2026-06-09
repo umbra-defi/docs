@@ -17,6 +17,9 @@ const client = await getUmbraClient(
     rpcUrl,
     rpcSubscriptionsUrl,
     indexerApiEndpoint,   // optional but required for scanning + burning
+    relayerApiEndpoint,   // optional but required for burning
+    utxoDataStore,        // optional but strongly recommended on browser
+    nullifierStore,       // optional but strongly recommended on browser
   },
   {
     accountInfoProvider,    // override RPC account fetching
@@ -28,14 +31,12 @@ const client = await getUmbraClient(
       store,
       generate,
     },
-    utxoDataStore,          // optional but strongly recommended on browser
-    nullifierStore,         // optional but strongly recommended on browser
   },
 );
 ```
 
 ```typescript
-interface GetUmbraClientDeps {
+interface GetUmbraClientFromSignerDeps {
   readonly accountInfoProvider?: AccountInfoProviderFunction;
   readonly blockhashProvider?: GetLatestBlockhash;
   readonly transactionForwarder?: TransactionForwarder;
@@ -45,8 +46,6 @@ interface GetUmbraClientDeps {
     readonly store?: MasterSeedStorerFunction;
     readonly generate?: MasterSeedGeneratorFunction;
   };
-  readonly utxoDataStore?: UtxoDataStore;
-  readonly nullifierStore?: NullifierStore;
 }
 ```
 
@@ -75,14 +74,10 @@ Override for: unit tests (no live node), custom RPC middleware, account caching,
 Returns the latest confirmed [blockhash](https://solana.com/docs/terminology#blockhash) and last valid block height for transaction construction.
 
 ```typescript
-type GetLatestBlockhash = (options?: {
-  readonly commitment?: Commitment;
-}) => Promise<LatestBlockhashResult>;
-
-interface LatestBlockhashResult {
-  readonly blockhash: Blockhash;
-  readonly lastValidBlockHeight: bigint;
-}
+type GetLatestBlockhash = () => Promise<{
+  blockhash: string;
+  lastValidBlockHeight: number;
+}>;
 ```
 
 Default: RPC call via `rpcUrl`.
@@ -95,10 +90,8 @@ Handles transaction broadcast and confirmation. Used by every function that subm
 
 ```typescript
 interface TransactionForwarder {
-  forwardSequentially(txs: readonly SignedTransaction[]): Promise<readonly TransactionSignature[]>;
-  forwardInParallel(txs: readonly SignedTransaction[]): Promise<readonly TransactionSignature[]>;
-  // Sends a single tx without awaiting confirmation (e.g. best-effort rent reclaim).
-  fireAndForget(tx: SignedTransaction): Promise<TransactionSignature>;
+  forwardSequentially(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
+  forwardInParallel(txs: readonly SignedTransaction[]): Promise<TransactionSignature[]>;
 }
 ```
 
@@ -110,7 +103,6 @@ Override for [Jito](https://www.jito.network/) bundle submission, priority fee m
 const jitoForwarder: TransactionForwarder = {
   forwardSequentially: async (txs) => submitToJitoBundleEndpoint(txs),
   forwardInParallel: async (txs) => submitToJitoBundleEndpoint(txs),
-  fireAndForget: async (tx) => (await submitToJitoBundleEndpoint([tx]))[0],
 };
 ```
 
@@ -119,9 +111,7 @@ const jitoForwarder: TransactionForwarder = {
 Returns current Solana epoch information. Used for [Token-2022 transfer fee](/advanced/token-2022) schedule selection.
 
 ```typescript
-type GetEpochInfo = (options?: {
-  readonly commitment?: Commitment;
-}) => Promise<EpochInfoResult>;
+type GetEpochInfo = () => Promise<EpochInfoResult>;
 ```
 
 Default: RPC call via `rpcUrl`.

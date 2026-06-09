@@ -1,6 +1,6 @@
 ---
 title: "Stealth Pool Overview"
-description: "Stealth Pool overview: 4 note-creation variants (ATA/ETA × self/receiver-burnable), 3 shipped burn variants (receiver→ETA, self→ETA, self→ATA). Self-burnable vs receiver-burnable flows."
+description: "Stealth Pool overview (V14): 4 note-creation variants (PATA/ETA × self/receiver-burnable), 3 shipped burn variants (receiver→ETA, self→ETA, self→PATA). Self-burnable vs receiver-burnable flows."
 ---
 
 ## The Most Powerful Shielded Pool on Solana
@@ -18,7 +18,7 @@ The pool requires [registration](/sdk/registration) with `anonymous: true` **on 
 The pool operates on **Stealth Pool Notes** — commitments inserted into an on-chain Indexed Merkle Tree that represent locked tokens. Every note encodes three distinct roles:
 
 - **Sender** — the address that funded the note, locked the tokens into the pool, and fixed the recipient at creation time.
-- **Unlocker** — the address authorised to burn the note's nullifier on-chain and release the tokens, choosing whether they exit to an ATA or an ETA.
+- **Unlocker** — the address authorised to burn the note's nullifier on-chain and release the tokens, choosing whether they exit to a PATA or an ETA.
 - **Recipient** — the final destination address, set by the sender and not modifiable by the unlocker.
 
 The sender controls who receives. The unlocker controls when and how the tokens exit. Separating these two roles is what makes deep mixing possible — the sender's involvement ends at note-write time.
@@ -27,7 +27,7 @@ The sender controls who receives. The unlocker controls when and how the tokens 
 
 <CardGroup cols={2}>
   <Card title="Self-burnable" icon="user">
-    You are both the sender and the unlocker. Burn the note on your own schedule and choose whether tokens exit to an ATA or stay in an ETA. **Recipient needs zero on-chain state.**
+    You are both the sender and the unlocker. Burn the note on your own schedule and choose whether tokens exit to a PATA or stay in an ETA. **Recipient needs zero on-chain state.**
   </Card>
   <Card title="Receiver-burnable" icon="users">
     The recipient is the unlocker. They burn the note themselves and decide the exit. **Recipient must be fully registered** (all three sub-step flags) — the unlocker is encrypted against their `userCommitment`.
@@ -40,27 +40,27 @@ Receiver-burnable notes produce stronger anonymity sets. Because the sender's ac
 
 Each variant can be funded from two sources:
 
-- **From an ATA** — tokens are transferred directly from your public ATA. Single tx, no MPC.
+- **From a PATA** — tokens are transferred directly from your public ATA. Single tx, no MPC.
 - **From an ETA** — tokens are drawn from your existing EncryptedTokenAccount before entering the pool. Two-tx pipeline (proof account → note write), MPC under the hood.
 
 This gives four creator factories — all under `@umbra-privacy/sdk/deposit`:
 
-- `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ATA source, you unlock.
-- `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ATA source, recipient unlocks.
+- `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — PATA source, you unlock.
+- `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — PATA source, recipient unlocks.
 - `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ETA source (MPC), you unlock.
 - `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ETA source (MPC), recipient unlocks.
 
 See [Writing notes](/sdk/mixer/creating-utxos) for full API details and the recipient pre-check rubric.
 
-## Burn variants
+## Burn variants (V14)
 
 Three burn factories are shipped, under `@umbra-privacy/sdk/burn`:
 
-- `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` — receiver-burnable → ETA. Natively batches: groups notes by `destinationAddress`, chunks ≤4 per proof.
-- `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` — self-burnable → ETA. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`; SDK loops internally.
-- `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → ATA. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`.
+- `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` — receiver-burnable → ETA. Natively batches: groups notes by `destinationAddress`, chunks ≤5 per proof.
+- `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` — self-burnable → ETA. `MAX_NOTES_PER_PROOF = 1`; SDK loops internally.
+- `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → PATA. `MAX_NOTES_PER_PROOF = 1`.
 
-(Receiver-burnable → ATA is supported on-chain but is not yet shipped in the SDK — open issue.)
+(Receiver-burnable → PATA is supported on-chain but is not yet shipped in the SDK — open issue.)
 
 ## The Stealth Pool flow
 
@@ -88,7 +88,7 @@ Three burn factories are shipped, under `@umbra-privacy/sdk/burn`:
 ## Infrastructure requirements
 
 - **Indexer** — required for note discovery and Merkle proof fetching. Pass `indexerApiEndpoint` to `getUmbraClient`.
-- **Relayer** — required for burning. Construct it separately with `getUmbraRelayer({ apiEndpoint })` and pass it to the burner factory's `relayer` dep. It is not a `getUmbraClient` argument.
+- **Relayer** — required for burning. Pass `relayerApiEndpoint` to `getUmbraClient`, then build the burner factory's `relayer` dep from `getUmbraRelayer({ apiEndpoint })`.
 - **Store adapters** — strongly recommended on the browser. Without `utxoDataStore` / `nullifierStore`, every `scan()` re-scans every active tree from genesis.
 
 ```typescript
@@ -109,6 +109,7 @@ const client = await getUmbraClient({
   rpcUrl: "...",
   rpcSubscriptionsUrl: "...",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
+  relayerApiEndpoint: "https://relayer.api.umbraprivacy.com",
   utxoDataStore,
   nullifierStore,
 });
@@ -116,9 +117,9 @@ const client = await getUmbraClient({
 
 ## Privacy Considerations
 
-**Burn into an ETA by default.** When a note is burnt into an ETA, the burned amount is hidden, the destination is not revealed, and no observable exit event is produced on-chain. At burn time, the sender is completely unlinkable — there is no visible amount, no destination address, and no signal that can tie the burn back to any specific note write. ATA burns should be the opt-out, not the default.
+**Burn into an ETA by default.** When a note is burnt into an ETA, the burned amount is hidden, the destination is not revealed, and no observable exit event is produced on-chain. At burn time, the sender is completely unlinkable — there is no visible amount, no destination address, and no signal that can tie the burn back to any specific note write. PATA burns should be the opt-out, not the default.
 
-**Use round, pool-common amounts when burning publicly.** If a burn must exit to an ATA, the amount becomes visible on-chain. Unusual or fragmented amounts let an observer eliminate most of the tree and narrow in on the matching commitment. Standardise on amounts that are common in the pool (e.g. exactly 100 USDC) to stay indistinguishable within the largest possible set.
+**Use round, pool-common amounts when burning publicly.** If a burn must exit to a PATA, the amount becomes visible on-chain. Unusual or fragmented amounts let an observer eliminate most of the tree and narrow in on the matching commitment. Standardise on amounts that are common in the pool (e.g. exactly 100 USDC) to stay indistinguishable within the largest possible set.
 
 **Burn to a fresh address when going public.** Burning into an address with existing on-chain history re-establishes a link. Use an address that has never appeared on-chain before.
 

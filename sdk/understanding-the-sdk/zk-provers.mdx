@@ -7,16 +7,12 @@ description: "Six injectable Groth16 prover interfaces (one per Circom circuit).
 
 Every operation that generates a [Groth16](/sdk/advanced/cryptography/groth16) ZK proof requires a prover passed through `deps`. **There is no built-in default** — you must always supply one. All provers follow the same `prove(inputs) → { proofA, proofB, proofC }` contract.
 
-The prover **factories** and the asset CDN (`getCdnZkAssetProvider`) live inside the main SDK at the `@umbra-privacy/sdk/zk-prover` subpath.
-
-<Note>
-The prover **interfaces** below do **not** ship from `/zk-prover` — its index does not re-export them. Five of them (`IZkProverForUserRegistration`, `IZkProverForETAIntoStealthPoolNote`, and the three `IZkProverForClaim…` interfaces) ship from `@umbra-privacy/sdk/shared`; `IZkProverForATAIntoStealthPoolNote` ships from `@umbra-privacy/sdk/deposit`. You only need to import an interface if you are writing a custom prover implementation; the factories below return correctly-typed instances without it.
-</Note>
+In V14 the prover and the asset CDN live inside the main SDK at the `@umbra-privacy/sdk/zk-prover` subpath. The standalone `@umbra-privacy/web-zk-prover` package from V13 has been deleted.
 
 For instantiation, Web Worker setup, and remote proving backends, see [ZK Provers](/sdk/advanced/zk-provers).
 
 <Note>
-**Prover naming pattern.** Creator-side prover factories use `get{ETA,ATA}IntoStealthPoolNoteCreatorProver` (interfaces `IZkProverFor{ETA,ATA}IntoStealthPoolNote`). Burner-side factories use `getClaim{Self,Receiver}ClaimableUtxoInto{EncryptedBalance,PublicBalance}Prover` (interfaces `IZkProverForClaim…`) — these names come from the wire protocol's `claim` / `utxo` vocabulary.
+The **burner** prover factory and interface names retained their V13 spellings (`getClaim…`, `IZkProverForClaim…`). The **creator** prover factories were renamed — ETA-source: `getETAIntoStealthPoolNoteCreatorProver` / `IZkProverForETAIntoStealthPoolNote`; ATA-source: `getATAIntoStealthPoolNoteCreatorProver` / `IZkProverForATAIntoStealthPoolNote`. The high-level **factory functions** in `/deposit`, `/withdrawal`, `/burn` also use the new vocabulary. Both creator and burner prover names coexist but follow different patterns.
 </Note>
 
 ---
@@ -51,7 +47,7 @@ interface IZkProverForETAIntoStealthPoolNote {
 
 **Shared by both ETA-source creator variants** — `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` and `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` both take a `zkProver: IZkProverForETAIntoStealthPoolNote` dep. Use `getETAIntoStealthPoolNoteCreatorProver()` to get a default instance.
 
-For ATA-source creation, see `IZkProverForATAIntoStealthPoolNote` below.
+For PATA-source creation, see `IZkProverForATAIntoStealthPoolNote` below.
 
 ---
 
@@ -87,7 +83,7 @@ interface IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance {
 }
 ```
 
-Required by: `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` deps (`zkProver`). This prover accepts a batch size `nLeaves` (1–5; the receiver-burnable burner chunks to ≤4 per proof).
+Required by: `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` deps (`zkProver`). This prover accepts a batch size `nLeaves` (1–5 in V14 — the SDK chunks to 5 notes per proof).
 
 ---
 

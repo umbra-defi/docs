@@ -20,12 +20,12 @@ When a Stealth Pool Note is written, its Poseidon commitment is appended to the 
 
 ## Burning and per-batch Merkle proofs
 
-When a note is burnt, the burner factory fetches a per-batch Merkle inclusion proof (20 sibling hashes + current root) from the indexer **immediately before submitting the burn**. The proof is embedded in the Groth16 circuit input and verified on-chain.
+When a note is burnt, the V14 burner factory fetches a per-batch Merkle inclusion proof (20 sibling hashes + current root) from the indexer **immediately before submitting the burn**. The proof is embedded in the Groth16 circuit input and verified on-chain.
 
 The on-chain program stores a rolling buffer of the **100 most recent Merkle roots**. A ZK proof generated against any of these roots is valid on submission — you do not need to prove against the absolute latest root. This gives a practical window between proof generation and transaction submission, accommodating network latency, wallet confirmation delays, and slower clients.
 
 <Note>
-The scanner does not pre-bundle Merkle proofs. Proofs are fetched per batch at burn time so a single proof set is shared across an entire batch — far cheaper than fetching one proof per note. Callers should pass scanned notes directly to a burner factory; `enrichWithMerkleProof` is exported from `@umbra-privacy/sdk/burn` only for callers building a fully custom burn pipeline.
+The V14 scanner does not pre-bundle Merkle proofs (V13 did). Proofs are fetched per batch at burn time so a single proof set is shared across an entire batch — far cheaper than fetching one proof per note. Callers should pass scanned notes directly to a burner factory; `enrichWithMerkleProof` is exported from `@umbra-privacy/sdk/burn` only for callers building a fully custom burn pipeline.
 </Note>
 
 <Warning>

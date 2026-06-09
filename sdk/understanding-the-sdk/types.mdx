@@ -1,6 +1,6 @@
 ---
 title: "Types & Interfaces"
-description: "SDK type system: branded types U64/U128/U256, Bn254FieldElement, X25519PublicKey. Integration with @solana/kit Address and TransactionSignature. Function types via the named subpath of each operation family."
+description: "SDK type system (V14): branded types U64/U128/U256, Bn254FieldElement, X25519PublicKey. Integration with @solana/kit Address and TransactionSignature. Function types via the named subpath of each operation family."
 ---
 
 ## Anza Solana Kit Types
@@ -16,18 +16,18 @@ If you are writing unit tests or building a custom RPC layer, the [`@solana/kit`
 
 ## Function Types
 
-Every returned function has a named type exported from the **same subpath** as its factory. There is no separate `@umbra-privacy/sdk/interfaces` re-export — types ship alongside their factories.
+Every returned function has a named type exported from the **same subpath** as its factory. There is no separate `@umbra-privacy/sdk/interfaces` re-export in V14 — types ship alongside their factories.
 
 ```typescript
 import type {
   // Deposit family
-  ATAIntoETADirectDepositorFunction,
+  FromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunction,
   ATAIntoReceiverBurnableStealthPoolNoteCreatorFunction,
 } from "@umbra-privacy/sdk/deposit";
 
 import type {
   // Withdrawal family
-  ETAIntoATAWithdrawerFunction,
+  FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunction,
 } from "@umbra-privacy/sdk/withdrawal";
 
 import type {
@@ -49,11 +49,11 @@ This is useful when you build a factory function once and store it in React stat
 
 ```typescript
 import { useState, useEffect } from "react";
-import type { ATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+import type { FromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
 const [deposit, setDeposit] =
-  useState<ATAIntoETADirectDepositorFunction | null>(null);
+  useState<FromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunction | null>(null);
 
 useEffect(() => {
   if (client) {

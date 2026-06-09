@@ -1,17 +1,17 @@
 ---
 title: "Withdraw"
-description: "getETAIntoATAWithdrawerFunction: move tokens from an EncryptedTokenAccount to an AssociatedTokenAccount. Returns WithdrawResult with Arcium MPC callback confirmation."
+description: "getETAIntoATAWithdrawerFunction (V14): move tokens from an EncryptedTokenAccount to a PublicAssociatedTokenAccount. Returns WithdrawResult with Arcium MPC callback confirmation."
 ---
 
 ## Overview
 
-The `withdraw` operation is the reverse of a deposit. It moves tokens from a user's `EncryptedTokenAccount (ETA)` back to their `AssociatedTokenAccount (ATA)`.
+The `withdraw` operation is the reverse of a deposit. It moves tokens from a user's `EncryptedTokenAccount (ETA)` back to their `PublicAssociatedTokenAccount (PATA)`.
 
 ```
 ETA (on-chain encrypted balance)
           │
           ▼
-  Pool custody (on-chain SPL)  ──withdraw──▶  Your ATA
+  Pool custody (on-chain SPL)  ──withdraw──▶  Your PATA
 ```
 
 Arcium MPC verifies the withdrawal authorization. The operation follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) — the SDK waits for both the handler and the callback transactions to confirm before returning.
@@ -26,7 +26,7 @@ const withdraw = getETAIntoATAWithdrawerFunction({ client });
 const result = await withdraw(
   destinationAddress, // where tokens go (typically client.signer.address)
   mint,               // SPL or Token-2022 mint address
-  withdrawalAmount,   // amount in native token units (U64)
+  amount,             // amount in native token units (U64)
   options?,           // optional
 );
 ```
@@ -34,14 +34,14 @@ const result = await withdraw(
 ## Parameters
 
 <ParamField path="destinationAddress" type="Address" required>
-  The Solana address whose ATA will receive the withdrawn tokens. This is typically `client.signer.address`.
+  The Solana address whose PATA will receive the withdrawn tokens. This is typically `client.signer.address`.
 </ParamField>
 
 <ParamField path="mint" type="Address" required>
   The SPL or Token-2022 mint address. Must match a mint for which the user has an existing ETA.
 </ParamField>
 
-<ParamField path="withdrawalAmount" type="U64" required>
+<ParamField path="amount" type="bigint" required>
   The amount to withdraw, in the token's native units. Must not exceed the current ETA balance.
 </ParamField>
 
@@ -62,19 +62,19 @@ const result = await withdraw(
 </ParamField>
 
 <ParamField path="options.feeVaultOffset" type="U128" default="0n">
-  Fee-vault PDA offset. The fee-vault path is currently unused for public-ATA withdrawals — leave at the default `0n` (sentinel for "no fee-vault interaction").
+  Fee-vault PDA offset. The fee-vault path is currently unused for public-PATA withdrawals — leave at the default `0n` (sentinel for "no fee-vault interaction").
 </ParamField>
 
 <ParamField path="options.destinationProgram" type="Address">
   Optional observer-CPI destination program invoked after the MPC callback. Defaults to the System Program (sentinel = "no observer CPI").
 </ParamField>
 
-<ParamField path="options.hooks" type="WithdrawalHooks">
+<ParamField path="options.hooks" type="FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawHooks">
   Per-phase lifecycle hooks (`onValidationStart`, `onAccountFetchComplete`, `queueComputation`, `onComplete`, `onError`, etc.).
 </ParamField>
 
 <Note>
-There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the withdrawer. Priority fees are configured at factory time. Callback waiting is always-on — the result's `callback` field is populated on success.
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the V14 withdrawer. Priority fees are configured at factory time. Callback waiting is always-on — the result's `callback` field is populated on success.
 </Note>
 
 ## Return Value
@@ -122,7 +122,7 @@ if (result.callback?.status === "finalized") {
 
 ## Withdrawal destination
 
-The tokens are sent to the **ATA** associated with the `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail with an account-not-found error. Create the ATA first using standard token tooling if needed.
+The tokens are sent to the **PATA** associated with the `destinationAddress` for the given mint. If that PATA does not exist, the transaction will fail with an account-not-found error. Create the PATA first using standard token tooling if needed.
 
 ## Callback failure recovery
 
@@ -132,7 +132,7 @@ If the handler succeeds but the Arcium callback never lands (network partition, 
 import { getStagedSplRecovererFunction, getStagedSolRecovererFunction } from "@umbra-privacy/sdk/account";
 
 const recover = getStagedSplRecovererFunction({ client });
-await recover(mint, amount, destinationAta);
+await recover({ mint });
 ```
 
 No MPC, no ZK proof — a synchronous recovery transaction. Use `getStagedSolRecovererFunction` for wSOL.

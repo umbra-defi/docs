@@ -9,30 +9,31 @@ description: "API reference: getEncryptedBalanceQuerierFunction (Rescue cipher d
 
 ```typescript
 function getUserAccountQuerierFunction(
-  args: GetQueryUserAccountFunctionArgs,
-  deps?: GetQueryUserAccountFunctionDeps,
-): QueryUserAccountFunction
+  args: GetUserAccountQuerierFunctionArgs,
+  deps?: GetUserAccountQuerierFunctionDeps,
+): UserAccountQuerierFunction
 ```
 
 Returns a function that fetches and decodes the on-chain user account for any Umbra address.
 
 ---
 
-### GetQueryUserAccountFunctionArgs
+### GetUserAccountQuerierFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetQueryUserAccountFunctionDeps
+### GetUserAccountQuerierFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 
 ### Returns
 
-`QueryUserAccountFunction`
+`UserAccountQuerierFunction`
 
 ```typescript
-type QueryUserAccountFunction = (
+type UserAccountQuerierFunction = (
   userAddress: Address,
+  options?: { commitment?: Commitment },
 ) => Promise<QueryUserAccountResult>
 ```
 
@@ -88,31 +89,32 @@ if (result.state === "exists") {
 
 ```typescript
 function getEncryptedBalanceQuerierFunction(
-  args: GetQueryEncryptedBalanceFunctionArgs,
-  deps?: GetQueryEncryptedBalanceFunctionDeps,
-): QueryEncryptedBalanceFunction
+  args: GetEncryptedBalanceQuerierFunctionArgs,
+  deps?: GetEncryptedBalanceQuerierFunctionDeps,
+): EncryptedBalanceQuerierFunction
 ```
 
 Returns a function that fetches and decrypts encrypted token balances for a set of mints. For shared-mode accounts, the balance is decrypted locally using the caller's X25519 private key. For MXE-mode accounts, the ciphertext cannot be decrypted client-side.
 
 ---
 
-### GetQueryEncryptedBalanceFunctionArgs
+### GetEncryptedBalanceQuerierFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetQueryEncryptedBalanceFunctionDeps
+### GetEncryptedBalanceQuerierFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
-- `rescueCipherDecryptor?: RescueCipherDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
+- `rcDecryptor?: RcDecryptorFunction` - Override the Rescue cipher decryptor used for shared-mode balance decryption.
 
 ### Returns
 
-`QueryEncryptedBalanceFunction`
+`EncryptedBalanceQuerierFunction`
 
 ```typescript
-type QueryEncryptedBalanceFunction = (
+type EncryptedBalanceQuerierFunction = (
   mints: readonly Address[],
+  options?: { commitment?: Commitment },
 ) => Promise<Map<Address, QueryEncryptedBalanceResult>>
 ```
 

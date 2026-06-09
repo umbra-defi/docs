@@ -30,7 +30,8 @@ There is no client-level `commitment` parameter. Each SDK function accepts per-c
 - `network: Network` — `"mainnet"` | `"devnet"` | `"localnet"`.
 - `rpcUrl: string` — HTTPS RPC endpoint URL for the Solana cluster.
 - `rpcSubscriptionsUrl: string` — WebSocket RPC endpoint URL for transaction confirmation.
-- `indexerApiEndpoint?: string` — base URL for the Umbra indexer (e.g. `"https://utxo-indexer.api.umbraprivacy.com"`). Required for Stealth Pool operations (`getBurnableStealthPoolNoteScannerFunction` and all burner factories). The relayer is **not** a client argument — construct it separately with `getUmbraRelayer({ apiEndpoint })` and pass it to the burner `relayer` dep.
+- `indexerApiEndpoint?: string` — base URL for the Umbra indexer (e.g. `"https://utxo-indexer.api.umbraprivacy.com"`). Required for Stealth Pool operations (`getBurnableStealthPoolNoteScannerFunction` and all burner factories).
+- `relayerApiEndpoint?: string` — base URL for the Umbra relayer. Required for burning. The burner factory's `relayer` adapter is built from a relayer client constructed against this endpoint via `getUmbraRelayer({ apiEndpoint })`.
 - `utxoDataStore?: IUtxoDataStore` — persistent storage for scanner cursor + decrypted notes. Strongly recommended on the browser. Build via `createShardedUtxoDataStore({ storageBackend })` from `@umbra-privacy/sdk/store-adapters`.
 - `nullifierStore?: INullifierStore` — persistent storage for discovered nullifiers. Same source as `utxoDataStore`; use `createShardedNullifierStore({ storageBackend })`.
 - `deferMasterSeedSignature?: boolean` — skip the master seed signature prompt at construction time. Defaults to `false`.
@@ -93,19 +94,18 @@ The read-only configuration object produced by `getUmbraClient`. All factory fun
 - `signer: IUmbraSigner` - The connected wallet.
 - `network: Network` - The configured network.
 - `networkConfig: NetworkConfig` - On-chain program IDs and addresses for the configured network.
-- `versions` - Version specifier functions, one per member: `protocol`, `algorithm`, `scheme`, and `network`. (Inline object type, not a named export.)
-- `offsets` - U512 key-derivation offsets, one per derived key. Commitment is not stored on the client - each SDK function accepts per-call commitment overrides. (Inline object type, not a named export.)
+- `versions: ResolvedVersions` - Resolved protocol, algorithm, and scheme version identifiers.
+- `offsets: ResolvedOffsets` - Resolved key derivation offsets. Commitment is not stored on the client - each SDK function accepts per-call commitment overrides.
 - `accountInfoProvider: AccountInfoProviderFunction` - Account data fetcher (RPC-based or overridden).
 - `blockhashProvider: GetLatestBlockhash` - Blockhash fetcher (RPC-based or overridden).
 - `transactionForwarder: TransactionForwarder` - Transaction broadcaster (WebSocket-based or overridden).
 - `epochInfoProvider: GetEpochInfo` - Epoch info fetcher (RPC-based or overridden).
 - `fetchMerkleProof?: MerkleProofFetcherFunction` — indexer-based single-leaf Merkle proof fetcher. Present only when `indexerApiEndpoint` is set.
 - `fetchBatchMerkleProof?: BatchMerkleProofFetcherFunction` — indexer-based per-batch Merkle proof fetcher. Pass to burner factories. Present only when `indexerApiEndpoint` is set.
-- `fetchUtxoData?: UtxoDataFetcherFunction` — indexer-based Stealth Pool Note data fetcher used internally by the scanner. (Field name retains legacy spelling — the scanner deps override is named `fetchStealthPoolNoteData`, see `/reference/mixer`.) Present only when `indexerApiEndpoint` is set.
+- `fetchUtxoData?: UtxoDataFetcherFunction` — indexer-based Stealth Pool Note data fetcher used internally by the scanner. (Field name retains V13 spelling for backwards compatibility — the V14 scanner deps override is named `fetchStealthPoolNoteData`, see `/reference/mixer`.) Present only when `indexerApiEndpoint` is set.
 - `fetchTreeSummary?: TreeSummaryFetcherFunction` — indexer-based tree summary fetcher. Present only when `indexerApiEndpoint` is set.
 - `utxoDataStore?` / `nullifierStore?` — same instances supplied at construction, when present.
-- `masterSeed: { getMasterSeed }` — convenience accessor for the most common key operation. `getMasterSeed()` loads the cached seed or derives it via wallet signature on first use, then reuses the cache. This is the only member on `client.masterSeed`.
-- `keyStorage: KeyStorageRegistry` — full load/store/generate registry for all key types. For master-seed storage control use `keyStorage.masterSeed.{ load, store, generate, getMasterSeed }`: `load` attempts to load an existing seed, `store` persists it, and `generate` derives a new seed via signature. (Advanced usage — most consumers only need `masterSeed.getMasterSeed()`.)
+- `masterSeed: { load, store, generate, getMasterSeed }` — master seed storage operations. `load` attempts to load an existing seed, `store` persists it, `generate` derives a new seed via signature, and `getMasterSeed` is a convenience method combining load and generate.
 
 ---
 

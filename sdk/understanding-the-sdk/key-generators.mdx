@@ -10,8 +10,8 @@ All cryptographic keys are derived from the master seed via [KMAC256](/sdk/advan
 ### Master Viewing Key Generators
 
 ```typescript
-type MasterViewingKeyDeriverFunction = () => Promise<MasterViewingKey>;
-type MasterViewingKeyBlindingFactorDeriverFunction = () => Promise<Bn254FieldElement>;
+type MasterViewingKeyGeneratorFunction = () => Promise<MasterViewingKey>;
+type MasterViewingKeyBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
 ```
 
 Used by: registration, Stealth Pool Note creation (self-burnable and receiver-burnable), burning.
@@ -19,8 +19,8 @@ Used by: registration, Stealth Pool Note creation (self-burnable and receiver-bu
 ### Poseidon Private Key Generators
 
 ```typescript
-type PoseidonPrivateKeyDeriverFunction = () => Promise<Bn254FieldElement>;
-type PoseidonBlindingFactorDeriverFunction = () => Promise<Bn254FieldElement>;
+type PoseidonPrivateKeyGeneratorFunction = () => Promise<Bn254FieldElement>;
+type PoseidonBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
 ```
 
 Used by: registration, Stealth Pool Note creation, burning.
@@ -32,7 +32,7 @@ Used by: registration, Stealth Pool Note creation, burning.
 type Curve25519KeypairGeneratorFunction = () => Promise<Curve25519KeypairResult>;
 
 // Per-mint X25519 key - used for Stealth Pool Note ciphertext addressing
-type MintX25519KeypairDeriverFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
+type MintX25519KeypairGeneratorFunction = (mint: Address) => Promise<Curve25519KeypairResult>;
 ```
 
 Used by: registration, Stealth Pool Note creation. Also exposed via `getMintEncryptionKeyRotatorFunction` deps (in `@umbra-privacy/sdk/account`).
@@ -40,7 +40,7 @@ Used by: registration, Stealth Pool Note creation. Also exposed via `getMintEncr
 ### Viewing Key Generators (Poseidon sub-hierarchy)
 
 ```typescript
-type MintViewingKeyDeriverFunction = (
+type MintViewingKeyGeneratorFunction = (
   mint: Address,
   options?: ViewingKeyGeneratorOptions,
 ) => Promise<MintViewingKey>;
@@ -83,17 +83,14 @@ Used by: Stealth Pool Note creation (the second viewing key scopes the note ciph
 ### Commitment Factor Generators
 
 ```typescript
-type RescueCommitmentBlindingFactorDeriverFunction = (offset: U256) => Promise<Bn254FieldElement>;
-type PolynomialCommitmentFactorDeriverFunction = (offset: U256) => Promise<Curve25519FieldElement>;
-type PoseidonKeystreamBlindingFactorDeriverFunction = (
-  keystream: Bn254FieldElement,
-  offset: U256,
-) => Promise<Bn254FieldElement>;
+type RescueEncryptionCommitmentBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
+type RandomFactorForPolynomialCommitmentGeneratorFunction = () => Promise<Curve25519FieldElement>;
+type PoseidonKeystreamBlindingFactorGeneratorFunction = () => Promise<Bn254FieldElement>;
 ```
 
 ### Ephemeral Stealth Pool Note key generators
 
-Each note operation uses per-note ephemeral keys parameterised by the on-chain generation index. All are injectable. The TypeScript names use the wire-protocol prefix `EphemeralUtxo*`; the burn-side interfaces re-export them under aliases:
+Each note operation uses per-note ephemeral keys parameterised by the on-chain generation index. All are injectable. The TypeScript names retained their V13 spellings (`EphemeralUtxo*`) and the burn-side interfaces re-export them under V14 aliases:
 
 ```typescript
 type EphemeralUtxoMasterViewingKeyDeriverFunction = (offset: U256) => Promise<MasterViewingKey>;
@@ -117,28 +114,28 @@ Beyond key generation, the low-level cryptographic operations themselves are inj
 The [Rescue cipher](/sdk/advanced/cryptography/rescue-cipher) is used to encrypt Stealth Pool Note payloads and EncryptedTokenAccount balances.
 
 ```typescript
-type RescueCipherEncryptorFunction = (
-  plaintext: readonly RescueCipherPlaintext[],
-) => Promise<{ ciphertexts: RescueCipherCiphertext[]; nonce: RescueCipherEncryptionNonce }>;
+type RcEncryptorFunction = (
+  plaintext: readonly RcPlaintext[],
+) => Promise<{ ciphertexts: RcCiphertext[]; nonce: RcEncryptionNonce }>;
 
-type RescueCipherEncryptorWithNonceFunction = (
-  plaintext: readonly RescueCipherPlaintext[],
-  nonce: RescueCipherEncryptionNonce,
-) => Promise<RescueCipherCiphertext[]>;
+type RcEncryptorWithNonceFunction = (
+  plaintext: readonly RcPlaintext[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcCiphertext[]>;
 
-type RescueCipherDecryptorFunction = (
-  ciphertext: readonly RescueCipherCiphertext[],
-  nonce: RescueCipherEncryptionNonce,
-) => Promise<RescueCipherPlaintext[]>;
+type RcDecryptorFunction = (
+  ciphertext: readonly RcCiphertext[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcPlaintext[]>;
 
-type RescueCipherKeyGeneratorFunction = (
-  counters: readonly RescueCipherCounter[],
-  nonce: RescueCipherEncryptionNonce,
-) => Promise<ReadonlyMap<RescueCipherCounter, RescueCipherKey>>;
+type RcKeyGeneratorFunction = (
+  counters: readonly RcCounter[],
+  nonce: RcEncryptionNonce,
+) => Promise<RcKey[]>;
 ```
 
-- `rescueEncryptor` and `rescueKeyGenerator` appear in: registration, Stealth Pool Note creation deps.
-- `rescueCipherDecryptor` appears in: `getEncryptedBalanceQuerierFunction` deps — override to provide a custom decryption backend.
+- `getRcEncryptor` and `getRcKeyGenerator` appear in: registration, Stealth Pool Note creation deps.
+- `rcDecryptor` appears in: `getEncryptedBalanceQuerierFunction` deps — override to provide a custom decryption backend.
 
 ### AES Encryption
 

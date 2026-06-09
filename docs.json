@@ -19,7 +19,6 @@
             "pages": [
               "introduction",
               "quickstart",
-              "production-and-pitfalls",
               "supported-tokens",
               "pricing"
             ]

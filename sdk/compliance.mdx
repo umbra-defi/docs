@@ -1,6 +1,6 @@
 ---
 title: "Compliance"
-description: "Two independent compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for Stealth Pool Notes, and X25519 compliance grants for EncryptedTokenAccount re-encryption."
+description: "Two independent V14 compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for Stealth Pool Notes, and X25519 compliance grants for EncryptedTokenAccount re-encryption."
 ---
 
 ## Overview
@@ -43,7 +43,7 @@ Master Viewing Key
 
 Each level is derived from the level above using a Poseidon hash. Sharing a key at any level grants read access to all note activity within that scope and nothing outside it. The Second Viewing Key (a.k.a. the transaction viewing key — TVK) is the one that actually decrypts a note's Poseidon stream cipher (`pc_encrypted_*`).
 
-Eight derivers ship, all from the SDK's key-derivation primitives:
+Eight derivers ship in V14, all from the SDK's key-derivation primitives:
 
 ```typescript
 import {
@@ -76,20 +76,19 @@ import { getComplianceGrantIssuerFunction } from "@umbra-privacy/sdk/compliance"
 const createGrant = getComplianceGrantIssuerFunction({ client });
 
 // Create a grant allowing `receiver` to re-encrypt your shared ETA ciphertexts.
-// Arguments are positional: (receiver, granterX25519, receiverX25519, nonce, optionalData?, hooks?)
-const result = await createGrant(
+const result = await createGrant({
   receiver,        // receiver's wallet address (Address)
   granterX25519,   // your MVK X25519 public key (X25519PublicKey)
   receiverX25519,  // receiver's X25519 public key (X25519PublicKey)
-  nonce,           // u128 bigint nonce (RescueCipherEncryptionNonce)
-);
+  nonce,           // u128 nonce (RescueCipherEncryptionNonce)
+});
 ```
 
 See [X25519 Compliance Grants](/sdk/compliance-x25519-grants) for the complete workflow — deriving the granter's MVK X25519 keypair, generating a random nonce, re-encrypting ciphertexts under the grant, and querying grant status.
 
 ---
 
-## Compliance factory inventory
+## V14 compliance factory inventory
 
 All under `@umbra-privacy/sdk/compliance`:
 
@@ -102,6 +101,7 @@ All under `@umbra-privacy/sdk/compliance`:
 - `getNetworkCiphertextReencryptorForNetworkGrantFunction` — re-encrypt under a network grant.
 - `getSharedCiphertextReencryptorForNetworkGrantFunction` — re-encrypt a Shared-mode ciphertext for a network grantee.
 
+The V14 query factories were renamed from V13's `getQueryNetworkMxe…` / `getQueryNetworkShared…` to today's `getNetworkComplianceGrantQuerierFunction` / `getSharedComplianceGrantQuerierFunction`. The reencryptors changed correspondingly.
 
 ## Privacy and Trust Model
 

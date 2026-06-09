@@ -1,6 +1,6 @@
 ---
 title: "Conversion API Reference"
-description: "Complete reference for converting MXE-only ETAs to Shared mode + rotating the per-mint X25519 key."
+description: "Complete V14 reference for converting MXE-only ETAs to Shared mode + rotating the per-mint X25519 key."
 ---
 
 ## `getNetworkEncryptionToSharedEncryptionConverterFunction`
@@ -10,8 +10,8 @@ import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-
 
 function getNetworkEncryptionToSharedEncryptionConverterFunction(
   args: { client: IUmbraClient },
-  deps?: GetConvertToSharedEncryptionFunctionDeps,
-): ConvertToSharedEncryptionFunction;
+  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
+): NetworkEncryptionToSharedEncryptionConverterFunction;
 ```
 
 Factory function that returns a callable conversion function.

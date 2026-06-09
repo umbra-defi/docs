@@ -3,13 +3,13 @@ title: "Encrypted Balances"
 description: "EncryptedTokenAccounts (ETAs): MXE-only mode (Arcium network decryptable) vs Shared mode (user X25519 decryptable). Covers nonces, ciphertext structure, and encryption upgrades."
 ---
 
-## ATA vs. ETA
+## PATA vs. ETA
 
-Solana uses **AssociatedTokenAccounts (ATAs)** to hold SPL and Token-2022 tokens. These are fully public; anyone can query the balance.
+Solana uses **PublicAssociatedTokenAccounts (PATAs)** — formerly just called ATAs — to hold SPL and Token-2022 tokens. These are fully public; anyone can query your balance.
 
 Umbra introduces **EncryptedTokenAccounts (ETAs)** — on-chain PDA accounts that hold your token balance in encrypted form.
 
-**ATA (standard public ATA)**
+**PATA (standard public ATA)**
 - Balance visible on-chain.
 - Supports standard SPL transfers.
 - No registration required.
@@ -21,15 +21,15 @@ Umbra introduces **EncryptedTokenAccounts (ETAs)** — on-chain PDA accounts tha
 - One-time user registration required.
 - Works with any [supported](/supported-tokens) mint.
 
-## Depositing: ATA → ETA
+## Depositing: PATA → ETA
 
-When you call the depositor
+When you call the V14 depositor
 `getATAIntoETADirectDepositorFunction`,
-your tokens move from your ATA into the on-chain pool custody account. The
+your tokens move from your PATA into the on-chain pool custody account. The
 program records the encrypted balance in the ETA PDA for your `(wallet, mint)` pair.
 
 ```
-Your ATA  ──deposit──►  Pool custody (on-chain SPL)
+Your PATA  ──deposit──►  Pool custody (on-chain SPL)
                               │
                               ▼
                          Your ETA  (encrypted balance stored here)
@@ -37,9 +37,9 @@ Your ATA  ──deposit──►  Pool custody (on-chain SPL)
 
 The pool custody account holds the real tokens. The ETA stores the cryptographic proof of how much of those tokens belong to you.
 
-## Withdrawing: ETA → ATA
+## Withdrawing: ETA → PATA
 
-`getETAIntoATAWithdrawerFunction` reverses the deposit. Arcium MPC verifies that your encrypted balance is sufficient and authorises the transfer from the pool custody account back to your ATA.
+`getETAIntoATAWithdrawerFunction` reverses the deposit. Arcium MPC verifies that your encrypted balance is sufficient and authorises the transfer from the pool custody account back to your PATA.
 
 ## The Two Encryption Modes
 
@@ -106,7 +106,7 @@ const result   = balances.get(USDC_MINT);
 
 switch (result?.state) {
   case "shared":
-    console.log("Balance:", result.balance); // decrypted U64
+    console.log("Balance:", result.balance); // decrypted MathU64
     break;
   case "mxe":
     console.log("Account is in MXE mode — convert to Shared to decrypt locally.");
@@ -121,7 +121,7 @@ switch (result?.state) {
 ```
 
 <Warning>
-Only Shared-mode ETAs can be decrypted client-side. MXE-mode ETAs return `{ state: "mxe" }` without a balance. Use the [converter](/sdk/conversion) (`getNetworkEncryptionToSharedEncryptionConverterFunction`) to move to Shared mode.
+Only Shared-mode ETAs can be decrypted client-side. MXE-mode ETAs return `{ state: "mxe" }` without a balance. Use the converter (above) to move to Shared mode.
 </Warning>
 
 ## Protocol Fees
@@ -133,9 +133,9 @@ Deposits and withdrawals subtract a small protocol fee from your balance. The fe
 
 Fees are deducted automatically. For Token-2022 mints with a transfer fee extension, the Token-2022 transfer fee is subtracted *before* protocol fees are applied — see [Token-2022 Support](/advanced/token-2022).
 
-## Lottery Points (Umbra Confidential SPL)
+## Lottery Points (C-SPL)
 
-**Umbra Confidential SPL** adds a loyalty/lottery-point tracking layer to every `EncryptedTokenAccount`. It is live on-chain and in active SDK integration.
+Umbra's **Confidential SPL (C-SPL)** feature adds a loyalty/lottery-point tracking layer to every `EncryptedTokenAccount`. It is live on-chain and in active SDK integration.
 
 ### What changes in the ETA state
 
@@ -152,10 +152,10 @@ Every time a Stealth Pool Note is burned **into** an ETA, the Arcium MPC compute
 
 ### Account migration
 
-ETAs deployed before Umbra Confidential SPL have zero-byte placeholders for the two new fields. To enable points accrual, each such account must go through a two-step migration:
+ETAs deployed before C-SPL have zero-byte placeholders for the two new fields. To enable points accrual, each such account must go through a two-step migration:
 
 1. **`migrate_for_points`** — a pure on-chain account realloc (no MPC). Expands the account from the old layout to the new size and shifts existing data forward.
-2. **`initialise_points_for_network_balance_v17`** or **`initialise_points_for_shared_balance_v17`** — an Arcium MPC instruction that overwrites the placeholder bytes with valid encrypted-zero ciphertexts and sets `is_points_initialised = true`.
+2. **`initialise_points_for_network_balance_v15`** or **`initialise_points_for_shared_balance_v15`** — an Arcium MPC instruction that overwrites the placeholder bytes with valid encrypted-zero ciphertexts and sets `is_points_initialised = true`.
 
 <Warning>
 SDK TypeScript factory helpers for the migration steps are **not yet shipped**. To run the migration from code, use the Codama-generated client (`@umbra-privacy/umbra-codama`) directly until higher-level wrappers land in a future SDK release.

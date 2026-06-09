@@ -48,7 +48,7 @@ Returns an array of transaction signatures — one per sub-step that was execute
 </ParamField>
 
 <ParamField path="hooks.registerAnonymousUsage" type="SkippableMpcTransactionStepHooks">
-  Lifecycle hooks for the MPC + ZK `register_user_for_anonymous_usage_v17` sub-step (user-commitment registration). Slots: `onPreSend`, `onPostSend`, `onSkipped`, plus MPC progress slots (`onMonitorStarted`, `onProgress`, `onFinalized`).
+  Lifecycle hooks for the MPC + ZK `register_user_for_anonymous_usage_v18` sub-step (user-commitment registration). Slots: `onPreSend`, `onPostSend`, `onSkipped`, plus MPC progress slots (`onMonitorStarted`, `onProgress`, `onFinalized`).
 </ParamField>
 
 ---
@@ -59,8 +59,8 @@ Returns an array of transaction signatures — one per sub-step that was execute
 import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 function getUserAccountQuerierFunction(args: {
-  client: IUmbraClient;
-}): QueryUserAccountFunction
+  accountInfoProvider: AccountInfoProviderFunction;
+}): UserAccountQuerierFunction
 ```
 
 Factory function that returns a read-only account state query.
@@ -70,6 +70,7 @@ Factory function that returns a read-only account state query.
 ```typescript
 async function queryUserAccount(
   userAddress: Address,
+  options?: { commitment?: Commitment },
 ): Promise<QueryUserAccountResult>
 ```
 
@@ -118,7 +119,7 @@ Sub-step A: register_user_for_confidential_usage   [if confidential: true]
   └─ Stores on-chain in EncryptedUserAccount
   └─ Synchronous, no MPC
 
-Sub-step B: register_user_for_anonymous_usage_v17  [if anonymous: true]
+Sub-step B: register_user_for_anonymous_usage_v18  [if anonymous: true]
   └─ init_if_needed: EncryptedUserAccount PDA
   └─ Derives Poseidon commitment from master seed
   └─ Stages master viewing key material

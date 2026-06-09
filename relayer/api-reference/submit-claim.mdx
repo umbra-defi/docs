@@ -16,13 +16,13 @@ from `@umbra-privacy/sdk/burn` instead.
 The relayer validates the request, builds the on-chain transactions, and submits them asynchronously. Poll `GET /v1/claims/{request_id}` with the returned UUID to track progress.
 
 <Note>
-The wire path retains the legacy `/v1/claims` segment. In SDK code you call it via the relayer client's `submitClaim` method (or its `submitBurn` alias when plugged into a burner factory's `relayer` dep).
+The wire path retains the legacy `/v1/claims` segment. In V14 SDK code you call it via the relayer client's `submitClaim` method (or its `submitBurn` alias when plugged into a burner factory's `relayer` dep).
 </Note>
 
 ## Burn variants
 
 - `encrypted_balance` — burn into an `EncryptedTokenAccount`. Requires additional Rescue-encrypted fee fields in `proof_account_data`. Each note slot has 6 linker encryptions and 6 key commitments.
-- `public_balance` — burn into a `AssociatedTokenAccount`. Requires `fee_proof_data` with the client's expected basis-points rates (`protocol_fee_basis_points`, `relayer_fee_basis_points`) and allowed-address PDA slots — the relayer verifies these against the on-chain `FeeSchedule` / `RelayerFeeSchedule` PDAs before submission, catching stale client config without wasting a transaction. Each note slot has 5 linker encryptions and 5 key commitments.
+- `public_balance` — burn into a `PublicAssociatedTokenAccount`. Requires `fee_proof_data` with the client's expected basis-points rates (`protocol_fee_basis_points`, `relayer_fee_basis_points`) and allowed-address PDA slots — the relayer verifies these against the on-chain `FeeSchedule` / `RelayerFeeSchedule` PDAs before submission, catching stale client config without wasting a transaction. Each note slot has 5 linker encryptions and 5 key commitments.
 
 ## Validation rules
 

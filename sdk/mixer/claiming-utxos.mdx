@@ -1,6 +1,6 @@
 ---
 title: "Burning Notes"
-description: "3 burner factory functions: receiver-burnable → ETA, self-burnable → ETA, self-burnable → ATA. Each needs a fetchBatchMerkleProof, a circuit-specific zkProver, and a relayer adapter ({submitBurn, pollBurnStatus, getRelayerAddress})."
+description: "3 V14 burner factory functions: receiver-burnable → ETA, self-burnable → ETA, self-burnable → PATA. Each needs a fetchBatchMerkleProof, a circuit-specific zkProver, and a relayer adapter ({submitBurn, pollBurnStatus, getRelayerAddress})."
 ---
 
 ## Overview
@@ -9,9 +9,9 @@ Burning a Stealth Pool Note presents a ZK proof on-chain that you know the secre
 
 You choose where the tokens go:
 - **Into an EncryptedTokenAccount** — tokens remain private after burning. Default for receiver-burnable.
-- **Into an AssociatedTokenAccount** — tokens become visible in the destination ATA. Self-burnable only.
+- **Into a PublicAssociatedTokenAccount** — tokens become visible in the destination PATA. Self-burnable only in V14.
 
-## burner factories
+## V14 burner factories
 
 All three live under `@umbra-privacy/sdk/burn`.
 
@@ -71,7 +71,7 @@ const burn = getSelfBurnableStealthPoolNoteIntoETABurnerFunction(
 const result = await burn(notes);
 ```
 
-### Self-burnable → ATA
+### Self-burnable → PATA
 
 ```typescript
 import {
@@ -100,7 +100,7 @@ const result = await burn(notes);
 ```
 
 <Note>
-Receiver-burnable → ATA is supported on-chain (`claim_to_receiver` in the anchor program) but is not yet exposed in the SDK. Use receiver-burnable → ETA, then a regular withdrawal, until the SDK ships the direct path.
+Receiver-burnable → PATA is supported on-chain (`claim_to_receiver` in the anchor program) but is not yet exposed in the SDK. Use receiver-burnable → ETA, then a regular withdrawal, until the SDK ships the direct path.
 </Note>
 
 ## Function signature
@@ -112,7 +112,7 @@ type BurnerFn = (
   stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "self-burnable" | "receiver-burnable" })[],
   optionalData?: OptionalData32,
   microLamportsPerAcu?: MicroLamportsPerAcu,
-) => Promise<BurnStealthPoolNoteIntoETAResult | BurnStealthPoolNoteIntoATAResult>;
+) => Promise<BurnStealthPoolNoteIntoEncryptedTokenAccountResult | BurnStealthPoolNoteIntoPublicAssociatedTokenAccountResult>;
 ```
 
 ### Parameters
@@ -140,15 +140,15 @@ type BurnerFn = (
 </ParamField>
 
 <ParamField path="relayer" type="{ submitBurn; pollBurnStatus; getRelayerAddress }" required>
-  Relayer adapter. The three property names (`submitBurn`, `pollBurnStatus`, `getRelayerAddress`) are TypeScript aliases of the relayer client's claim methods (`BurnSubmitterFunction = ClaimSubmitterFunction`, etc.), so a relayer client built via `getUmbraRelayer({ apiEndpoint })` plugs in directly.
+  Relayer adapter. The three property names are V14 — they are TypeScript aliases (`BurnSubmitterFunction = ClaimSubmitterFunction`, etc.), so a relayer client built via `getUmbraRelayer({ apiEndpoint })` plugs in directly under the renamed property names.
 </ParamField>
 
 ## Return Value
 
-Receiver-into-ETA and self-into-ETA both return `BurnStealthPoolNoteIntoETAResult`. Self-into-ATA returns `BurnStealthPoolNoteIntoATAResult`. Both shapes:
+Receiver-into-ETA and self-into-ETA both return `BurnStealthPoolNoteIntoEncryptedTokenAccountResult`. Self-into-PATA returns `BurnStealthPoolNoteIntoPublicAssociatedTokenAccountResult`. Both shapes:
 
 ```typescript
-interface BurnStealthPoolNoteIntoETAResult {
+interface BurnStealthPoolNoteIntoEncryptedTokenAccountResult {
   readonly signatures: readonly TransactionSignature[]; // from OperationOutcome — every tx submitted
   readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
 }
@@ -158,7 +158,7 @@ interface BurnBatchResult {
   readonly status: BurnStatus;
   readonly txSignature?: string;                                    // on-chain burn tx (when landed)
   readonly callbackSignature?: string;                              // MPC callback tx (when finalised)
-  readonly resolvedVariant?: string;                                // relayer-chosen variant, e.g. "claim_into_existing_shared_balance_v17"
+  readonly resolvedVariant?: string;                                // relayer-chosen variant, e.g. "claim_into_existing_shared_balance_v14"
   readonly failureReason?: string | null;
   readonly stealthPoolNoteIds?: readonly string[];                  // "treeIndex:leafIndex" pairs
 }
@@ -172,13 +172,13 @@ type BurnStatus =
 `completed` / `callback_received` indicate success. The signature you want to surface to the user is `callbackSignature ?? txSignature`. `failureReason` containing `"NullifierAlreadyBurnt"` means the note was already burnt — the SDK treats this as idempotent success.
 
 <Note>
-**Umbra Confidential SPL lottery points:** When burning into an ETA, the Arcium MPC generates a `rescue_encrypted_lottery_ticket_delta` and adds it to your ETA's running point totals. This field is present in the raw relayer batch response but is not yet surfaced in `BurnBatchResult`. See [Lottery Points (Umbra Confidential SPL)](/concepts/encrypted-balances#lottery-points-umbra-confidential-spl) for the current SDK status.
+**C-SPL lottery points:** When burning into an ETA, the Arcium MPC generates a `rescue_encrypted_lottery_ticket_delta` and adds it to your ETA's running point totals. This field is present in the raw relayer batch response but is not yet surfaced in `BurnBatchResult`. See [Lottery Points (C-SPL)](/concepts/encrypted-balances#lottery-points-c-spl) for the current SDK status.
 </Note>
 
 ## Batching behaviour
 
-- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤4 per proof. Pass the whole array; do not reimplement chunking.
-- **Self-burnable → ETA / ATA** has `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array; the result has one batch per note.
+- **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤5 per proof. Pass the whole array; do not reimplement chunking.
+- **Self-burnable → ETA / PATA** has `MAX_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array; the result has one batch per note.
 
 ## Full example: scan + burn
 
@@ -215,7 +215,7 @@ Proof generation is CPU-intensive. Plan for 2–8 seconds in the browser per bat
 
 ## Stale Merkle Proofs
 
-Merkle proofs can become stale if the tree root changes between when the proof is fetched and when the burn is submitted. The burner fetches the proof **per batch, immediately before submission**, which keeps the window small. If a burn fails with a root mismatch, simply re-run it — the burner refetches the proof on each attempt.
+Merkle proofs can become stale if the tree root changes between when the proof is fetched and when the burn is submitted. In V14 the burner fetches the proof **per batch, immediately before submission**, so this is much less likely than under V13's scan-time proof bundling. If a burn fails with a root mismatch, simply re-run it — the burner refetches the proof on each attempt.
 
 <Note>
 Do **not** call `enrichWithMerkleProof` yourself in normal use. The burner handles it. The helper is exported from `@umbra-privacy/sdk/burn` only for callers building a fully custom burn pipeline that bypasses the orchestrator factories.

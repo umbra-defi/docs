@@ -1,6 +1,6 @@
 ---
 title: "Stealth Pool (Mixer)"
-description: "API reference: getBurnableStealthPoolNoteScannerFunction (zero-arg) + 3 burner factories (receiver→ETA, self→ETA, self→ATA) with fetchBatchMerkleProof, ZK prover, and relayer deps."
+description: "V14 API reference: getBurnableStealthPoolNoteScannerFunction (zero-arg) + 3 burner factories (receiver→ETA, self→ETA, self→PATA) with fetchBatchMerkleProof, ZK prover, and relayer deps."
 ---
 
 All Stealth Pool factories live under `@umbra-privacy/sdk/burn`.
@@ -44,8 +44,6 @@ interface ScannedStealthPoolNoteResult {
   readonly etaToStealthPoolReceiverBurnable: readonly DecryptedStealthPoolNoteData[];
   readonly ataToStealthPoolSelfBurnable: readonly DecryptedStealthPoolNoteData[];
   readonly ataToStealthPoolReceiverBurnable: readonly DecryptedStealthPoolNoteData[];
-  readonly networkBalanceToStealthPoolSelfBurnableWithEncryptedAddress: readonly DecryptedStealthPoolNoteData[];
-  readonly networkBalanceToStealthPoolReceiverBurnableWithEncryptedAddress: readonly DecryptedStealthPoolNoteData[];
   readonly scannedTrees: readonly ScannedTreeProgress[];
 }
 
@@ -61,7 +59,7 @@ Notes are **not** proof-bundled — proofs are fetched per batch at burn time.
 
 ### Errors
 
-Throws `FetchUtxosError` (named with the legacy noun; class name retained for backwards compatibility — the error itself covers Stealth Pool Note scanning). See [Errors](./errors#fetchutxoserror).
+Throws `FetchUtxosError` (named with the legacy noun; class name retained for backwards compatibility — the error itself covers V14 Stealth Pool Note scanning). See [Errors](./errors#fetchutxoserror).
 
 ### Example
 
@@ -85,7 +83,7 @@ function getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   args: { client: IUmbraClient },
   deps: {
     fetchBatchMerkleProof: BatchMerkleProofFetcherFunction;
-    zkProver: IZkProverForBurnReceiverBurnableStealthPoolNoteIntoETA;
+    zkProver: IZkProverForBurnReceiverBurnableStealthPoolNoteIntoEncryptedTokenAccount;
     relayer: {
       submitBurn: BurnSubmitterFunction;
       pollBurnStatus: BurnStatusPollerFunction;
@@ -100,13 +98,13 @@ function getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
 ): ReceiverBurnableStealthPoolNoteIntoETABurnerFunction;
 ```
 
-Burns receiver-burnable notes into the caller's ETA. **Natively batches**: groups by `destinationAddress`, chunks to ≤4 per proof.
+Burns receiver-burnable notes into the caller's ETA. **Natively batches**: groups by `destinationAddress`, chunks to ≤5 per proof.
 
 ### Required deps
 
 - **`fetchBatchMerkleProof`** — typically `client.fetchBatchMerkleProof` (auto-wired when `indexerApiEndpoint` is set on the client).
-- **`zkProver`** — `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver()` from `@umbra-privacy/sdk/zk-prover`. (The interface type is aliased internally as `IZkProverForBurnReceiverBurnableStealthPoolNoteIntoETA` — the underlying type is identical.)
-- **`relayer`** — adapter built from `getUmbraRelayer({ apiEndpoint })`. `BurnSubmitterFunction` and `BurnStatusPollerFunction` are TypeScript aliases of `ClaimSubmitterFunction` and `ClaimStatusPollerFunction`, so the relayer client's `submitClaim` / `pollClaimStatus` plug in directly under the renamed property names.
+- **`zkProver`** — `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver()` from `@umbra-privacy/sdk/zk-prover`. (The interface type is aliased internally as `IZkProverForBurnReceiverBurnableStealthPoolNoteIntoEncryptedTokenAccount` — the underlying type is identical.)
+- **`relayer`** — adapter built from `getUmbraRelayer({ apiEndpoint })`. `BurnSubmitterFunction` and `BurnStatusPollerFunction` are V14 TypeScript aliases of `ClaimSubmitterFunction` and `ClaimStatusPollerFunction`, so the relayer client's `submitClaim` / `pollClaimStatus` plug in directly under the renamed property names.
 
 ### Returns
 
@@ -115,9 +113,9 @@ type ReceiverBurnableStealthPoolNoteIntoETABurnerFunction = (
   stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "receiver-burnable" })[],
   optionalData?: OptionalData32,
   microLamportsPerAcu?: MicroLamportsPerAcu,
-) => Promise<BurnStealthPoolNoteIntoETAResult>;
+) => Promise<BurnStealthPoolNoteIntoEncryptedTokenAccountResult>;
 
-interface BurnStealthPoolNoteIntoETAResult {
+interface BurnStealthPoolNoteIntoEncryptedTokenAccountResult {
   readonly signatures: readonly TransactionSignature[]; // every tx submitted (from OperationOutcome)
   readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
 }
@@ -127,7 +125,7 @@ interface BurnBatchResult {
   readonly status: BurnStatus;
   readonly txSignature?: string;               // on-chain burn tx (when landed)
   readonly callbackSignature?: string;         // MPC callback tx (when finalised)
-  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v17"
+  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v14"
   readonly failureReason?: string | null;
   readonly stealthPoolNoteIds?: readonly string[]; // "treeIndex:leafIndex" pairs
 }
@@ -150,7 +148,7 @@ Throws `ClaimUtxoError`. See [Errors](./errors#claimutxoerror). The `"transactio
 
 **Import:** `@umbra-privacy/sdk/burn`
 
-Same shape as the receiver variant. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1` — the SDK loops internally; caller still passes an array. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance` — use `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
+Same shape as the receiver variant. `MAX_NOTES_PER_PROOF = 1` — the SDK loops internally; caller still passes an array. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance` — use `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
 
 ---
 
@@ -158,10 +156,10 @@ Same shape as the receiver variant. `MAX_STEALTH_POOL_NOTES_PER_PROOF = 1` — t
 
 **Import:** `@umbra-privacy/sdk/burn`
 
-Same shape; tokens released to the destination ATA instead of an ETA. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance` — use `getClaimSelfClaimableUtxoIntoPublicBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
+Same shape; tokens released to the destination PATA instead of an ETA. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance` — use `getClaimSelfClaimableUtxoIntoPublicBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
 
 <Note>
-Receiver-burnable → ATA exists on-chain but is not yet shipped in the SDK. Use receiver-burnable → ETA then a regular withdrawal until the SDK adds the direct path.
+Receiver-burnable → PATA exists on-chain but is not yet shipped in the SDK. Use receiver-burnable → ETA then a regular withdrawal until the SDK adds the direct path.
 </Note>
 
 ---

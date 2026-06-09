@@ -1,18 +1,19 @@
-# Umbra Privacy SDK (V14)
+# Umbra Privacy SDK
 
-> Umbra is a privacy protocol for Solana that shields SPL and Token-2022 token balances using Arcium multi-party computation (MPC) and zero-knowledge proofs. The TypeScript SDK (`@umbra-privacy/sdk@5.x`) wraps all protocol operations into async factory functions for Node.js 18+ and modern browser environments. Requires a Solana wallet (Ed25519 signer) and an RPC endpoint. All amounts use base units (e.g., 1 USDC = 1_000_000n). All operations are non-custodial — private keys never leave the client. **The standalone `@umbra-privacy/web-zk-prover` package no longer exists**; the prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
+> Umbra is a privacy protocol for Solana that shields SPL and Token-2022 token balances using Arcium multi-party computation (MPC) and zero-knowledge proofs. The TypeScript SDK (`@umbra-privacy/sdk@5.0.0-rc.4`) wraps all protocol operations into async factory functions for Node.js 18+ and modern browser environments. Requires a Solana wallet (Ed25519 signer) and an RPC endpoint. All amounts use base units (e.g., 1 USDC = 1_000_000n). All operations are non-custodial — private keys never leave the client. **The standalone `@umbra-privacy/web-zk-prover` package no longer exists**; the prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
 
 This documentation covers the SDK API, protocol concepts, indexer REST API, and relayer API for building privacy-preserving Solana applications.
 
-## V14 vocabulary primer
+## Key terms
 
 - **PATA** — `PublicAssociatedTokenAccount`. A standard SPL ATA.
 - **ETA** — `EncryptedTokenAccount`. Umbra-managed encrypted balance, two modes (MXE-only and Shared).
-- **Stealth Pool Note** — V14 name for what V13 called a "UTXO". A commitment leaf in the mixer's Indexed Merkle Tree.
-- **Burn** — V14 name for what V13 called a "claim". The wire protocol retains `/v1/claims` and `submitClaim` / `pollClaimStatus`; the burner-factory `relayer` dep uses TypeScript aliases `submitBurn` / `pollBurnStatus` that re-export the claim methods.
+- **Stealth Pool Note** — a commitment leaf in the mixer's Indexed Merkle Tree (the SDK surfaces it as a "note").
+- **Burn** — consuming a note: reveals its nullifier on-chain and credits the destination balance. The wire protocol retains `/v1/claims` and `submitClaim` / `pollClaimStatus`; the burner-factory `relayer` dep uses TypeScript aliases `submitBurn` / `pollBurnStatus` that re-export the claim methods.
 
 ## Requirements and Constraints
 
+- **Install (current release `5.0.0-rc.4`)**: pin the SDK to the exact version and add a package-manager override `@umbra-privacy/umbra-codama@3.0.0-rc.4` — the version `rc.4` resolves transitively (`codama rc.3`) has a PDA-derivation bug that makes deposits fail on-chain with `ConstraintSeeds (2006)`. Also apply the one-file `scripts/patch-sdk.mjs` postinstall patch for the `rc.3`–`rc.4` `scan()` BigInt-on-base64 bug.
 - **Runtime**: Node.js 18+ or modern browser with BigInt support.
 - **TypeScript**: 5.0+ required (branded types use phantom symbols).
 - **Wallet**: must implement `IUmbraSigner` (signTransaction, signTransactions, signMessage).
@@ -33,7 +34,7 @@ This documentation covers the SDK API, protocol concepts, indexer REST API, and 
 
 Operation factories require subpath imports — the main barrel only re-exports `getUmbraClient`, signers, `Result<T,E>`, errors, and infrastructure (indexer / relayer / arcium / solana / zk-prover).
 
-- `@umbra-privacy/sdk` — `getUmbraClient`, signer factories, `getUmbraRelayer`.
+- `@umbra-privacy/sdk` — `getUmbraClient`, signer factories, `getUmbraRelayer`, `getUmbraIndexer`.
 - `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction` + executors.
 - `@umbra-privacy/sdk/deposit` — `getATAIntoETADirectDepositorFunction` + 4 Stealth Pool Note creators.
 - `@umbra-privacy/sdk/withdrawal` — `getETAIntoATAWithdrawerFunction`.
@@ -42,7 +43,7 @@ Operation factories require subpath imports — the main barrel only re-exports 
 - `@umbra-privacy/sdk/conversion` — `getNetworkEncryptionToSharedEncryptionConverterFunction`.
 - `@umbra-privacy/sdk/compliance` — grant issuer / revoker / 3 reencryptors / 3 queriers.
 - `@umbra-privacy/sdk/account` — `getStagedSpl/SolRecovererFunction`, key rotators, maintenance.
-- `@umbra-privacy/sdk/zk-prover` — one factory per Groth16 circuit (`getATAIntoStealthPoolNoteCreatorProver`, `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver`, etc. — V13 prover names retained).
+- `@umbra-privacy/sdk/zk-prover` — one factory per Groth16 circuit (`getATAIntoStealthPoolNoteCreatorProver`, `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver`, etc. — legacy burner-prover names retained).
 - `@umbra-privacy/sdk/zk-prover/cdn` — `getCdnZkAssetProvider`.
 - `@umbra-privacy/sdk/store-adapters` — `createBrowserStorageBackend`, `createShardedUtxoDataStore`, `createShardedNullifierStore`.
 - `@umbra-privacy/sdk/shared` — `UMBRA_MESSAGE_TO_SIGN`.
@@ -62,22 +63,20 @@ import {
 
 const signer = await createInMemorySigner();
 
-// 1. Create the client first.
+const storageBackend = createBrowserStorageBackend({ dbName: "umbra" });
+const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
+const nullifierStore = createShardedNullifierStore({ storageBackend });
+
 const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl: "https://api.mainnet-beta.solana.com",
   rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
+  relayerApiEndpoint: "https://relayer.api.umbraprivacy.com",
+  utxoDataStore,
+  nullifierStore,
 });
-
-// 2. Storage backend (browser/IndexedDB — takes no arguments).
-const backend = createBrowserStorageBackend();
-
-// 3. Build the sharded stores FROM the client (async — they read
-//    client.masterSeed to derive their encryption keys), then attach.
-client.utxoDataStore  = await createShardedUtxoDataStore(client, backend);
-client.nullifierStore = await createShardedNullifierStore(client, backend);
 ```
 
 ### Register, deposit, and withdraw
@@ -142,8 +141,8 @@ const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   },
 );
 
-if (result.ataIntoReceiverBurnable.length > 0) {
-  await burn(result.ataIntoReceiverBurnable);
+if (result.ataToStealthPoolReceiverBurnable.length > 0) {
+  await burn(result.ataToStealthPoolReceiverBurnable);
 }
 ```
 
@@ -159,8 +158,8 @@ if (result.ataIntoReceiverBurnable.length > 0) {
 
 ## Getting Started
 
-- [Installation](https://docs.umbraprivacy.com/sdk/installation): install `@umbra-privacy/sdk`; the V14 subpath table (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`, `/zk-prover`, `/store-adapters`, `/shared`, …).
-- [Quickstart](https://docs.umbraprivacy.com/quickstart): end-to-end V14 example — getUmbraClient, register, deposit, withdraw, create note, scan, burn.
+- [Installation](https://docs.umbraprivacy.com/sdk/installation): install `@umbra-privacy/sdk`; the subpath table (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`, `/zk-prover`, `/store-adapters`, `/shared`, …).
+- [Quickstart](https://docs.umbraprivacy.com/quickstart): end-to-end example — getUmbraClient, register, deposit, withdraw, create note, scan, burn.
 - [Creating a Client](https://docs.umbraprivacy.com/sdk/creating-a-client): `getUmbraClient(args, deps?)` — signer, network, rpcUrl, rpcSubscriptionsUrl, indexerApiEndpoint, relayerApiEndpoint, utxoDataStore, nullifierStore.
 - [Wallet Adapters](https://docs.umbraprivacy.com/sdk/wallet-adapters): `IUmbraSigner` interface, `createInMemorySigner`, `createSignerFromWalletAccount`, `UMBRA_MESSAGE_TO_SIGN` from `@umbra-privacy/sdk/shared`.
 - [Supported Tokens](https://docs.umbraprivacy.com/supported-tokens): mainnet wSOL/USDC/USDT/UMBRA/CASH, devnet/localnet wSOL only.
@@ -181,7 +180,7 @@ if (result.ataIntoReceiverBurnable.length > 0) {
 
 - [Overview](https://docs.umbraprivacy.com/sdk/mixer/overview): 4 creator factories × 3 shipped burner factories. Native batching for receiver→ETA (≤4 per proof); single-note for self→ETA / self→PATA.
 - [Writing Notes](https://docs.umbraprivacy.com/sdk/mixer/creating-utxos): `getSelf/ReceiverBurnableStealthPoolNoteFromPublicAssociatedTokenAccountCreatorFunction`, `getSelf/ReceiverBurnableStealthPoolNoteFromEncryptedTokenAccountCreatorFunction` (MPC). Recipient pre-check rubric for receiver-burnable creates.
-- [Scanning](https://docs.umbraprivacy.com/sdk/mixer/fetching-utxos): `getBurnableStealthPoolNoteScannerFunction({ client })()` — **zero-arg**, returns `ScannedStealthPoolNoteResult` with 4 long-form keys (`etaIntoSelfBurnable`, `etaIntoReceiverBurnable`, `ataIntoSelfBurnable`, `ataIntoReceiverBurnable`) + `scannedTrees`. Cursor in `client.utxoDataStore`.
+- [Scanning](https://docs.umbraprivacy.com/sdk/mixer/fetching-utxos): `getBurnableStealthPoolNoteScannerFunction({ client })()` — **zero-arg**, returns `ScannedStealthPoolNoteResult` with 4 long-form keys (`etaToStealthPoolSelfBurnable`, `etaToStealthPoolReceiverBurnable`, `ataToStealthPoolSelfBurnable`, `ataToStealthPoolReceiverBurnable`) + `scannedTrees`. Cursor in `client.utxoDataStore`.
 - [Burning](https://docs.umbraprivacy.com/sdk/mixer/claiming-utxos): `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction`, `getSelfBurnableStealthPoolNoteIntoETABurnerFunction`, `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — require `fetchBatchMerkleProof`, `zkProver`, and `relayer: { submitBurn, pollBurnStatus, getRelayerAddress }`.
 - [Privacy Analysis](https://docs.umbraprivacy.com/sdk/mixer/privacy-analysis): 3-tier model — Tier 1 ETA↔ETA strongest, Tier 2 mixed, Tier 3 PATA↔PATA weakest.
 
@@ -224,7 +223,7 @@ if (result.ataIntoReceiverBurnable.length > 0) {
 
 ## Indexer API
 
-- [Overview](https://docs.umbraprivacy.com/indexer/overview): REST API at `utxo-indexer.api.umbraprivacy.com`, Protobuf responses, tree structure (depth-20, 1M leaves per tree). V14 burner factories fetch per-batch Merkle proofs at burn time; the scanner does **not** pre-bundle proofs.
+- [Overview](https://docs.umbraprivacy.com/indexer/overview): REST API at `utxo-indexer.api.umbraprivacy.com`, Protobuf responses, tree structure (depth-20, 1M leaves per tree). Burner factories fetch per-batch Merkle proofs at burn time; the scanner does **not** pre-bundle proofs.
 - [Stats](https://docs.umbraprivacy.com/indexer/api-reference/stats): `GET /v1/stats`.
 - [Health](https://docs.umbraprivacy.com/indexer/api-reference/health/basic): `GET /health`.
 - [Tree Metadata](https://docs.umbraprivacy.com/indexer/api-reference/tree-metadata): `GET /v1/trees/{tree_index}`.
@@ -251,7 +250,7 @@ if (result.ataIntoReceiverBurnable.length > 0) {
 - Indexer (Devnet): `https://utxo-indexer.api-devnet.umbraprivacy.com`.
 - Relayer (Mainnet): `https://relayer.api.umbraprivacy.com`.
 - Relayer (Devnet): `https://relayer.api-devnet.umbraprivacy.com`.
-- NPM Package: `@umbra-privacy/sdk` (v5.x — pin to exact version).
+- NPM Package: `@umbra-privacy/sdk` (`5.0.0-rc.4` — pin to exact version; add the `@umbra-privacy/umbra-codama@3.0.0-rc.4` override).
 
 ## Migrations
 

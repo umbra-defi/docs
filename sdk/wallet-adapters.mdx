@@ -57,12 +57,12 @@ Modern Solana wallets — Phantom, Backpack, Solflare, and others — implement 
 You obtain the `wallet` and `account` objects by discovering registered wallets with `getWallets()` from `@wallet-standard/app`, then calling the wallet's `standard:connect` feature.
 
 ```bash
-pnpm add @wallet-standard/app @wallet-standard/core @wallet-standard/features
+pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
 ```
 
 ```typescript
 import { getWallets } from "@wallet-standard/app";
-import type { Wallet, WalletAccount } from "@wallet-standard/core";
+import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import { StandardConnect, StandardDisconnect } from "@wallet-standard/features";
 import {
   createSignerFromWalletAccount,
@@ -86,7 +86,7 @@ const { accounts } = await connectFeature.connect();
 const account = accounts[0];
 
 // 3. Create the Umbra signer
-const signer = createSignerFromWalletAccount({ wallet, account });
+const signer = createSignerFromWalletAccount(wallet, account);
 
 // 4. Create the Umbra client
 const client = await getUmbraClient({

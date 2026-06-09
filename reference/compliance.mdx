@@ -29,17 +29,9 @@ Creates an on-chain compliance grant signed by the user, authorizing a third-par
 
 ### GetCreateUserGrantedComplianceGrantFunctionDeps
 
-```typescript
-interface GetCreateUserGrantedComplianceGrantFunctionDeps {
-  readonly rpc?: {
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-  readonly keys?: {
-    readonly masterViewingKeyX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
-  };
-}
-```
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+- `masterViewingKeyX25519KeypairGenerator?: MasterViewingKeyX25519KeypairGeneratorFunction`
 
 ### Returns
 
@@ -52,7 +44,7 @@ type CreateUserGrantedComplianceGrantFunction = (
   receiverX25519: X25519PublicKey,
   nonce: RescueCipherEncryptionNonce,
   optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
+  hooks?: ComplianceTransactionHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -96,17 +88,9 @@ Revokes an existing user-granted compliance grant, removing the third-party's au
 
 ### GetDeleteUserGrantedComplianceGrantFunctionDeps
 
-```typescript
-interface GetDeleteUserGrantedComplianceGrantFunctionDeps {
-  readonly rpc?: {
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-  readonly keys?: {
-    readonly masterViewingKeyX25519KeypairDeriver?: Curve25519KeypairGeneratorFunction;
-  };
-}
-```
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+- `masterViewingKeyX25519KeypairGenerator?: MasterViewingKeyX25519KeypairGeneratorFunction`
 
 ### Returns
 
@@ -119,7 +103,7 @@ type DeleteUserGrantedComplianceGrantFunction = (
   receiverX25519: X25519PublicKey,
   nonce: RescueCipherEncryptionNonce,
   optionalData?: OptionalData32,
-  hooks?: SimpleOperationHooks,
+  hooks?: ComplianceTransactionHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -224,34 +208,34 @@ Returned by all three query functions:
 
 ```typescript
 function getNetworkCiphertextReencryptorForNetworkGrantFunction(
-  args: GetReencryptNetworkCiphertextsNetworkGrantV10FunctionArgs,
-  deps?: GetReencryptNetworkCiphertextsNetworkGrantV10FunctionDeps,
-): ReencryptNetworkCiphertextsNetworkGrantV10Function;
+  args: { client: IUmbraClient },
+  deps?: GetNetworkCiphertextReencryptorForNetworkGrantFunctionDeps,
+): NetworkCiphertextReencryptorForNetworkGrantFunction;
 ```
 
 Re-encrypts MXE-mode ciphertexts under a network grant, making them readable by the grant receiver. Queues an Arcium MPC computation.
 
-### GetReencryptNetworkCiphertextsNetworkGrantV10FunctionArgs
+### GetNetworkCiphertextReencryptorForNetworkGrantFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetReencryptNetworkCiphertextsNetworkGrantV10FunctionDeps
+### GetNetworkCiphertextReencryptorForNetworkGrantFunctionDeps
 
 - `getLatestBlockhash?: GetLatestBlockhash`
 - `transactionForwarder?: TransactionForwarder`
 
 ### Returns
 
-`ReencryptNetworkCiphertextsNetworkGrantV10Function`
+`NetworkCiphertextReencryptorForNetworkGrantFunction`
 
 ```typescript
-type ReencryptNetworkCiphertextsNetworkGrantV10Function = (
+type NetworkCiphertextReencryptorForNetworkGrantFunction = (
   receiverX25519Key: X25519PublicKey,
   nonce: RescueCipherEncryptionNonce,
   inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  hooks?: ReencryptHooks,
+  hooks?: ComplianceTransactionHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -268,26 +252,26 @@ type ReencryptNetworkCiphertextsNetworkGrantV10Function = (
 
 ```typescript
 function getSharedCiphertextReencryptorForNetworkGrantFunction(
-  args: GetReencryptSharedCiphertextsNetworkGrantV10FunctionArgs,
-  deps?: GetReencryptSharedCiphertextsNetworkGrantV10FunctionDeps,
-): ReencryptSharedCiphertextsNetworkGrantV10Function
+  args: GetSharedCiphertextReencryptorForNetworkGrantFunctionArgs,
+  deps?: GetSharedCiphertextReencryptorForNetworkGrantFunctionDeps,
+): SharedCiphertextReencryptorForNetworkGrantFunction
 ```
 
 Re-encrypts shared-mode ciphertexts under a network shared grant.
 
 ### Returns
 
-`ReencryptSharedCiphertextsNetworkGrantV10Function`
+`ReencryptSharedCiphertextsNetworkGrantFunction`
 
 ```typescript
-type ReencryptSharedCiphertextsNetworkGrantV10Function = (
+type ReencryptSharedCiphertextsNetworkGrantFunction = (
   granterX25519Key: X25519PublicKey,
   receiverX25519Key: X25519PublicKey,
   nonce: RescueCipherEncryptionNonce,
   inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  hooks?: ReencryptHooks,
+  hooks?: ComplianceTransactionHooks,
 ) => Promise<TransactionSignature>
 ```
 
@@ -303,29 +287,29 @@ type ReencryptSharedCiphertextsNetworkGrantV10Function = (
 
 ```typescript
 function getSharedCiphertextReencryptorForUserGrantFunction(
-  args: GetReencryptSharedCiphertextsUserGrantV10FunctionArgs,
-  deps?: GetReencryptSharedCiphertextsUserGrantV10FunctionDeps,
-): ReencryptSharedCiphertextsUserGrantV10Function
+  args: GetReencryptSharedCiphertextsUserGrantFunctionArgs,
+  deps?: GetReencryptSharedCiphertextsUserGrantFunctionDeps,
+): ReencryptSharedCiphertextsUserGrantFunction
 ```
 
 Re-encrypts shared-mode ciphertexts under a user-granted compliance grant.
 
 ### Returns
 
-`ReencryptSharedCiphertextsUserGrantV10Function`
+`ReencryptSharedCiphertextsUserGrantFunction`
 
 ```typescript
-type ReencryptSharedCiphertextsUserGrantV10Function = (
+type ReencryptSharedCiphertextsUserGrantFunction = (
   granterX25519Key: X25519PublicKey,
   receiverX25519Key: X25519PublicKey,
   nonce: RescueCipherEncryptionNonce,
   inputEncryptionNonce: RescueCipherEncryptionNonce,
   ciphertexts: readonly Uint8Array[],
   optionalData?: OptionalData32,
-  hooks?: ReencryptHooks,
+  hooks?: ComplianceTransactionHooks,
 ) => Promise<TransactionSignature>
 ```
 
-Identical signature to `ReencryptSharedCiphertextsNetworkGrantV10Function`. The difference is which on-chain grant account is used to authorize the re-encryption.
+Identical signature to `ReencryptSharedCiphertextsNetworkGrantFunction`. The difference is which on-chain grant account is used to authorize the re-encryption.
 
 - `ciphertexts: readonly Uint8Array[]` - Must contain between 1 and 6 elements.

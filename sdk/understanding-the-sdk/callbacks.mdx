@@ -1,11 +1,11 @@
 ---
 title: "Transaction Callbacks"
-description: "Per-operation hooks interfaces: DirectTransactionStepHooks, MpcTransactionStepHooks, RegistrationHooks, BurnHooks. Named per-phase and per-step slots scoped to each operation."
+description: "V14 per-operation hooks interfaces: DirectTransactionStepHooks, MpcTransactionStepHooks, RegistrationHooks, BurnHooks. Named per-phase/per-step slots replace the V13 generic TransactionCallbacks."
 ---
 
 ## Overview
 
-The SDK uses per-operation **hooks** objects (not a single generic `TransactionCallbacks`). Each factory's `deps.hooks` or `options.hooks` slot accepts a named interface specific to that operation, with named per-phase / per-step hook keys. Hooks observe the operation as it moves through validation, fetching, ZK proving, transaction submission, MPC callback waiting, and completion.
+V14 uses per-operation **hooks** objects (not a single generic `TransactionCallbacks`). Each factory's `deps.hooks` or `options.hooks` slot accepts a named interface specific to that operation, with named per-phase / per-step hook keys. Hooks observe the operation as it moves through validation, fetching, ZK proving, transaction submission, MPC callback waiting, and completion.
 
 The two transaction-level building blocks every hooks interface uses:
 
@@ -38,13 +38,13 @@ interface MpcTransactionStepHooks extends DirectTransactionStepHooks {
 }
 ```
 
-**Skipped steps fire `onSkipped`, not `onPreSend` / `onPostSend`.** This is how the SDK signals "the step was a no-op because the on-chain state was already correct."
+**Skipped steps fire `onSkipped`, not `onPreSend` / `onPostSend`.** This is the V14 way to observe "the step was a no-op because the on-chain state was already correct."
 
 ---
 
 ## Usage — Registration
 
-Registration uses a single `hooks` option (`RegistrationHooks`) with named per-step slots and top-level phase hooks. Each skippable step slot takes `{ onPreSend, onPostSend, onSkipped }`.
+V14 registration uses a single `hooks` option (`RegistrationHooks`) with named per-step slots and top-level phase hooks. Each skippable step slot takes `{ onPreSend, onPostSend, onSkipped }`.
 
 ```typescript
 import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
@@ -86,7 +86,7 @@ Step slot names: `initUserAccount`, `registerX25519PublicKey`, `registerAnonymou
 
 ## Usage — Stealth Pool Note creation
 
-Creating a Stealth Pool Note runs through validation, mint fetch, key derivation, ZK proving, and up to two on-chain transaction steps. Hooks are supplied through the factory's `deps.hooks` slot (type `ATAIntoStealthPoolNoteCreatorHooks`), which carries top-level phase hooks plus per-step `DirectTransactionStepHooks` for each transaction. (The same hooks shape is also accepted at call time via `options.hooks`.) The per-step slots are `populateProofAccount` and `createStealthPoolNote` — each a `DirectTransactionStepHooks` with `onPreSend` / `onPostSend`. There is no `createUtxo` or `closeProofAccount` slot.
+Creating a Stealth Pool Note involves up to three transactions. Each has its own callbacks slot inside the `options` argument:
 
 ```typescript
 import { getATAIntoSelfBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
@@ -94,36 +94,27 @@ import { getATAIntoStealthPoolNoteCreatorProver } from "@umbra-privacy/sdk/zk-pr
 
 const createNote = getATAIntoSelfBurnableStealthPoolNoteCreatorFunction(
   { client },
+  { zkProver: getATAIntoStealthPoolNoteCreatorProver() },
+);
+
+await createNote(
+  { destinationAddress: recipient, mint, amount },
   {
-    zkProver: getATAIntoStealthPoolNoteCreatorProver(),
-    hooks: {
-      // Top-level phase hooks
-      onValidationStart:         async () => console.log("Validating..."),
-      onValidationComplete:      async ({ generationIndex }) => console.log("Generation index:", generationIndex),
-      onMintFetchStart:          async () => console.log("Fetching mint..."),
-      onMintFetchComplete:       async ({ tokenProgram, hasTransferFee }) => console.log("Mint:", tokenProgram, "T22 fee:", hasTransferFee),
-      onKeyDerivationStart:      async () => console.log("Deriving keys..."),
-      onKeyDerivationComplete:   async ({ elapsedMs }) => console.log("Keys ready in", elapsedMs, "ms"),
-      onZkProofGenerationStart:  async () => console.log("Proving..."),
-      onZkProofGenerationComplete: async ({ elapsedMs }) => console.log("Proof done in", elapsedMs, "ms"),
-
-      // Per-transaction-step hooks (DirectTransactionStepHooks)
-      populateProofAccount: {
-        onPreSend:  async () => console.log("Creating proof account..."),
-        onPostSend: async ({ signature }) => console.log("Proof account:", signature),
-      },
-      createStealthPoolNote: {
-        onPreSend:  async () => console.log("Submitting note write..."),
-        onPostSend: async ({ signature }) => console.log("Note written:", signature),
-      },
-
-      onComplete: async (result) => console.log("Note created:", result),
-      onError:    async ({ phase, error }) => console.error("Failed at", phase, error),
+    createUtxo: {
+      pre: async (tx) => console.log("Submitting note write..."),
+      post: async (tx, sig) => console.log("Note written:", sig),
+    },
+    createProofAccount: {
+      pre: async (tx) => console.log("Creating proof account..."),
+      post: async (tx, sig) => console.log("Proof account:", sig),
+    },
+    closeProofAccount: {
+      // Only fires if a stale proof account was found and closed.
+      pre: async (tx) => console.log("Closing stale proof account..."),
+      post: async (tx, sig) => console.log("Closed:", sig),
     },
   },
 );
-
-await createNote({ destinationAddress: recipient, mint, amount });
 ```
 
 ---

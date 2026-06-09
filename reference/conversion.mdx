@@ -9,30 +9,24 @@ description: "API reference: getNetworkEncryptionToSharedEncryptionConverterFunc
 
 ```typescript
 function getNetworkEncryptionToSharedEncryptionConverterFunction(
-  args: GetConvertToSharedEncryptionFunctionArgs,
-  deps?: GetConvertToSharedEncryptionFunctionDeps,
-): ConvertToSharedEncryptionFunction
+  args: GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs,
+  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
+): NetworkEncryptionToSharedEncryptionConverterFunction
 ```
 
 Converts one or more encrypted token accounts from MXE-mode (network-decryptable only) to shared-mode (user-decryptable). Conversion is per-mint and involves an on-chain Arcium MPC computation. Mints that are already in shared mode, uninitialized, or non-existent are skipped rather than erroring.
 
 ---
 
-### GetConvertToSharedEncryptionFunctionArgs
+### GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetConvertToSharedEncryptionFunctionDeps
+### GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps
 
-```typescript
-interface GetConvertToSharedEncryptionFunctionDeps {
-  readonly rpc?: {
-    readonly accountInfoProvider?: AccountInfoProviderFunction;
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-}
-```
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
 
 ### Returns
 
@@ -49,7 +43,7 @@ type ConvertToSharedEncryptionFunction = (
 
 - `mints: readonly Address[]` — token mints to convert. Processed in parallel (eligible only).
 - `optionalData?: OptionalData32` — 32-byte caller metadata. Pre-hashed only.
-- `hooks?: ConvertToSharedHooks` — overall batch lifecycle hooks; per-mint MPC-step hooks (`onPreSend`, `onPostSend`, `onMonitorStarted`, `onFinalized`) live in the `perMintTransaction` member.
+- `hooks?: ConvertToSharedHooks` — per-mint and overall lifecycle hooks.
 - `microLamportsPerAcu?: MicroLamportsPerAcu` — optional priority fee in micro-lamports per Arcium compute unit.
 
 ### ConvertToSharedEncryptionResult
@@ -103,53 +97,39 @@ for (const [mint, reason] of result.skipped) {
 
 ```typescript
 function getMintEncryptionKeyRotatorFunction(
-  args: GetRotateMintX25519EncryptionKeyFunctionArgs,
-  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
-): RotateMintX25519EncryptionKeyFunction
+  args: GetMintEncryptionKeyRotatorFunctionArgs,
+  deps?: GetMintEncryptionKeyRotatorFunctionDeps,
+): MintEncryptionKeyRotatorFunction
 ```
 
 Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
 
 ---
 
-### GetRotateMintX25519EncryptionKeyFunctionArgs
+### GetMintEncryptionKeyRotatorFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetRotateMintX25519EncryptionKeyFunctionDeps
+### GetMintEncryptionKeyRotatorFunctionDeps
 
-```typescript
-interface GetRotateMintX25519EncryptionKeyFunctionDeps {
-  readonly rpc?: {
-    readonly accountInfoProvider?: AccountInfoProviderFunction;
-    readonly blockhashProvider?: GetLatestBlockhash;
-    readonly transactionForwarder?: TransactionForwarder;
-  };
-  readonly keys?: {
-    readonly mintX25519KeypairDeriver?: MintX25519KeypairDeriverFunction;
-  };
-}
-```
+- `accountInfoProvider?: AccountInfoProviderFunction`
+- `getLatestBlockhash?: GetLatestBlockhash`
+- `transactionForwarder?: TransactionForwarder`
+- `mintX25519KeypairGenerator?: MintX25519KeypairGeneratorFunction` - Override the per-mint X25519 keypair derivation.
 
 ### Returns
 
-`RotateMintX25519EncryptionKeyFunction`
+`MintEncryptionKeyRotatorFunction`
 
 ```typescript
-type RotateMintX25519EncryptionKeyFunction = (
+type MintEncryptionKeyRotatorFunction = (
   mint: Address,
   optionalData?: OptionalData32,
   hooks?: RotateMintKeyHooks,
-  microLamportsPerAcu?: MicroLamportsPerAcu,
-  options?: RotateMintKeyOptions,
-) => Promise<TransactionSignature>
+) => Promise<RotateMintKeyResult>
 ```
 
 - `mint: Address` - The token mint whose X25519 key to rotate.
-- `optionalData?: OptionalData32` - 32-byte caller metadata. Pre-hashed only.
-- `hooks?: RotateMintKeyHooks` - per-phase lifecycle hooks for the MPC re-encryption.
-- `microLamportsPerAcu?: MicroLamportsPerAcu` - optional priority fee per Arcium compute unit.
-- `options?: RotateMintKeyOptions` - per-call options (e.g. skip the pre-flight key-consistency assertion).
 
 ---
 

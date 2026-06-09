@@ -1,35 +1,26 @@
 ---
 title: "Key Rotation & Deps Reference"
-description: "Offset-based key rotation: U512 offsets on getUmbraClient shift KMAC256 derivation to produce new X25519, MVK, and commitment keys for the same wallet. Complete deps map per factory."
+description: "Offset-based key rotation: U512 offsets on getUmbraClient shift KMAC256 derivation to produce new X25519, MVK, and commitment keys for the same wallet. Complete deps map per V14 factory."
 ---
 
 ## Key Rotation via Offsets
 
 Key rotation is a distinct mechanism from dependency injection. Rather than replacing the generator function, you increment a numeric offset at client construction time. This causes the [KMAC256](/sdk/advanced/cryptography/kmac256) derivation to produce a completely different key for the same wallet, without changing any code.
 
-Each offset is typed as a branded `U512`, not a plain `bigint`. Brand each value with the `assertU512` predicate (there is no `createU512` wrapper) before assigning it — a bare `1n` will not type-check:
-
 ```typescript
-import { assertU512, type U512 } from "@umbra-privacy/sdk/types";
-
-const u512 = (value: bigint): U512 => {
-  assertU512(value, "offset");
-  return value;
-};
-
 const client = await getUmbraClient({
   signer,
   network: "mainnet",
   rpcUrl,
   rpcSubscriptionsUrl,
   offsets: {
-    x25519UserAccountPrivateKey: u512(1n),   // rotate the token encryption key
-    poseidonPrivateKey: u512(0n),
-    masterViewingKey: u512(0n),
-    x25519MasterViewingKeyEncryptingPrivateKey: u512(0n),
-    mintX25519PrivateKey: u512(0n),
-    rescueCommitmentBlindingFactor: u512(0n),
-    randomCommitmentFactor: u512(0n),
+    x25519UserAccountPrivateKey: 1n,   // rotate the token encryption key
+    poseidonPrivateKey: 0n,
+    masterViewingKey: 0n,
+    x25519MasterViewingKeyEncryptingPrivateKey: 0n,
+    mintX25519PrivateKey: 0n,
+    rescueCommitmentBlindingFactor: 0n,
+    randomCommitmentFactor: 0n,
   },
 });
 ```
@@ -51,7 +42,7 @@ For active on-chain key rotation (issue a new key, re-encrypt existing state, re
 
 ---
 
-## Per-Factory Deps Reference
+## Per-Factory Deps Reference (V14)
 
 A complete map of which injectable deps each factory accepts. Subpath in parens.
 
@@ -64,7 +55,7 @@ A complete map of which injectable deps each factory accepts. Subpath in parens.
 - `userAccountX25519KeypairGenerator`, `masterViewingKeyEncryptingX25519KeypairGenerator`.
 - `mintX25519KeypairGenerator`.
 - `rescueCommitmentBlindingFactorDeriver`, `randomFactorDeriver`.
-- `rescueKeyGenerator`, `rescueEncryptor`, `rescueCommitmentGenerator`.
+- `getRcKeyGenerator`, `getRcEncryptor`, `rescueCommitmentGenerator`.
 - `userCommitmentGenerator`.
 - `fiatShamirChallengeGenerator`, `challengePowersFunction`, `polynomialEvaluator`.
 - `poseidonAggregator`.
@@ -88,7 +79,7 @@ A complete map of which injectable deps each factory accepts. Subpath in parens.
 
 **`getEncryptedBalanceQuerierFunction`**
 - `accountInfoProvider`.
-- `rescueCipherDecryptor` — override to provide a custom Rescue cipher decryption backend.
+- `rcDecryptor` — override to provide a custom Rescue cipher decryption backend.
 
 ### Stealth Pool Note creation — `@umbra-privacy/sdk/deposit`
 
@@ -102,7 +93,7 @@ A complete map of which injectable deps each factory accepts. Subpath in parens.
 - Same as above.
 - `zkProver` (`IZkProverForETAIntoStealthPoolNote`) — **required**.
 
-**`getATAIntoSelfBurnableStealthPoolNoteCreatorFunction`** (ATA-source, no MPC)
+**`getATAIntoSelfBurnableStealthPoolNoteCreatorFunction`** (PATA-source, no MPC)
 - `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`.
 - All MVK / Poseidon / ephemeral-note key derivers.
 - Cryptographic operation functions.

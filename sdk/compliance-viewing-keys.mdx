@@ -230,5 +230,5 @@ An auditor cannot:
 - Decrypt the X25519 + AES-GCM ciphertext (`aes_encrypted_data`) or the Rescue ciphertext (`rc_encrypted_*`) — those use independent keys.
 
 <Note>
-No opinionated `getViewingKey…NoteScannerFunction` factory is shipped — auditors compose one from the shipped primitives. Pattern (~50 lines): for each note, call `getSecondViewingKeyDeriver` for the granted scope, then call `getPoseidonDecryptor` with the Second Viewing Key as the cipher `key` to recover the plaintext. The decryptor takes only `(ciphertexts, key)` and generates the keystream internally.
+No opinionated `getViewingKey…NoteScannerFunction` factory is shipped — auditors compose one from the shipped primitives. Pattern (~50 lines): for each note, call `getSecondViewingKeyDeriver` for the granted scope, then call `getPoseidonDecryptor` with the Second Viewing Key as the cipher key and the keystream `Poseidon([transactionViewingKey, counter, 2n])` to recover the plaintext.
 </Note>

@@ -19,13 +19,17 @@ import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
 
 const query = getUserAccountQuerierFunction({ client });
 
-const result = await query(userAddress);
+const result = await query(userAddress, options?);
 ```
 
 ### Parameters
 
 <ParamField path="userAddress" type="Address" required>
-  The wallet address to query registration status for. An optional second argument, `options?: { accountInfoCommitment?: "processed" | "confirmed" | "finalized" }`, overrides the commitment level used for account reads (defaults to `"confirmed"`).
+  The wallet address to query registration status for.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for the RPC account read. Overrides the default on a per-call basis.
 </ParamField>
 
 ### Return Value
@@ -53,7 +57,7 @@ When `state === "exists"`, `data` contains:
 </ResponseField>
 
 <ResponseField name="isActiveForAnonymousUsage" type="boolean">
-  Whether anonymous (mixer/UTXO) usage has been activated. This is an independent flag set by the `activate_for_anonymous_usage` instruction — it is not derived from the X25519 or commitment registration flags.
+  Whether both X25519 and commitment registration are complete and the account is ready for all features.
 </ResponseField>
 
 <ResponseField name="x25519PublicKey" type="Uint8Array">
@@ -64,8 +68,8 @@ When `state === "exists"`, `data` contains:
   Entropy bytes mixed into nonce derivation. Combined with `generationIndex` to derive the next note's `generationIndex` — never invent your own.
 </ResponseField>
 
-<ResponseField name="generationIndex" type="U128">
-  Monotonic counter incremented when a new token account is created or an ETA is converted from MXE to Shared mode (not on every deposit/withdrawal). Used internally for nonce derivation.
+<ResponseField name="generationIndex" type="bigint">
+  Monotonic counter incremented on each deposit/withdrawal. Used internally for nonce derivation.
 </ResponseField>
 
 ### Example: Check Registration Status
@@ -104,7 +108,7 @@ import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk/query";
 const query = getEncryptedBalanceQuerierFunction({ client });
 
 // Query your encrypted balances for one or more mints
-const balances = await query([USDC_MINT, USDT_MINT]);
+const balances = await query([USDC_MINT, USDT_MINT], options?);
 // Returns Map<Address, QueryEncryptedBalanceResult>
 ```
 
@@ -113,7 +117,11 @@ The function queries the calling user's own encrypted balances. Pass an array of
 ### Parameters
 
 <ParamField path="mints" type="Address[]" required>
-  An array of SPL or Token-2022 mint addresses to query. An optional second argument, `options?: { accountInfoCommitment?: "processed" | "confirmed" | "finalized" }`, overrides the commitment level used for account reads (defaults to `"confirmed"`). The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
+  An array of SPL or Token-2022 mint addresses to query. The SDK fetches the encrypted token account PDA for each mint and returns a result for every mint in the array.
+</ParamField>
+
+<ParamField path="options.commitment" type="Commitment" default='"confirmed"'>
+  Commitment level used for the RPC account reads. Overrides the default on a per-call basis.
 </ParamField>
 
 ### Return Value
@@ -123,7 +131,7 @@ type QueryEncryptedBalanceResult =
   | { readonly state: "non_existent" }
   | { readonly state: "uninitialized" }
   | { readonly state: "mxe" }
-  | { readonly state: "shared"; readonly balance: U64 };
+  | { readonly state: "shared"; readonly balance: MathU64 };
 ```
 
 The four states represent:
@@ -131,7 +139,7 @@ The four states represent:
 - `"non_existent"` — No ETA exists for this mint. The user needs to deposit first.
 - `"uninitialized"` — The ETA PDA exists on-chain but the Arcium balance has not been initialised yet.
 - `"mxe"` — The ETA is in MXE-only mode. The balance is encrypted under the network key and cannot be decrypted client-side.
-- `"shared"` — The ETA is in Shared mode. The SDK automatically decrypts the balance using the user's X25519 private key and returns the plaintext `balance` as a `U64`.
+- `"shared"` — The ETA is in Shared mode. The SDK automatically decrypts the balance using the user's X25519 private key and returns the plaintext `balance` as a `MathU64`.
 
 ### Example
 

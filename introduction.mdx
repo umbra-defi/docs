@@ -7,7 +7,7 @@ description: "Umbra privacy protocol for Solana: shield SPL/Token-2022 balances 
 
 Umbra adds a privacy layer on top of standard Solana [SPL and Token-2022 tokens](https://spl.solana.com/token). It lets you:
 
-- **Shield balances** — move tokens from an Associated Token Account (ATA) into an **EncryptedTokenAccount (ETA)** where the balance is hidden from everyone except authorized viewers.
+- **Shield balances** — move tokens from a public Associated Token Account (PATA) into an **EncryptedTokenAccount (ETA)** where the balance is hidden from everyone except authorized viewers.
 - **Transfer anonymously** — write a **Stealth Pool Note** into a shared mixer tree, then **burn** it from any wallet with no on-chain linkage to the sender.
 - **Control who sees what** — grant selective viewing access to auditors or compliance systems without exposing your full history.
 
@@ -17,15 +17,16 @@ Everything runs on Solana using a combination of on-chain programs and [Arcium](
 You do **not** need to understand MPC or zero-knowledge proofs to use Umbra. The SDK handles all cryptographic operations for you.
 </Note>
 
-## Key Terms
+## Key terms
 
-These are the nouns and verbs you will see throughout the SDK and the rest of these docs:
+The SDK and these docs use this vocabulary throughout:
 
-- **ATA** — `AssociatedTokenAccount`. A standard SPL Associated Token Account holding plaintext tokens. Source/destination of deposits and withdrawals.
-- **ETA** — `EncryptedTokenAccount`. An Umbra-managed account whose balance is encrypted. Has two modes: **MXE-only** (only the Arcium MPC network can decrypt) and **Shared** (you can also decrypt locally with your viewing key).
-- **Stealth Pool Note** — an anonymous note stored as a commitment in the on-chain Indexed Merkle Tree. Senders create notes; either the original sender (self-burnable) or a designated recipient (receiver-burnable) burns them later to redeem the value.
-- **Burn** — the operation that redeems a Stealth Pool Note: it reveals the note's nullifier (preventing double-spend), discharges the value into either an ETA or an ATA, and emits no on-chain link back to the creator.
+- **PATA** — `PublicAssociatedTokenAccount`. A standard SPL Associated Token Account holding plaintext tokens.
+- **ETA** — `EncryptedTokenAccount`. An Umbra-managed account whose balance is encrypted. Two modes: **MXE-only** (Arcium decrypts) and **Shared** (the user can also decrypt locally).
+- **Stealth Pool Note** — a leaf in the shared mixer tree. On-chain it is a commitment in the Indexed Merkle Tree; the SDK surfaces it as a "note".
+- **Burn** — consuming a note: it reveals the note's nullifier on-chain and credits the destination balance.
 
+The on-chain instruction is `burn_*` and the relayer endpoint is `/v1/claims` — the wire protocol uses these lower-level nouns, and a handful of TS aliases bridge them so the relayer client plugs into the burner factories unchanged. You should not need to touch any of that as an SDK consumer.
 
 ## Core Concepts at a Glance
 
@@ -37,7 +38,7 @@ These are the nouns and verbs you will see throughout the SDK and the rest of th
     Break the on-chain link between sender and recipient using a shared Merkle tree of Stealth Pool Notes and zero-knowledge burn proofs.
   </Card>
   <Card title="SDK" icon="code" href="/sdk/installation">
-    One TypeScript package, `@umbra-privacy/sdk`. The ZK prover, indexer client, and relayer client all ship as subpath modules of the same package.
+    One TypeScript package, `@umbra-privacy/sdk`. The ZK prover, indexer client, and relayer client all ship as subpath modules — no separate `@umbra-privacy/web-zk-prover` package.
   </Card>
   <Card title="Indexer API" icon="server" href="/indexer/overview">
     A read-only REST API for Stealth Pool Note records and Merkle proofs — used internally by the SDK and available for direct integration.
@@ -64,15 +65,15 @@ Your App
 The Umbra on-chain program is deployed at different addresses per network:
 
 - **Mainnet:** `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh`
-- **Devnet:** `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`
+- **Devnet:** `342qFp62fzTt4zowrVPhrDdcRLGapPCMe8w5kFSoJ4f4`
 
 The SDK resolves the correct program address automatically based on the `network` parameter.
 
 ## Supported Networks
 
 - `mainnet` — Production. wSOL, USDC, USDT, UMBRA, CASH.
-- `devnet` — Development and integration testing. wSOL, dUSDC, dUSDT, STREAMFLOW. Get dUSDC / dUSDT test tokens at [faucet.umbraprivacy.com](https://faucet.umbraprivacy.com/).
-- `localnet` — Local validator (development).
+- `devnet` — Development and integration testing. wSOL only.
+- `localnet` — Local validator. wSOL only.
 
 ## Next Steps
 

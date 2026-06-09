@@ -37,7 +37,7 @@ const result = await convert(
 </ParamField>
 
 <ParamField path="hooks" type="ConvertToSharedHooks">
-  Optional overall + per-mint lifecycle hooks. Top-level fields cover the batch (`onValidationStart`/`onValidationComplete`, `onAccountFetchStart`/`onAccountFetchComplete`, `onMintConversionStart`/`onMintConversionComplete`/`onMintConversionSkipped`, `onComplete`, `onError`). The MPC-step hooks for each individual conversion (`onPreSend`, `onPostSend`, `onMonitorStarted`, `onFinalized`) live inside the `perMintTransaction` member.
+  Optional per-mint + overall lifecycle hooks. Each per-mint conversion is an MPC step (`onPreSend`, `onPostSend`, `onMonitorStarted`, `onFinalized`).
 </ParamField>
 
 <ParamField path="microLamportsPerAcu" type="MicroLamportsPerAcu">
@@ -92,7 +92,7 @@ If a per-mint X25519 key may have been compromised, use the mint X25519 rotator 
 import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk/account";
 
 const rotateMintKey = getMintEncryptionKeyRotatorFunction({ client });
-const signature = await rotateMintKey(mint);
+const result = await rotateMintKey({ mint });
 ```
 
 This is an MPC operation — it re-encrypts the on-chain balance under the new per-mint key. The account must already be in Shared mode. See [Recovery & Rotation](/sdk/advanced/recovery) for details on when and how to rotate keys.
@@ -129,7 +129,7 @@ if (mxeOnlyMints.length > 0) {
 
 ## Error Handling
 
-Conversion submits all eligible mints in parallel (via `Promise.all`). If a transaction fails or is cancelled mid-batch, whichever conversions landed before the rejection will already be confirmed on-chain — they are not rolled back. Because submission is parallel, the set of mints that succeeded before a failure is non-deterministic; inspect on-chain state (or re-run `convert()`, which skips already-shared mints) rather than assuming a sequential checkpoint.
+Conversion processes each mint sequentially. If a transaction fails or is cancelled mid-way, any mints already converted will have their signatures in `result.converted` - they are not rolled back.
 
 ```typescript
 import { isConversionError } from "@umbra-privacy/sdk/errors";
@@ -144,10 +144,9 @@ try {
     switch (err.stage) {
       case "transaction-sign":
         // User rejected a per-mint transaction in their wallet.
-        // Conversions run in parallel, so some mints may already be confirmed
-        // on-chain while others never submitted — the partial set is non-deterministic.
-        // Re-call convert() with the same mint list; already-shared mints are skipped.
-        showNotification("Conversion cancelled. Re-run to convert any remaining mints.");
+        // Any mints converted before this point are already confirmed on-chain.
+        // Re-call convert() with the remaining mints to resume.
+        showNotification("Conversion cancelled. Progress has been saved.");
         break;
 
       case "account-fetch":
@@ -156,9 +155,8 @@ try {
         break;
 
       case "transaction-send":
-        // A per-mint transaction was submitted but confirmation timed out.
-        // Other mints in the parallel batch may have landed; the partial set is
-        // non-deterministic. Check on-chain before retrying.
+        // Transaction submitted but confirmation timed out.
+        // Any mints already converted in this batch are confirmed on-chain.
         console.warn("Confirmation timeout. Check on-chain before retrying.");
         break;
 

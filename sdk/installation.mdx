@@ -1,23 +1,23 @@
 ---
 title: "Installation"
-description: "Install @umbra-privacy/sdk@5.0.0-rc.3. Ships everything in one package — operations are imported from named subpaths (/registration, /deposit, /burn, /query, …); the ZK prover lives at /zk-prover."
+description: "Install @umbra-privacy/sdk@5.x. V14 ships everything in one package — operations are imported from named subpaths (/registration, /deposit, /burn, /query, …); the ZK prover lives at /zk-prover."
 ---
 
 ## Package
 
-The SDK is a single package — `@umbra-privacy/sdk`. The ZK prover, indexer client, relayer client, store adapters, and Solana primitives are all subpaths of the same package.
+The SDK is a single package — `@umbra-privacy/sdk`. The ZK prover, indexer client, relayer client, store adapters, and Solana primitives are all subpaths of the same package. **There is no separate `@umbra-privacy/web-zk-prover` in V14** (it was folded into `@umbra-privacy/sdk/zk-prover` in the V14 bundle).
 
 <CodeGroup>
 ```bash pnpm
-pnpm add @umbra-privacy/sdk@5.0.0-rc.3
+pnpm add @umbra-privacy/sdk
 ```
 
 ```bash npm
-npm install @umbra-privacy/sdk@5.0.0-rc.3
+npm install @umbra-privacy/sdk
 ```
 
 ```bash yarn
-yarn add @umbra-privacy/sdk@5.0.0-rc.3
+yarn add @umbra-privacy/sdk
 ```
 </CodeGroup>
 
@@ -50,15 +50,15 @@ The main `@umbra-privacy/sdk` barrel only re-exports:
 
 - `getUmbraClient`, the four signer factories (`createInMemorySigner`, `createSignerFromPrivateKeyBytes`, `createSignerFromKeyPair`, `createSignerFromWalletAccount`).
 - The full error hierarchy and the `Result<T, E>` helpers.
-- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, RPC providers, transaction forwarders.
+- Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, `getUmbraIndexer`, RPC providers, transaction forwarders.
 
-**Every operation factory lives behind a named subpath.** This keeps the main barrel small and helps bundlers tree-shake aggressively. The subpath map:
+**Every operation factory lives behind a named subpath.** This keeps the main barrel small and helps bundlers tree-shake aggressively. The subpath map (V14):
 
 - `@umbra-privacy/sdk/client` — `IUmbraClient`, `IUmbraSigner` interfaces.
-- `@umbra-privacy/sdk/shared` — protocol-wide constants. **`UMBRA_MESSAGE_TO_SIGN` and `BPS_DIVISOR` live here**, not on the main barrel.
+- `@umbra-privacy/sdk/shared` — protocol-wide constants. **`UMBRA_MESSAGE_TO_SIGN` lives here**, not on the main barrel.
 - `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction` + executors.
 - `@umbra-privacy/sdk/deposit` — direct depositor + the four Stealth Pool Note creators.
-- `@umbra-privacy/sdk/withdrawal` — ETA → ATA withdrawer.
+- `@umbra-privacy/sdk/withdrawal` — ETA → PATA withdrawer.
 - `@umbra-privacy/sdk/burn` — note scanner + three burner factories + `enrichWithMerkleProof`.
 - `@umbra-privacy/sdk/query` — encrypted-balance + user-account queriers.
 - `@umbra-privacy/sdk/conversion` — MXE-only → Shared converter.
@@ -72,7 +72,7 @@ The main `@umbra-privacy/sdk` barrel only re-exports:
 - `@umbra-privacy/sdk/relayer` — typed relayer client (re-exported from main barrel).
 - `@umbra-privacy/sdk/solana`, `@umbra-privacy/sdk/pda`, `@umbra-privacy/sdk/token` — Solana primitives.
 - `@umbra-privacy/sdk/arcium` — Arcium MPC types + helpers.
-- `@umbra-privacy/sdk/constants` — mint lists, domain separators, network configs, etc.
+- `@umbra-privacy/sdk/constants` — `BPS_DIVISOR`, mint lists, etc.
 - `@umbra-privacy/sdk/types` — branded primitives (`U64`, `Address`, …).
 - `@umbra-privacy/sdk/crypto`, `…/crypto/poseidon`, `…/crypto/rescue`, `…/crypto/aes`, `…/crypto/key-derivation`, `…/crypto/challenges`, `…/crypto/commitment` — cryptographic primitives.
 - `@umbra-privacy/sdk/errors` — error classes + `is*` type guards.
@@ -97,7 +97,7 @@ import {
   getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
 } from "@umbra-privacy/sdk/burn";
 
-// ZK prover (same package, named subpath)
+// ZK prover (V14: same package, named subpath)
 import {
   getATAIntoStealthPoolNoteCreatorProver,
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
@@ -115,7 +115,7 @@ import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
 ```
 
 <Note>
-**Prover naming pattern:** creator-side factories use the form `get{ETA,ATA}IntoStealthPoolNoteCreatorProver`. Burner-side factories use the form `getClaim{Self,Receiver}ClaimableUtxoInto{EncryptedBalance,PublicBalance}Prover` — these spellings come from the wire protocol, which uses `claim` / `utxo` instead of `burn` / `note`.
+The **burner** ZK prover factories retained V13 spellings (`getClaim…ClaimableUtxo…`). The **creator** prover factories were renamed: `getETAIntoStealthPoolNoteCreatorProver` (ETA-source) and `getATAIntoStealthPoolNoteCreatorProver` (ATA-source). Only the burner names are "legacy".
 </Note>
 
 ## Runtime Requirements

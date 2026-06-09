@@ -43,7 +43,6 @@ import {
   isRpcError,
   isTransactionError,
   isTransactionSigningError,
-  isMasterSeedSigningRejectedError,
 } from "@umbra-privacy/sdk/errors";
 ```
 
@@ -54,38 +53,29 @@ import {
 ```
 Error
 └── UmbraError
-    ├── AssertionError (abstract)
-    │   ├── RangeAssertionError (abstract)
-    │   ├── LengthAssertionError (abstract)
-    │   ├── FormatAssertionError (abstract)
-    │   └── NominalAssertionError (abstract)
-    │       └── (concrete assertion errors)
-    └── OperationError (abstract)
-        ├── CryptographyError
-        ├── InstructionError
-        ├── RpcError
-        ├── TransactionError
-        │   └── TransactionSigningError
-        │       └── MasterSeedSigningRejectedError
-        ├── EncryptedDepositError
-        ├── EncryptedWithdrawalError
-        ├── RegistrationError
-        ├── ConversionError
-        ├── CreateUtxoError
-        ├── FetchUtxosError
-        ├── ClaimUtxoError
-        ├── QueryError
-        ├── AccountError
-        └── ComplianceError
+    ├── CryptographyError
+    ├── InstructionError
+    ├── RpcError
+    ├── TransactionError
+    │   └── TransactionSigningError
+    │       └── MasterSeedSigningRejectedError
+    ├── EncryptedDepositError
+    ├── EncryptedWithdrawalError
+    ├── RegistrationError
+    ├── ConversionError
+    ├── CreateUtxoError
+    ├── FetchUtxosError
+    ├── ClaimUtxoError
+    ├── QueryError
+    ├── AccountError
+    └── ComplianceError
 ```
-
-`AssertionError` and `OperationError` are abstract intermediates — you never instantiate them directly, but you can catch on them (`isAssertionError`, `isOperationError`) to handle "any assertion failed" or "any operation failed" without naming the specific class. The concrete assertion errors extend one of the family-shaped abstracts (`RangeAssertionError`, `LengthAssertionError`, `FormatAssertionError`, `NominalAssertionError`).
 
 ---
 
 ## Staged Errors
 
-Every major SDK operation throws a dedicated staged error. Each one extends the abstract `OperationError<TStage>` (itself a subclass of `UmbraError`), so you can catch a specific operation with its `is*` guard or every operation at once with `isOperationError`. The `stage` field pinpoints exactly where in the pipeline the failure occurred, and `code` is derived as `<OPERATION>_<STAGE>`.
+Every major SDK operation throws a dedicated staged error. The `stage` field pinpoints exactly where in the pipeline the failure occurred.
 
 ---
 
@@ -94,7 +84,7 @@ Every major SDK operation throws a dedicated staged error. Each one extends the 
 Thrown by `getATAIntoETADirectDepositorFunction`.
 
 ```typescript
-class EncryptedDepositError extends OperationError<EncryptedDepositStage> {
+class EncryptedDepositError extends UmbraError {
   readonly stage: EncryptedDepositStage;
 }
 
@@ -122,7 +112,7 @@ function isEncryptedDepositError(error: unknown): error is EncryptedDepositError
 Thrown by `getETAIntoATAWithdrawerFunction`.
 
 ```typescript
-class EncryptedWithdrawalError extends OperationError<EncryptedWithdrawalStage> {
+class EncryptedWithdrawalError extends UmbraError {
   readonly stage: EncryptedWithdrawalStage;
 }
 
@@ -147,7 +137,7 @@ function isEncryptedWithdrawalError(error: unknown): error is EncryptedWithdrawa
 Thrown by `getUserRegistrationFunction`.
 
 ```typescript
-class RegistrationError extends OperationError<RegistrationStage> {
+class RegistrationError extends UmbraError {
   readonly stage: RegistrationStage;
 }
 
@@ -175,7 +165,7 @@ function isRegistrationError(error: unknown): error is RegistrationError;
 Thrown by `getNetworkEncryptionToSharedEncryptionConverterFunction` and `getMintEncryptionKeyRotatorFunction`.
 
 ```typescript
-class ConversionError extends OperationError<ConversionStage> {
+class ConversionError extends UmbraError {
   readonly stage: ConversionStage;
 }
 
@@ -200,7 +190,7 @@ function isConversionError(error: unknown): error is ConversionError;
 Thrown by all four Stealth Pool Note creator factory functions in `@umbra-privacy/sdk/deposit`.
 
 ```typescript
-class CreateUtxoError extends OperationError<CreateUtxoStage> {
+class CreateUtxoError extends UmbraError {
   readonly stage: CreateUtxoStage;
 }
 
@@ -230,7 +220,7 @@ function isCreateUtxoError(error: unknown): error is CreateUtxoError;
 Thrown by `getBurnableStealthPoolNoteScannerFunction` in `@umbra-privacy/sdk/burn`.
 
 ```typescript
-class FetchUtxosError extends OperationError<FetchUtxosStage> {
+class FetchUtxosError extends UmbraError {
   readonly stage: FetchUtxosStage;
 }
 
@@ -252,7 +242,7 @@ function isFetchUtxosError(error: unknown): error is FetchUtxosError;
 Thrown by all three burner factory functions in `@umbra-privacy/sdk/burn`.
 
 ```typescript
-class ClaimUtxoError extends OperationError<ClaimUtxoStage> {
+class ClaimUtxoError extends UmbraError {
   readonly stage: ClaimUtxoStage;
 }
 
@@ -279,7 +269,7 @@ function isClaimUtxoError(error: unknown): error is ClaimUtxoError;
 Thrown by `getUserAccountQuerierFunction` and `getEncryptedBalanceQuerierFunction`.
 
 ```typescript
-class QueryError extends OperationError<QueryStage> {
+class QueryError extends UmbraError {
   readonly stage: QueryStage;
 }
 
@@ -301,7 +291,7 @@ function isQueryError(error: unknown): error is QueryError;
 Thrown by every factory in `@umbra-privacy/sdk/account` — staged-token recoverers (`getStagedSolRecovererFunction`, `getStagedSplRecovererFunction`), key rotators (`getUserEncryptionKeyRotatorFunction`, `getMasterViewingKeyRotatorFunction`, `getMintEncryptionKeyRotatorFunction`), and entropy-seed rotators (`getUserEntropySeedRotatorFunction`, `getTokenEntropySeedRotatorFunction`).
 
 ```typescript
-class AccountError extends OperationError<AccountStage> {
+class AccountError extends UmbraError {
   readonly stage: AccountStage;
 }
 
@@ -319,7 +309,7 @@ function isAccountError(error: unknown): error is AccountError;
 Thrown by every factory in `@umbra-privacy/sdk/compliance` — grant issuer / revoker / queriers / re-encryptors.
 
 ```typescript
-class ComplianceError extends OperationError<ComplianceStage> {
+class ComplianceError extends UmbraError {
   readonly stage: ComplianceStage;
 }
 
@@ -334,7 +324,7 @@ function isComplianceError(error: unknown): error is ComplianceError;
 
 ## Base Error Primitives
 
-These are the underlying error types. All staged errors extend the abstract `OperationError<TStage>`, which in turn extends `UmbraError`.
+These are the underlying error types. All staged errors extend `UmbraError`.
 
 ---
 
@@ -346,14 +336,16 @@ Base class for all SDK errors.
 class UmbraError extends Error {
   constructor(
     message: string,
-    options: {
-      code: string;
-      cause?: Error;
+    options?: {
+      code?: string;
+      context?: Record<string, unknown>;
+      cause?: unknown;
     },
   );
 
-  readonly code: string;          // Machine-readable code. Required — subclasses set it.
-  override readonly cause?: Error;
+  readonly code: string;          // Machine-readable code. Defaults to "UMBRA_ERROR".
+  readonly context?: Record<string, unknown>;
+  override readonly cause?: unknown;
 }
 
 function isUmbraError(error: unknown): error is UmbraError;
@@ -366,20 +358,18 @@ function isUmbraError(error: unknown): error is UmbraError;
 Thrown when a cryptographic operation fails - most commonly ZK proof generation or Rescue cipher encryption/decryption.
 
 ```typescript
-class CryptographyError extends OperationError<CryptoStage> {
+class CryptographyError extends UmbraError {
   constructor(
-    stage: CryptoStage,
     message: string,
-    options: {
-      operation: string;
+    options?: {
+      code?: string;
+      operation?: string;
       context?: Record<string, unknown>;
-      cause?: Error;
+      cause?: unknown;
     },
   );
 
-  readonly stage: CryptoStage;    // The crypto lifecycle stage that failed.
-  readonly code: CryptoCode;      // Derived as `CRYPTO_<STAGE>`, e.g. "CRYPTO_DECRYPTION".
-  readonly operation: string;     // Name of the failed operation, e.g. "encryptAesGcm". Required.
+  readonly operation?: string;    // Name of the failed operation, e.g. "groth16-prove".
 }
 
 function isCryptographyError(error: unknown): error is CryptographyError;
@@ -392,19 +382,17 @@ function isCryptographyError(error: unknown): error is CryptographyError;
 Thrown when instruction construction fails - typically a protocol state mismatch or missing on-chain account.
 
 ```typescript
-class InstructionError extends OperationError<InstructionStage> {
+class InstructionError extends UmbraError {
   constructor(
-    stage: InstructionStage,
     message: string,
     options?: {
+      code?: string;
       instructionName?: string;
       context?: Record<string, unknown>;
-      cause?: Error;
+      cause?: unknown;
     },
   );
 
-  readonly stage: InstructionStage;     // The instruction-build stage that failed.
-  readonly code: InstructionCode;       // Derived as `INSTRUCTION_<STAGE>`.
   readonly instructionName?: string;    // Name of the instruction that failed to build.
 }
 
@@ -418,21 +406,19 @@ function isInstructionError(error: unknown): error is InstructionError;
 Thrown when an RPC or indexer HTTP call fails.
 
 ```typescript
-class RpcError extends OperationError<RpcStage> {
+class RpcError extends UmbraError {
   constructor(
-    stage: RpcStage,
     message: string,
     options?: {
+      code?: string;
       endpoint?: string;
       statusCode?: number;
       rpcErrorCode?: number;
       context?: Record<string, unknown>;
-      cause?: Error;
+      cause?: unknown;
     },
   );
 
-  readonly stage: RpcStage;         // The RPC-interaction stage that failed.
-  readonly code: RpcCode;           // Derived as `RPC_<STAGE>`.
   readonly endpoint?: string;       // The URL that was called.
   readonly statusCode?: number;     // HTTP status code (e.g. 429 for rate limit, 503 for unavailable).
   readonly rpcErrorCode?: number;   // JSON-RPC error code from the node.
@@ -448,20 +434,18 @@ function isRpcError(error: unknown): error is RpcError;
 Thrown when a transaction fails on-chain (simulation rejection or network rejection).
 
 ```typescript
-class TransactionError extends OperationError<TransactionStage> {
+class TransactionError extends UmbraError {
   constructor(
-    stage: TransactionStage,
     message: string,
     options?: {
+      code?: string;
       signature?: string;
       simulationLogs?: string[];
       context?: Record<string, unknown>;
-      cause?: Error;
+      cause?: unknown;
     },
   );
 
-  readonly stage: TransactionStage;     // The transaction-lifecycle stage that failed.
-  readonly code: TransactionCode;       // Derived as `TRANSACTION_<STAGE>`, e.g. "TRANSACTION_SIGN".
   readonly signature?: string;          // Base58 tx signature. Present even on failure - tx may have landed.
   readonly simulationLogs?: string[]    // Program log output from pre-flight simulation.
 }
@@ -480,16 +464,15 @@ class TransactionSigningError extends TransactionError {
   constructor(
     message: string,
     options?: {
+      code?: string;
       wasRejected?: boolean;
       signerAddress?: string;
       signature?: string;
-      simulationLogs?: string[];
       context?: Record<string, unknown>;
-      cause?: Error;
+      cause?: unknown;
     },
   );
 
-  // Stage is pinned to "sign", so `code` is always "TRANSACTION_SIGN".
   readonly wasRejected: boolean;      // true = user explicitly cancelled; false = wallet error.
   readonly signerAddress?: string;    // Address of the wallet that rejected.
 }
@@ -501,7 +484,7 @@ function isTransactionSigningError(error: unknown): error is TransactionSigningE
 
 ### MasterSeedSigningRejectedError
 
-Thrown when the user declines to sign the master seed derivation message. Extends `TransactionSigningError`. Always has `wasRejected: true`. Because it is pinned to the `"sign"` stage, its `code` is `"TRANSACTION_SIGN"` — distinguish it from a generic signing rejection with the `isMasterSeedSigningRejectedError` type guard, not the code string.
+Thrown when the user declines to sign the master seed derivation message. Extends `TransactionSigningError`. Always has `wasRejected: true`. Error code: `"MASTER_SEED_SIGNING_REJECTED"`.
 
 This surfaces during the first operation that needs key material in a session - typically `register()`, or `getUmbraClient()` in non-deferred mode.
 
