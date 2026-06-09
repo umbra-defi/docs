@@ -1,6 +1,6 @@
 # Umbra Privacy SDK
 
-> Umbra is a privacy protocol for Solana that shields SPL and Token-2022 token balances using Arcium multi-party computation (MPC) and zero-knowledge proofs. The TypeScript SDK (`@umbra-privacy/sdk@5.0.0-rc.4`) wraps all protocol operations into async factory functions for Node.js 18+ and modern browser environments. Requires a Solana wallet (Ed25519 signer) and an RPC endpoint. All amounts use base units (e.g., 1 USDC = 1_000_000n). All operations are non-custodial — private keys never leave the client. **The standalone `@umbra-privacy/web-zk-prover` package no longer exists**; the prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
+> Umbra is a privacy protocol for Solana that shields SPL and Token-2022 token balances using Arcium multi-party computation (MPC) and zero-knowledge proofs. The TypeScript SDK (`@umbra-privacy/sdk@5.0.0-rc.6`) wraps all protocol operations into async factory functions for Node.js 18+ and modern browser environments. Requires a Solana wallet (Ed25519 signer) and an RPC endpoint. All amounts use base units (e.g., 1 USDC = 1_000_000n). All operations are non-custodial — private keys never leave the client. **The standalone `@umbra-privacy/web-zk-prover` package no longer exists**; the prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
 
 This documentation covers the SDK API, protocol concepts, indexer REST API, and relayer API for building privacy-preserving Solana applications.
 
@@ -13,7 +13,7 @@ This documentation covers the SDK API, protocol concepts, indexer REST API, and 
 
 ## Requirements and Constraints
 
-- **Install (current release `5.0.0-rc.4`)**: pin the SDK to the exact version and add a package-manager override `@umbra-privacy/umbra-codama@3.0.0-rc.4` — the version `rc.4` resolves transitively (`codama rc.3`) has a PDA-derivation bug that makes deposits fail on-chain with `ConstraintSeeds (2006)`. Also apply the one-file `scripts/patch-sdk.mjs` postinstall patch for the `rc.3`–`rc.4` `scan()` BigInt-on-base64 bug.
+- **Install (current release `5.0.0-rc.6`)**: pin the SDK to the exact version. No package-manager overrides or dist patches are needed — the earlier `rc.3`/`rc.4` codama PDA bug (`ConstraintSeeds 2006` on deposit) and the columnar `scan()` BigInt-on-base64 bug are both fixed in rc.6.
 - **Runtime**: Node.js 18+ or modern browser with BigInt support.
 - **TypeScript**: 5.0+ required (branded types use phantom symbols).
 - **Wallet**: must implement `IUmbraSigner` (signTransaction, signTransactions, signMessage).
@@ -250,7 +250,7 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 - Indexer (Devnet): `https://utxo-indexer.api-devnet.umbraprivacy.com`.
 - Relayer (Mainnet): `https://relayer.api.umbraprivacy.com`.
 - Relayer (Devnet): `https://relayer.api-devnet.umbraprivacy.com`.
-- NPM Package: `@umbra-privacy/sdk` (`5.0.0-rc.4` — pin to exact version; add the `@umbra-privacy/umbra-codama@3.0.0-rc.4` override).
+- NPM Package: `@umbra-privacy/sdk` (`5.0.0-rc.6` — pin to exact version; pins `@umbra-privacy/umbra-codama@3.0.0-rc.6`, no override needed).
 
 ## Migrations
 

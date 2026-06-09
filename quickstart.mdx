@@ -12,36 +12,29 @@ description: "Build directly on @umbra-privacy/sdk: register, deposit, create a 
 ## 1. Install
 
 The SDK is one package — the ZK prover, indexer client, relayer client, and Solana
-primitives are all subpath modules of `@umbra-privacy/sdk`.
+primitives are all subpath modules of `@umbra-privacy/sdk`. **`snarkjs` is a required
+peer dependency** (the SDK imports it for Groth16 proving) — install it alongside the SDK
+or the first import throws `ERR_MODULE_NOT_FOUND`.
 
 <CodeGroup>
 ```bash pnpm
-pnpm add @umbra-privacy/sdk@5.0.0-rc.4
+pnpm add @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 
 ```bash npm
-npm install @umbra-privacy/sdk@5.0.0-rc.4
+npm install @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 
 ```bash yarn
-yarn add @umbra-privacy/sdk@5.0.0-rc.4
+yarn add @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 </CodeGroup>
 
-<Warning>
-**Required override (V18):** `@umbra-privacy/sdk@5.0.0-rc.4` resolves
-`@umbra-privacy/umbra-codama@3.0.0-rc.3`, which has a PDA-derivation bug that makes
-deposits fail on-chain with `ConstraintSeeds (2006)`. Pin the codama client to its
-fixed release `3.0.0-rc.4` until the next SDK release bumps it:
-
-```jsonc
-// package.json
-{
-  "pnpm": { "overrides": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" } }
-  // npm: "overrides": { ... }   ·   yarn: "resolutions": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" }
-}
-```
-</Warning>
+<Note>
+If you connect a browser wallet (Phantom/Solflare/…) you also need the
+`@wallet-standard/core` peer dependency. It is not required for the
+`createInMemorySigner` / `createSignerFromPrivateKeyBytes` paths used below.
+</Note>
 
 <Warning>
 Pin the SDK to an exact version (no `^`, no `~`). The ZK assets are versioned in
@@ -49,44 +42,40 @@ lockstep with the package; floating versions can resolve a manifest that points 
 the wrong circuit hash.
 </Warning>
 
-<Note>
-**Known scan bug (rc.3–rc.4):** the columnar UTXO-fetch path calls `BigInt()` on a
-base64 field, so every `scan()` throws on devnet. Until it's fixed upstream, apply
-a one-file dist patch (a `scripts/patch-sdk.mjs` wired as a `postinstall` hook)
-that rewrites the two lines to decode the bytes correctly.
-</Note>
-
 ## 2. Create a Signer
 
-For quick testing, generate an in-memory keypair. For production, see [Wallet Adapters](/sdk/wallet-adapters).
+For quick testing, generate an in-memory keypair. For anything reusable, load a
+persisted keypair with `createSignerFromPrivateKeyBytes` (it accepts a 64-byte
+keypair or a 32-byte seed). For production, use a wallet adapter — see
+[Wallet Adapters](/sdk/wallet-adapters).
 
 ```typescript
-import { createInMemorySigner } from "@umbra-privacy/sdk";
+import {
+  createInMemorySigner,
+  createSignerFromPrivateKeyBytes,
+} from "@umbra-privacy/sdk";
 
+// Ephemeral — disappears when the process exits. Test/dev only.
 const signer = await createInMemorySigner();
+
+// Reusable — pass your own secret bytes (e.g. from a Solana CLI keypair file).
+// const secret = Uint8Array.from(JSON.parse(readFileSync("keypair.json", "utf8")));
+// const signer = await createSignerFromPrivateKeyBytes(secret);
+
 console.log("Wallet address:", signer.address);
 ```
 
 <Warning>
-An in-memory keypair is ephemeral — it disappears when the process exits. Use a browser wallet, or `createSignerFromPrivateKeyBytes` with a persisted keypair, for anything beyond local testing.
+Both factories are **async** — you must `await` them, or `signer.address` is `undefined`.
 </Warning>
 
 ## 3. Create the Umbra Client
 
-The client owns your signer, network configuration, indexer endpoint, relayer endpoint, and (on the browser) the persistent stores for scan progress and discovered nullifiers.
+The client owns your signer, network configuration, and indexer endpoint. The relayer
+is **not** a client argument — you build it separately with `getUmbraRelayer` (step 9).
 
 ```typescript
 import { getUmbraClient } from "@umbra-privacy/sdk";
-import {
-  createBrowserStorageBackend,
-  createShardedUtxoDataStore,
-  createShardedNullifierStore,
-} from "@umbra-privacy/sdk/store-adapters";
-
-// Browser: persist scan state across reloads.
-const storageBackend = createBrowserStorageBackend({ dbName: "umbra" });
-const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
-const nullifierStore = createShardedNullifierStore({ storageBackend });
 
 const client = await getUmbraClient({
   signer,
@@ -94,11 +83,18 @@ const client = await getUmbraClient({
   rpcUrl: "https://api.mainnet-beta.solana.com",
   rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
   indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
-  relayerApiEndpoint: "https://relayer.api.umbraprivacy.com",
-  utxoDataStore,
-  nullifierStore,
+  // NOTE: there is NO relayerApiEndpoint here — see step 9.
 });
 ```
+
+<Note>
+**Testing on devnet?** Use `network: "devnet"`,
+`rpcUrl: "https://api.devnet.solana.com"` (+ `wss://api.devnet.solana.com`),
+`indexerApiEndpoint: "https://utxo-indexer.api-devnet.umbraprivacy.com"`, the devnet
+relayer `https://relayer.api-devnet.umbraprivacy.com`, and the devnet **dUSDC** mint
+`4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7`. See [Supported Tokens](/supported-tokens)
+for the full per-network mint list.
+</Note>
 
 <Note>
 The Umbra program address differs between devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
@@ -108,22 +104,37 @@ The Umbra program address differs between devnet and mainnet. The SDK resolves t
 The first operation that needs the master seed (typically `register()`) prompts the wallet to sign a deterministic consent message. Subsequent operations reuse the cached seed without re-prompting.
 </Note>
 
-<Warning>
-On the browser, wire `utxoDataStore` and `nullifierStore`. Without them every `scan()` iterates from genesis across every active tree — fine on devnet, crippling on mainnet. On Node.js you can omit them and the scanner falls back to in-memory state.
-</Warning>
+<Note>
+**Browser: persist scan state.** On Node you can omit persistent stores and the
+scanner falls back to in-memory state (fine for scripts). In the browser, wire
+`createShardedUtxoDataStore` + `createShardedNullifierStore`
+(`@umbra-privacy/sdk/store-adapters`) — otherwise every `scan()` walks every tree
+from genesis. Because those stores derive their keys from the client's master seed,
+it's a **two-phase build**: construct a bootstrap client, build the stores from it,
+then rebuild the client with the stores in `deps`. See the example app's
+[`lib/umbra-client.ts`](https://github.com/umbra-defi/examples/blob/main/private-payments-nextjs/lib/umbra-client.ts)
+for the full pattern.
+</Note>
 
 ## 4. Register Your Account
 
 Registration sets up your on-chain Umbra identity. It is idempotent: skipped sub-steps cost zero SOL, so you can call it safely on every app start.
 
+Anonymous registration runs a Groth16 proof, so it **requires a `zkProver`** in the
+factory's deps — omitting it throws `ZK prover is required for anonymous-mode registration`.
+
 ```typescript
 import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
+import { getUserRegistrationProver } from "@umbra-privacy/sdk/zk-prover";
 
-const register = getUserRegistrationFunction({ client });
+const register = getUserRegistrationFunction(
+  { client },
+  { zkProver: getUserRegistrationProver() },
+);
 
 const signatures = await register({
   confidential: true, // register the X25519 key (Shared-mode balances + receiver-burnable notes)
-  anonymous: true,    // register the user commitment (anonymous mixer transfers)
+  anonymous: true,    // register the user commitment (anonymous mixer transfers) — needs the zkProver above
 });
 
 console.log(`Registered in ${signatures.length} transaction(s)`);
@@ -140,16 +151,22 @@ Both `init_if_needed` the user account, so either may run first. The orchestrato
 
 Shield an SPL or Token-2022 balance by moving it from your public Associated Token Account into your Encrypted Token Account.
 
+Amounts are branded `U64` and mints are branded `Address` — wrap raw values with
+`createU64` (`@umbra-privacy/sdk/types`) and `address` (`@solana/kit`) so the calls
+typecheck.
+
 ```typescript
 import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
+import { createU64 } from "@umbra-privacy/sdk/types";
+import { address } from "@solana/kit";
 
 const deposit = getATAIntoETADirectDepositorFunction({ client });
 
-const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
-const amount = 1_000_000n; // 1 USDC (6 decimals)
+const MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // USDC (mainnet)
+const amount = createU64({ value: 1_000_000n }); // 1 USDC (6 decimals)
 
 const result = await deposit(
-  client.signer.address, // credit your own ETA
+  signer.address, // credit your own ETA
   MINT,
   amount,
 );
@@ -162,7 +179,8 @@ if (result.callback?.status === "finalized") {
 
 ## 6. Withdraw Tokens (ETA → PATA)
 
-Move tokens back from your Encrypted Token Account to your public ATA.
+Move tokens back from your Encrypted Token Account to your public ATA. (`MINT` and
+`amount` are the branded values from step 5.)
 
 ```typescript
 import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
@@ -170,7 +188,7 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
 const result = await withdraw(
-  client.signer.address, // destination PATA owner
+  signer.address, // destination PATA owner
   MINT,
   amount,
 );
@@ -186,16 +204,27 @@ if (result.callback?.status === "finalized") {
 Send tokens privately to a recipient by writing a Stealth Pool Note into the mixer. The recipient can later scan and burn it with no on-chain link to you as the sender.
 
 <Note>
-Creating a note requires a `zkProver` dependency for Groth16 proof generation. In V14 the prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover` — there is no separate `@umbra-privacy/web-zk-prover` package any more.
+Creating a note requires a `zkProver` dependency for Groth16 proof generation. The
+prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover` — there is no separate
+`@umbra-privacy/web-zk-prover` package any more.
 </Note>
 
 <Warning>
-Receiver-burnable creates encrypt the unlocker against the recipient's `userCommitment`. The recipient **must** have completed all three registration sub-steps (account init, X25519 key, user commitment). If they haven't, fall back to a **self-burnable** create — the sender stays the unlocker and the recipient needs zero on-chain state. See [Stealth Pool Notes — Registration prerequisites](/concepts/utxos-and-mixer#registration-prerequisites-differ-by-variant) for the full pre-check rubric.
+Receiver-burnable creates encrypt the unlocker against the recipient's `userCommitment`,
+so the recipient **must** have completed all three registration sub-steps (account init,
+X25519 key, user commitment). If they haven't, fall back to a **self-burnable** create
+with `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — the *sender* stays the
+unlocker and the recipient needs zero on-chain state. Note this is "park then hand off",
+not a direct credit: the funds remain spendable by you until you share the note's
+unlocking material out-of-band, so it suits one-shot transfers to someone you can reach
+off-chain. See [Stealth Pool Notes — Registration prerequisites](/concepts/utxos-and-mixer#registration-prerequisites-differ-by-variant)
+for the full pre-check rubric.
 </Warning>
 
 ```typescript
 import { getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
 import { getATAIntoStealthPoolNoteCreatorProver } from "@umbra-privacy/sdk/zk-prover";
+import { address } from "@solana/kit";
 
 const zkProver = getATAIntoStealthPoolNoteCreatorProver();
 
@@ -204,7 +233,7 @@ const createNote = getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction(
   { zkProver },
 );
 
-const RECIPIENT = "RecipientWalletAddressHere";
+const RECIPIENT = address("RecipientWalletAddressHere");
 
 const signatures = await createNote({
   destinationAddress: RECIPIENT,
@@ -215,7 +244,12 @@ console.log("Stealth Pool Note created:", signatures[0]);
 ```
 
 <Note>
-The ZK prover factory names were updated to match the new SDK vocabulary — use `getETAIntoStealthPoolNoteCreatorProver`, `getATAIntoStealthPoolNoteCreatorProver`, and the existing `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver` etc. for burner provers.
+**Spending from your shielded balance.** The factory above sources tokens from your
+public ATA. To create a note from your *existing* Encrypted Token Account balance
+(the common case once you've deposited), use the ETA-sourced creators —
+`getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` /
+`getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — same call shape, paired with
+`getETAIntoStealthPoolNoteCreatorProver`.
 </Note>
 
 ## 8. Scan for Burnable Notes
@@ -227,7 +261,7 @@ import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/bu
 
 const scan = getBurnableStealthPoolNoteScannerFunction({ client });
 
-// Zero-arg in V14. No (treeIndex, start, end) — the cursor is managed by the SDK.
+// Zero-arg. No (treeIndex, start, end) — the cursor is managed by the SDK.
 const result = await scan();
 
 console.log("Self-burnable from ETA: ", result.etaToStealthPoolSelfBurnable.length);
@@ -238,7 +272,7 @@ console.log("Scanned trees:", result.scannedTrees.length);
 ```
 
 <Warning>
-The scanner does **not** attach Merkle proofs to the returned notes. Proofs are fetched per batch at burn time so a single proof set is shared across an entire batch — far cheaper than fetching one proof per note. Pass the scanned notes directly to a burner factory; do not call `enrichWithMerkleProof` yourself unless you are building a custom burn pipeline.
+The scanner does **not** attach Merkle proofs to the returned notes. Proofs are fetched per batch at burn time so a single proof set is shared across an entire batch — far cheaper than fetching one proof per note. Pass the scanned notes (with a `kind` tag — see step 9) directly to a burner factory; do not call `enrichWithMerkleProof` yourself unless you are building a custom burn pipeline.
 </Warning>
 
 ## 9. Burn the Note
@@ -246,6 +280,10 @@ The scanner does **not** attach Merkle proofs to the returned notes. Proofs are 
 Burning consumes a note, reveals its nullifier on-chain to prevent double-spend, and credits the destination balance. We'll burn the receiver-burnable note we just created, into the recipient's Encrypted Token Account.
 
 The burner factory needs three dependencies: a `fetchBatchMerkleProof` (already exposed on `client`), a `zkProver` for the burn circuit, and a `relayer` adapter whose three methods (`submitBurn`, `pollBurnStatus`, `getRelayerAddress`) forward to the relayer service.
+
+The scanner returns notes **without** a `kind` discriminator, but the burner input is
+typed `DecryptedStealthPoolNoteData & { kind: "receiver-burnable" }` — tag each note
+with `kind` before passing it in.
 
 ```typescript
 import {
@@ -270,7 +308,10 @@ const burn = getReceiverBurnableStealthPoolNoteIntoETABurnerFunction(
   },
 );
 
-const notes = result.etaToStealthPoolReceiverBurnable; // or ...FromPublicAssociatedTokenAccount, depending on source
+// Tag the scanned notes with their burn kind (the scanner does not).
+const notes = result.etaToStealthPoolReceiverBurnable.map(
+  (n) => ({ ...n, kind: "receiver-burnable" as const }),
+);
 if (notes.length > 0) {
   const out = await burn([notes[0]]);
   for (const [batchIndex, batch] of out.batches) {
@@ -285,6 +326,15 @@ if (notes.length > 0) {
 ```
 
 <Note>
+For **self-burnable** notes use the matching burners + provers:
+`getSelfBurnableStealthPoolNoteIntoETABurnerFunction` /
+`getSelfBurnableStealthPoolNoteIntoATABurnerFunction`, with
+`getClaimSelfClaimableUtxoIntoEncryptedBalanceProver` /
+`getClaimSelfClaimableUtxoIntoPublicBalanceProver`. Tag those notes with
+`kind: "self-burnable"`.
+</Note>
+
+<Note>
 The `submitBurn` / `pollBurnStatus` property names map onto the relayer client's existing `submitClaim` / `pollClaimStatus` via plain TypeScript aliases (`BurnSubmitterFunction = ClaimSubmitterFunction`). The wire protocol still calls the endpoint `/v1/claims` — nothing has changed there.
 </Note>
 
@@ -294,12 +344,18 @@ Batching: pass an array of notes. The receiver-into-ETA burner groups them by `d
 
 ## Full Example
 
+A runnable Node script (uses an ephemeral signer, so fund + reuse a real keypair to
+take it past `register`). Stores are omitted — on Node the scanner falls back to
+in-memory state; for browser persistence see the two-phase note in step 3.
+
 ```typescript
 import {
   createInMemorySigner,
   getUmbraClient,
   getUmbraRelayer,
 } from "@umbra-privacy/sdk";
+import { createU64 } from "@umbra-privacy/sdk/types";
+import { address } from "@solana/kit";
 import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";
 import {
   getATAIntoETADirectDepositorFunction,
@@ -311,50 +367,42 @@ import {
   getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
 } from "@umbra-privacy/sdk/burn";
 import {
+  getUserRegistrationProver,
   getATAIntoStealthPoolNoteCreatorProver,
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
 } from "@umbra-privacy/sdk/zk-prover";
-import {
-  createBrowserStorageBackend,
-  createShardedUtxoDataStore,
-  createShardedNullifierStore,
-} from "@umbra-privacy/sdk/store-adapters";
 
 async function main() {
-  // 1. Signer (use your wallet adapter in production)
+  // 1. Signer (use your wallet adapter / a persisted keypair in production).
   const signer = await createInMemorySigner();
 
-  // 2. Client + store adapters (browser).
-  const storageBackend = createBrowserStorageBackend({ dbName: "umbra" });
-  const utxoDataStore  = createShardedUtxoDataStore({ storageBackend });
-  const nullifierStore = createShardedNullifierStore({ storageBackend });
-
+  // 2. Client (relayer is built separately, below).
   const client = await getUmbraClient({
     signer,
     network: "mainnet",
     rpcUrl: "https://api.mainnet-beta.solana.com",
     rpcSubscriptionsUrl: "wss://api.mainnet-beta.solana.com",
     indexerApiEndpoint: "https://utxo-indexer.api.umbraprivacy.com",
-    relayerApiEndpoint: "https://relayer.api.umbraprivacy.com",
-    utxoDataStore,
-    nullifierStore,
   });
 
-  // 3. Register (idempotent).
-  const register = getUserRegistrationFunction({ client });
-  await register({ confidential: true, anonymous: true });
+  const MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // USDC
 
-  const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
+  // 3. Register (idempotent; anonymous mode needs the registration prover).
+  const register = getUserRegistrationFunction(
+    { client },
+    { zkProver: getUserRegistrationProver() },
+  );
+  await register({ confidential: true, anonymous: true });
 
   // 4. Deposit (PATA → ETA).
   const deposit = getATAIntoETADirectDepositorFunction({ client });
-  await deposit(signer.address, MINT, 1_000_000n);
+  await deposit(signer.address, MINT, createU64({ value: 1_000_000n }));
 
   // 5. Withdraw (ETA → PATA).
   const withdraw = getETAIntoATAWithdrawerFunction({ client });
-  await withdraw(signer.address, MINT, 1_000_000n);
+  await withdraw(signer.address, MINT, createU64({ value: 1_000_000n }));
 
-  // 6. ZK provers (browser-side Groth16).
+  // 6. ZK provers (Groth16).
   const createProver = getATAIntoStealthPoolNoteCreatorProver();
   const burnProver   = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver();
 
@@ -363,8 +411,8 @@ async function main() {
     { client },
     { zkProver: createProver },
   );
-  const RECIPIENT = "RecipientWalletAddressHere";
-  await createNote({ destinationAddress: RECIPIENT, mint: MINT, amount: 500_000n });
+  const RECIPIENT = address("RecipientWalletAddressHere");
+  await createNote({ destinationAddress: RECIPIENT, mint: MINT, amount: createU64({ value: 500_000n }) });
 
   // 8. Scan (zero-arg, cursor in client.utxoDataStore).
   const scan = getBurnableStealthPoolNoteScannerFunction({ client });
@@ -385,7 +433,10 @@ async function main() {
     },
   );
 
-  const candidates = result.ataToStealthPoolReceiverBurnable;
+  // Tag scanned notes with their burn kind before passing to the burner.
+  const candidates = result.etaToStealthPoolReceiverBurnable.map(
+    (n) => ({ ...n, kind: "receiver-burnable" as const }),
+  );
   if (candidates.length > 0) {
     const out = await burn([candidates[0]]);
     for (const [, b] of out.batches) {

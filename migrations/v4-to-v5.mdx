@@ -7,29 +7,16 @@ V5 is a vocabulary + ergonomics overhaul. The on-chain protocol and wire formats
 
 This page walks you through every breaking change. Work top-to-bottom; nothing later depends on something earlier you skipped.
 
-<Warning>
-**Current release: `@umbra-privacy/sdk@5.0.0-rc.4`.** It resolves
-`@umbra-privacy/umbra-codama@3.0.0-rc.3`, which has a PDA-derivation bug that makes
-deposits fail on-chain with `ConstraintSeeds (2006)`. Pin the codama client to its
-fixed release until the next SDK release bumps it:
-
-```jsonc
-// package.json
-{
-  "pnpm": { "overrides": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" } }
-  // npm: "overrides": { ... }   ·   yarn: "resolutions": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" }
-}
-```
-
-There is also a known `scan()` bug in `rc.3`–`rc.4` (a `BigInt()` call on a base64
-field throws on the columnar fetch path). Until it's fixed upstream, apply a
-one-file dist patch (`scripts/patch-sdk.mjs`, wired as a `postinstall` hook) that
-rewrites the two lines to decode the bytes correctly.
-</Warning>
+<Note>
+**Current release: `@umbra-privacy/sdk@5.0.0-rc.6`** (pins `@umbra-privacy/umbra-codama@3.0.0-rc.6`).
+Nothing extra to wire up — the earlier `rc.3`/`rc.4` workarounds are gone: the codama
+PDA bug (`ConstraintSeeds 2006` on deposit) and the columnar `scan()` BigInt bug are
+**both fixed in rc.6**. No package-manager override, no `postinstall` dist patch.
+</Note>
 
 ## TL;DR
 
-1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.4`. Pin an **exact** version, and add the `@umbra-privacy/umbra-codama@3.0.0-rc.4` override (see the warning above).
+1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.6`. Pin an **exact** version (codama is pinned by the SDK — no override needed).
 2. Delete `@umbra-privacy/web-zk-prover` from `package.json`. The prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
 3. Move every operation factory import from the main barrel to its **named subpath** (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`).
 4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, ATA → PATA, encrypted balance → ETA).
@@ -67,9 +54,8 @@ import { getCdnZkAssetProvider } from "@umbra-privacy/web-zk-prover/cdn";
 ```jsonc
 {
   "dependencies": {
-    "@umbra-privacy/sdk": "5.0.0-rc.4"
-  },
-  "pnpm": { "overrides": { "@umbra-privacy/umbra-codama": "3.0.0-rc.4" } }
+    "@umbra-privacy/sdk": "5.0.0-rc.6"
+  }
 }
 ```
 
