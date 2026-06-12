@@ -1,6 +1,6 @@
 ---
 title: "The SDK Pattern"
-description: "SDK architecture (V14): factory pattern with verbose flow-based names, args (required params) vs deps (injectable providers), per-call commitment overrides, and subpath imports for every operation family."
+description: "SDK architecture (V18): factory pattern with verbose flow-based names, args (required params) vs deps (injectable providers), per-call commitment overrides, and subpath imports for every operation family."
 ---
 
 ## Design Philosophy
@@ -35,26 +35,26 @@ const ix = getTransferSolInstruction({ source, destination, amount });
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 ```
 
-## Naming Conventions (V14)
+## Naming Conventions (V18)
 
 Names are long, but they spell out the exact data flow.
 
 - **Deposit family** (`@umbra-privacy/sdk/deposit`)
-  - `getATAIntoETADirectDepositorFunction` — PATA → ETA.
-  - `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — PATA → self-burnable Stealth Pool Note.
-  - `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — PATA → receiver-burnable Stealth Pool Note.
+  - `getATAIntoETADirectDepositorFunction` — ATA → ETA.
+  - `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ATA → self-burnable Stealth Pool Note.
+  - `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ATA → receiver-burnable Stealth Pool Note.
   - `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — ETA → self-burnable Stealth Pool Note (MPC).
   - `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — ETA → receiver-burnable Stealth Pool Note (MPC).
 
 - **Withdrawal family** (`@umbra-privacy/sdk/withdrawal`)
-  - `getETAIntoATAWithdrawerFunction` — ETA → PATA.
+  - `getETAIntoATAWithdrawerFunction` — ETA → ATA.
 
 - **Burn family** (`@umbra-privacy/sdk/burn`)
   - `getBurnableStealthPoolNoteScannerFunction` — zero-arg scanner, cursor in `client.utxoDataStore`.
   - `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction` — receiver-burnable → ETA.
   - `getSelfBurnableStealthPoolNoteIntoETABurnerFunction` — self-burnable → ETA.
-  - `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → PATA.
-  - (Receiver-burnable → PATA exists on-chain but is not yet shipped in the SDK.)
+  - `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — self-burnable → ATA.
+  - (Receiver-burnable → ATA exists on-chain but is not yet shipped in the SDK.)
 
 - **Registration** (`@umbra-privacy/sdk/registration`) — `getUserRegistrationFunction`.
 - **Query** (`@umbra-privacy/sdk/query`) — `getUserAccountQuerierFunction`, `getEncryptedBalanceQuerierFunction`.
@@ -62,9 +62,9 @@ Names are long, but they spell out the exact data flow.
 - **Compliance** (`@umbra-privacy/sdk/compliance`) — grant issuer / revoker / re-encryptors / queriers.
 - **Account** (`@umbra-privacy/sdk/account`) — staged-token recoverers (`getStagedSplRecovererFunction`, `getStagedSolRecovererFunction`), key rotators, maintenance helpers.
 
-You read each name as `[verb] from [source] (into|to) [destination]` or `[verb] [object]`. There is no abbreviation — `EncryptedTokenAccount`, not `ETA`, and `PublicAssociatedTokenAccount`, not `PATA` — because the symbols are searchable and self-describing in code.
+You read each name as `[verb] from [source] (into|to) [destination]` or `[verb] [object]`. Factory names use the abbreviations `ATA` (`AssociatedTokenAccount`) and `ETA` (`EncryptedTokenAccount`) — e.g. `getATAIntoETADirectDepositorFunction` — so they stay short while remaining searchable and self-describing in code.
 
-## V14 vocabulary
+## V18 vocabulary
 
 - **Stealth Pool Note** replaces V13's "UTXO" in factory names and types. The wire protocol and on-chain instructions retain `claim_*` / `utxo_*` spellings for compatibility.
 - **Burn** replaces V13's "claim" in factory names. The relayer endpoint is still `/v1/claims`, and the burner factory's `relayer` dep takes `{ submitBurn, pollBurnStatus, getRelayerAddress }` — `submitBurn` and `pollBurnStatus` are TypeScript aliases of `submitClaim` and `pollClaimStatus`, so the relayer client's existing methods plug in unchanged under the renamed property names.

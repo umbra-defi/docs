@@ -1,6 +1,6 @@
 ---
 title: "Token-2022 Support"
-description: "Token-2022 transfer fee handling in V14: epoch-based fee schedule detection, fee deduction before protocol fees, epochInfoCommitment override. Affects PATA-source operations only."
+description: "Token-2022 transfer fee handling: epoch-based fee schedule detection, fee deduction before protocol fees, epochInfoCommitment override. Affects ATA-source operations only."
 ---
 
 ## Overview
@@ -79,12 +79,12 @@ The SDK detects that the mint is a Token-2022 program account, checks for a tran
 
 ## Affected Operations
 
-Transfer fee handling applies to these PATA-source operations:
+Transfer fee handling applies to these ATA-source operations:
 
 - `getATAIntoETADirectDepositorFunction` — fetches epoch info only when a Token-2022 transfer fee is detected.
 - `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — same.
 - `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — same.
-- `getETAIntoATAWithdrawerFunction` — same (the transfer back into a PATA also crosses the Token-2022 boundary).
+- `getETAIntoATAWithdrawerFunction` — same (the transfer back into an ATA also crosses the Token-2022 boundary).
 - `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — same.
 
 Operations that route entirely between an ETA and the on-chain Stealth Pool (e.g. self-burnable → ETA, receiver-burnable → ETA) are not affected by Token-2022 transfer fees, because the transfer happens within the Umbra program and does not cross the Token-2022 transfer fee boundary.

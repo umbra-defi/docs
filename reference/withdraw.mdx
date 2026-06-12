@@ -1,6 +1,6 @@
 ---
 title: "Withdrawal"
-description: "V14 API reference: getETAIntoATAWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
+description: "V18 API reference: getETAIntoATAWithdrawerFunction returns WithdrawResult with queueSignature and callbackSignature via Arcium MPC."
 ---
 
 ## getETAIntoATAWithdrawerFunction
@@ -10,11 +10,11 @@ description: "V14 API reference: getETAIntoATAWithdrawerFunction returns Withdra
 ```typescript
 function getETAIntoATAWithdrawerFunction(
   args: { client: IUmbraClient },
-  deps?: GetFromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunctionDeps,
-): FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunction;
+  deps?: GetETAIntoATAWithdrawerFunctionDeps,
+): ETAIntoATAWithdrawerFunction;
 ```
 
-Withdraws tokens from the caller's ETA to a destination PATA. This is the primary withdrawal path — no ZK proof required. The withdrawal queues an Arcium MPC computation; the network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
+Withdraws tokens from the caller's ETA to a destination ATA. This is the primary withdrawal path — no ZK proof required. The withdrawal queues an Arcium MPC computation; the network processes it and calls back on-chain to execute the transfer. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
 ### Deps
 
@@ -27,29 +27,29 @@ All fields are optional.
 ### Returns
 
 ```typescript
-type FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerFunction = (
+type ETAIntoATAWithdrawerFunction = (
   destinationAddress: Address,
   mint: Address,
   withdrawalAmount: U64,
-  options?: WithdrawOptions,
+  options?: ETAIntoATAWithdrawerOptions,
 ) => Promise<WithdrawResult>;
 ```
 
-- `destinationAddress: Address` — wallet whose PATA receives the tokens.
+- `destinationAddress: Address` — wallet whose ATA receives the tokens.
 - `mint: Address` — token mint address.
 - `withdrawalAmount: U64` — amount in base token units to withdraw from the ETA.
 
-### Options (`FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerOptions`)
+### Options (`ETAIntoATAWithdrawerOptions`)
 
 ```typescript
-interface FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerOptions {
+interface ETAIntoATAWithdrawerOptions {
   readonly optionalData?: OptionalData32;
   readonly accountInfoCommitment?: Commitment;
   readonly computationOffset?: U64;
   readonly mpcCallbackDataOffset?: U128;
   readonly feeVaultOffset?: U128;                  // default 0n (sentinel: no fee-vault interaction)
   readonly destinationProgram?: Address;           // default System Program (sentinel: no observer CPI)
-  // plus observer-CPI passthrough accounts and a `hooks?: FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawHooks`
+  // plus observer-CPI passthrough accounts and a `hooks?: WithdrawalHooks`
 }
 ```
 
@@ -59,7 +59,7 @@ interface FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawerOpt
 - `feeVaultOffset`, `destinationProgram` — observer-forward CPI configuration. Leave at defaults unless you are intentionally routing post-callback into another program.
 - `hooks` — per-phase lifecycle hooks (`onValidationStart`, `onAccountFetchComplete`, `queueComputation`, `onComplete`, `onError`, etc.).
 
-There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the V14 withdrawer.
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `epochInfoCommitment` options on the V18 withdrawer.
 
 ### WithdrawResult
 
@@ -93,7 +93,7 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
 const result = await withdraw(
-  destinationWallet,   // tokens land in this wallet's PATA
+  destinationWallet,   // tokens land in this wallet's ATA
   mintAddress,
   500_000n,
 );

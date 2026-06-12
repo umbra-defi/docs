@@ -1,15 +1,15 @@
 ---
 title: "Privacy Analysis"
-description: "3-tier privacy model: ETA → ETA (strongest), mixed flows (partial), PATA → PATA (weakest). Covers timing analysis, amount correlation, anonymity set sizing, and self-burnable vs receiver-burnable trade-offs."
+description: "3-tier privacy model: ETA → ETA (strongest), mixed flows (partial), ATA → ATA (weakest). Covers timing analysis, amount correlation, anonymity set sizing, and self-burnable vs receiver-burnable trade-offs."
 ---
 
 ## Summary
 
-The Stealth Pool's privacy strength is determined by three independent choices: where tokens come from (PATA or ETA), where they land (PATA or ETA), and who controls the burn (self-burnable or receiver-burnable).
+The Stealth Pool's privacy strength is determined by three independent choices: where tokens come from (ATA or ETA), where they land (ATA or ETA), and who controls the burn (self-burnable or receiver-burnable).
 
 - Shielding both ends (ETA → ETA) eliminates amount correlation entirely and makes the sender completely unlinkable at burn time — the strongest possible configuration.
 - Shielding one end (mixed flows) partially limits what an observer can correlate, depending on which side is visible.
-- Public flows (PATA → PATA) expose amounts at both ends; the only remaining privacy property is the absence of a direct on-chain link between the two addresses.
+- Public flows (ATA → ATA) expose amounts at both ends; the only remaining privacy property is the absence of a direct on-chain link between the two addresses.
 - Receiver-burnable notes are cryptographically equivalent to self-burnable notes with the same source and destination, but are stronger in practice — recipients naturally burn later and independently, widening the anonymity set without any deliberate effort.
 
 For a complete breakdown of all eight combinations see the [Privacy Ranking](#privacy-ranking) below.
@@ -20,8 +20,8 @@ For a complete breakdown of all eight combinations see the [Privacy Ranking](#pr
 
 Every Stealth Pool flow has two independent axes that determine its privacy profile:
 
-- **Source** — where the tokens come from: a `PublicAssociatedTokenAccount (PATA)` or an `EncryptedTokenAccount (ETA)`.
-- **Destination** — where the tokens land after the note is burnt: a PATA or an ETA.
+- **Source** — where the tokens come from: an `AssociatedTokenAccount (ATA)` or an `EncryptedTokenAccount (ETA)`.
+- **Destination** — where the tokens land after the note is burnt: an ATA or an ETA.
 - **Unlocker** — whether the sender (self-burnable) or the recipient (receiver-burnable) controls the burn.
 
 Writing a note from an ETA hides the deposited amount — no observer can see how much entered the pool. Burning into an ETA hides the released amount — no observer can see how much left the pool. When both ends are shielded, amounts cannot be correlated at all, and the sender is completely unlinkable at burn time.
@@ -47,13 +47,13 @@ Pairs share the same cryptographic strength. Within each pair, receiver-burnable
   - ETA → receiver-burnable → ETA.
   - ETA → self-burnable → ETA.
 - **Tier 2** — Mixed (one end shielded)
-  - ETA → receiver-burnable → PATA *(not yet shipped in V14 SDK; on-chain only)*.
-  - ETA → self-burnable → PATA.
-  - PATA → receiver-burnable → ETA.
-  - PATA → self-burnable → ETA.
-- **Tier 3** — PATA → PATA (both ends public)
-  - PATA → receiver-burnable → PATA *(not yet shipped in V14 SDK)*.
-  - PATA → self-burnable → PATA.
+  - ETA → receiver-burnable → ATA *(not yet shipped in V18 SDK; on-chain only)*.
+  - ETA → self-burnable → ATA.
+  - ATA → receiver-burnable → ETA.
+  - ATA → self-burnable → ETA.
+- **Tier 3** — ATA → ATA (both ends public)
+  - ATA → receiver-burnable → ATA *(not yet shipped in V18 SDK)*.
+  - ATA → self-burnable → ATA.
 
 ---
 
@@ -85,44 +85,44 @@ Cryptographically identical to the receiver-burnable variant. The same party con
 
 One side is visible, one is hidden. Amounts can be partially observed but not fully correlated across the pool boundary.
 
-### ETA → self-burnable → PATA
+### ETA → self-burnable → ATA
 
 The write is hidden but the burn exits publicly. No amount is visible at entry, so the visible exit cannot be tied back to any specific note with certainty.
 
-- **Visible on-chain** — burned amount and destination PATA at burn time.
+- **Visible on-chain** — burned amount and destination ATA at burn time.
 - **Hidden** — written amount and any quantitative link from the burn back to the write.
 - **Timing risk** — medium. The burn amount is visible but no matching write amount can be observed. Same party controls both events, so timing correlation is possible if you burn promptly after writing.
 - **Best for** — surfacing funds into a public wallet where hiding the deposit amount matters more than hiding the exit.
 
-### PATA → receiver-burnable → ETA
+### ATA → receiver-burnable → ETA
 
 The write is public but the burn is hidden. An observer can see who wrote and how much, but the burn produces no visible exit. The recipient acts independently.
 
-- **Visible on-chain** — written amount and the writing PATA at note-write time.
+- **Visible on-chain** — written amount and the writing ATA at note-write time.
 - **Hidden** — burned amount, burn destination, link from the visible write to the eventual burn.
 - **Timing risk** — low-medium. The exit is invisible, so even though the write is known, there is no observable burn event to correlate it against. The recipient controls timing.
 - **Best for** — scenarios where the sender's identity is not sensitive but the recipient's privacy must be protected.
 
-### PATA → self-burnable → ETA
+### ATA → self-burnable → ETA
 
 Cryptographically identical to the receiver-burnable variant; the same party controls both events.
 
-- **Visible on-chain** — written amount and writing PATA at note-write time.
+- **Visible on-chain** — written amount and writing ATA at note-write time.
 - **Hidden** — burned amount and destination.
 - **Timing risk** — medium. The write is fully visible. The exit leaves no trace, but the sender burning their own note may do so close to the write time.
 - **Best for** — moving funds into a private ETA from a known public wallet, where the source is not sensitive but the destination must be hidden.
 
 ---
 
-## Tier 3 — PATA → PATA
+## Tier 3 — ATA → ATA
 
 Both ends are public. Amounts are fully observable at write and burn. The only privacy property is the absence of a direct on-chain link.
 
-### PATA → self-burnable → PATA
+### ATA → self-burnable → ATA
 
 The weakest flow. Both events are fully visible and the same party controls both, making timing and amount correlation straightforward.
 
-- **Visible on-chain** — written amount, writing PATA, burned amount, destination PATA.
+- **Visible on-chain** — written amount, writing ATA, burned amount, destination ATA.
 - **Hidden** — the direct on-chain link between the two addresses; a ZK proof still prevents anyone from proving which write maps to which burn without the secret inputs.
 - **Timing risk** — high. Amounts are visible at both ends. Matching equal amounts written and burnt within a short window is easy when the anonymity set is small.
 - **Best for** — the minimum viable case where address unlinking is the only goal and amount / timing privacy are not a concern. Use round, pool-common amounts to maximise the anonymity set.

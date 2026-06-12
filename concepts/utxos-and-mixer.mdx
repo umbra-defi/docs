@@ -5,7 +5,7 @@ description: "Stealth Pool internals: Indexed Merkle Tree of note commitments, n
 
 ## What is a Stealth Pool Note?
 
-A **Stealth Pool Note** is Umbra V14's name for what V13 called a "UTXO". On-chain it is still a [UTXO](https://bitcoin.org/bitcoin.pdf)-style commitment leaf in the mixer's Indexed Merkle Tree — the rename happens at the SDK surface. Everywhere the SDK used to say "UTXO" we now say "Stealth Pool Note"; everywhere it used to say "claim" we now say "burn".
+A **Stealth Pool Note** is a [UTXO](https://bitcoin.org/bitcoin.pdf)-style commitment leaf in the mixer's Indexed Merkle Tree. The SDK surfaces these commitments as "notes", and the act of consuming one is a "burn".
 
 A note encodes:
 
@@ -29,14 +29,14 @@ The Stealth Pool is a shared **[Indexed Merkle Tree](https://link.springer.com/c
     As more users write notes into the same tree, your commitment becomes one of many. The larger the set, the harder it is to link the write to the eventual burn. Trees hold up to **1,048,576 leaves** (depth-20 Indexed Merkle Tree).
   </Step>
   <Step title="Scan">
-    The SDK queries the indexer for note ciphertexts, attempts to decrypt each with your viewing keys, and groups successful decrypts by `(burn kind, source)`. The V14 scanner is **zero-arg** — it walks every active tree and tracks its own cursor in `client.utxoDataStore`. See [Scanning](/sdk/mixer/fetching-utxos).
+    The SDK queries the indexer for note ciphertexts, attempts to decrypt each with your viewing keys, and groups successful decrypts by `(burn kind, source)`. The scanner is **zero-arg** — it walks every active tree and tracks its own cursor in `client.utxoDataStore`. See [Scanning](/sdk/mixer/fetching-utxos).
   </Step>
   <Step title="Burn">
     You present a **[zero-knowledge proof](https://dl.acm.org/doi/10.1145/22145.22178)** that proves:
     - You know the secret inputs behind a commitment that exists in the tree.
     - You haven't burnt it before (nullifier is unspent).
 
-    Without revealing *which* commitment it is. The on-chain program verifies the proof, burns the nullifier, and releases the tokens to the destination ETA or PATA.
+    Without revealing *which* commitment it is. The on-chain program verifies the proof, burns the nullifier, and releases the tokens to the destination ETA or ATA.
   </Step>
 </Steps>
 
@@ -44,9 +44,9 @@ The Stealth Pool is a shared **[Indexed Merkle Tree](https://link.springer.com/c
 
 A note is parameterised on two axes — **unlocker** (who can burn it) × **source** (where the funds came from):
 
-- **Self-burnable from PATA** — `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — sender keeps the unlocker; funded from the writer's PATA. Single tx, no MPC.
+- **Self-burnable from ATA** — `getATAIntoSelfBurnableStealthPoolNoteCreatorFunction` — sender keeps the unlocker; funded from the writer's ATA. Single tx, no MPC.
 - **Self-burnable from ETA** — `getETAIntoSelfBurnableStealthPoolNoteCreatorFunction` — sender keeps the unlocker; funded from the writer's ETA. Two-tx MPC pipeline.
-- **Receiver-burnable from PATA** — `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — unlocker encrypted against the recipient's `userCommitment`; funded from the writer's PATA.
+- **Receiver-burnable from ATA** — `getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — unlocker encrypted against the recipient's `userCommitment`; funded from the writer's ATA.
 - **Receiver-burnable from ETA** — `getETAIntoReceiverBurnableStealthPoolNoteCreatorFunction` — same recipient model, funded from the writer's ETA. Two-tx MPC pipeline.
 
 The "self-burnable" pattern is useful when you want to move funds through the pool yourself. The "receiver-burnable" pattern lets you send tokens anonymously — you write for a recipient, and they burn the note without you having direct access.
@@ -109,10 +109,10 @@ The privacy guarantee of the pool depends on how many other notes exist in the s
 In practice:
 - Wait for more users to write notes before burning.
 - Burning into a different address from the write address increases privacy.
-- Combining a burn into an ETA (rather than a PATA) hides the destination amount further.
+- Combining a burn into an ETA (rather than an ATA) hides the destination amount further.
 
 ## Trees Fill Up
 
 Each Merkle tree has a maximum of 1,048,576 leaves. When a tree is full, the on-chain write service starts a new tree at the next sequential index. Notes from different trees have separate anonymity sets.
 
-The V14 scanner walks every active tree automatically — you do not need to specify a tree index. (V13's `(treeIndex, start, end)` arguments are gone; cursor state lives in `client.utxoDataStore` and is per-tree under the hood.)
+The scanner walks every active tree automatically — you do not need to specify a tree index. (The old `(treeIndex, start, end)` arguments are gone; cursor state lives in `client.utxoDataStore` and is per-tree under the hood.)

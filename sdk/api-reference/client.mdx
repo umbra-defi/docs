@@ -141,7 +141,7 @@ The client object returned by `getUmbraClient`. All fields are read-only.
 </ResponseField>
 
 <ResponseField name="fetchUtxoData" type="UtxoDataFetcherFunction | undefined">
-  Indexer-based Stealth Pool Note data fetcher used internally by the scanner. Field name retained from V13 for backwards compatibility — V14 scanner override is `deps.fetchStealthPoolNoteData`. `undefined` if `indexerApiEndpoint` was not provided.
+  Indexer-based Stealth Pool Note data fetcher used internally by the scanner. Field name retained for backwards compatibility — the V18 scanner override is `deps.fetchStealthPoolNoteData`. `undefined` if `indexerApiEndpoint` was not provided.
 </ResponseField>
 
 <ResponseField name="fetchTreeSummary" type="TreeSummaryFetcherFunction | undefined">

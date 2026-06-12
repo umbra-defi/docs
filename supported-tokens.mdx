@@ -1,6 +1,6 @@
 ---
 title: "Supported Tokens"
-description: "V14 mint list: wSOL, USDC, USDT, UMBRA, CASH on mainnet; wSOL only on devnet. Each pool supports both EncryptedTokenAccount operations and the Stealth Pool mixer, including Token-2022 transfer fees."
+description: "V18 mint list: wSOL, USDC, USDT, UMBRA, CASH, ZINC on mainnet; wSOL only on devnet. Each pool supports both EncryptedTokenAccount operations and the Stealth Pool mixer, including Token-2022 transfer fees."
 ---
 
 ## Overview
@@ -57,6 +57,13 @@ const live    = await relayer.getSupportedMints();
   - EncryptedTokenAccount: enabled
   - Stealth Pool: enabled
 
+- **ZINC**
+  - Mint: `zinc155BS4mSPk8GXQj4R5hkVDQXcW253pTYq5SGyfi`
+  - Decimals: 9
+  - Token program: SPL
+  - EncryptedTokenAccount: enabled
+  - Stealth Pool: enabled
+
 ---
 
 ## Devnet
@@ -106,11 +113,11 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-// Deposit: PATA → ETA
+// Deposit: ATA → ETA
 const deposit = getATAIntoETADirectDepositorFunction({ client });
 await deposit(client.signer.address, USDC, 1_000_000n);
 
-// Withdraw: ETA → PATA
+// Withdraw: ETA → ATA
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 await withdraw(client.signer.address, USDC, 1_000_000n);
 ```

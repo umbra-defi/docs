@@ -10,7 +10,7 @@ The Umbra relayer is a transaction submission service that builds, signs, and su
 The relayer is used internally by the SDK's burner factories. You do not need to interact with the relayer API directly unless you are building a custom integration.
 
 <Note>
-The wire protocol retains the legacy `claim` noun: the endpoint is `/v1/claims`, the JSON shape is `{ request_id, status, … }`, and the SDK's relayer client method names are `submitClaim` / `pollClaimStatus`. In V14 the burner factory's `relayer` dep uses the renamed property names `submitBurn` / `pollBurnStatus`, which are TypeScript aliases of the claim equivalents — the relayer client's existing methods plug in directly. **There is no breaking wire change.**
+The wire protocol retains the legacy `claim` noun: the endpoint is `/v1/claims`, the JSON shape is `{ request_id, status, … }`, and the SDK's relayer client method names are `submitClaim` / `pollClaimStatus`. In V18 the burner factory's `relayer` dep uses the renamed property names `submitBurn` / `pollBurnStatus`, which are TypeScript aliases of the claim equivalents — the relayer client's existing methods plug in directly. **There is no breaking wire change.**
 </Note>
 
 ## Base URL
@@ -25,7 +25,7 @@ The wire protocol retains the legacy `claim` noun: the endpoint is `/v1/claims`,
 3. The SDK submits the request to the relayer via `POST /v1/claims`.
 4. The relayer validates, builds the on-chain transactions, and submits them.
 5. The SDK polls `GET /v1/claims/{request_id}` until the request reaches a terminal status.
-6. The burned tokens appear in the destination ETA or PATA.
+6. The burned tokens appear in the destination ETA or ATA.
 
 ## SDK Integration
 

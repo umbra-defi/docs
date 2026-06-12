@@ -1,6 +1,6 @@
 ---
 title: "Conversion API Reference"
-description: "Complete V14 reference for converting MXE-only ETAs to Shared mode + rotating the per-mint X25519 key."
+description: "Complete V18 reference for converting MXE-only ETAs to Shared mode + rotating the per-mint X25519 key."
 ---
 
 ## `getNetworkEncryptionToSharedEncryptionConverterFunction`
@@ -10,8 +10,8 @@ import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-
 
 function getNetworkEncryptionToSharedEncryptionConverterFunction(
   args: { client: IUmbraClient },
-  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
-): NetworkEncryptionToSharedEncryptionConverterFunction;
+  deps?: GetConvertToSharedEncryptionFunctionDeps,
+): ConvertToSharedEncryptionFunction;
 ```
 
 Factory function that returns a callable conversion function.
@@ -77,8 +77,8 @@ import { getMintEncryptionKeyRotatorFunction } from "@umbra-privacy/sdk/account"
 
 function getMintEncryptionKeyRotatorFunction(
   args: { client: IUmbraClient },
-  deps?: GetMintX25519KeyRotatorFunctionDeps,
-): MintX25519KeyRotatorFunction;
+  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
+): RotateMintX25519EncryptionKeyFunction;
 ```
 
 Rotates the X25519 encryption key for a specific mint's Shared-mode ETA. **MPC operation** — re-encrypts the on-chain balance under the new per-mint key. Use this when the per-mint key may have been compromised. The account must already be in Shared mode.

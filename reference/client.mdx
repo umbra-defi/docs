@@ -102,7 +102,7 @@ The read-only configuration object produced by `getUmbraClient`. All factory fun
 - `epochInfoProvider: GetEpochInfo` - Epoch info fetcher (RPC-based or overridden).
 - `fetchMerkleProof?: MerkleProofFetcherFunction` — indexer-based single-leaf Merkle proof fetcher. Present only when `indexerApiEndpoint` is set.
 - `fetchBatchMerkleProof?: BatchMerkleProofFetcherFunction` — indexer-based per-batch Merkle proof fetcher. Pass to burner factories. Present only when `indexerApiEndpoint` is set.
-- `fetchUtxoData?: UtxoDataFetcherFunction` — indexer-based Stealth Pool Note data fetcher used internally by the scanner. (Field name retains V13 spelling for backwards compatibility — the V14 scanner deps override is named `fetchStealthPoolNoteData`, see `/reference/mixer`.) Present only when `indexerApiEndpoint` is set.
+- `fetchUtxoData?: UtxoDataFetcherFunction` — indexer-based Stealth Pool Note data fetcher used internally by the scanner. (Field name retains its legacy spelling for backwards compatibility — the V18 scanner deps override is named `fetchStealthPoolNoteData`, see `/reference/mixer`.) Present only when `indexerApiEndpoint` is set.
 - `fetchTreeSummary?: TreeSummaryFetcherFunction` — indexer-based tree summary fetcher. Present only when `indexerApiEndpoint` is set.
 - `utxoDataStore?` / `nullifierStore?` — same instances supplied at construction, when present.
 - `masterSeed: { load, store, generate, getMasterSeed }` — master seed storage operations. `load` attempts to load an existing seed, `store` persists it, `generate` derives a new seed via signature, and `getMasterSeed` is a convenience method combining load and generate.

@@ -9,20 +9,20 @@ description: "API reference: getNetworkEncryptionToSharedEncryptionConverterFunc
 
 ```typescript
 function getNetworkEncryptionToSharedEncryptionConverterFunction(
-  args: GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs,
-  deps?: GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps,
-): NetworkEncryptionToSharedEncryptionConverterFunction
+  args: GetConvertToSharedEncryptionFunctionArgs,
+  deps?: GetConvertToSharedEncryptionFunctionDeps,
+): ConvertToSharedEncryptionFunction
 ```
 
 Converts one or more encrypted token accounts from MXE-mode (network-decryptable only) to shared-mode (user-decryptable). Conversion is per-mint and involves an on-chain Arcium MPC computation. Mints that are already in shared mode, uninitialized, or non-existent are skipped rather than erroring.
 
 ---
 
-### GetNetworkEncryptionToSharedEncryptionConverterFunctionArgs
+### GetConvertToSharedEncryptionFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetNetworkEncryptionToSharedEncryptionConverterFunctionDeps
+### GetConvertToSharedEncryptionFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `getLatestBlockhash?: GetLatestBlockhash`
@@ -97,20 +97,20 @@ for (const [mint, reason] of result.skipped) {
 
 ```typescript
 function getMintEncryptionKeyRotatorFunction(
-  args: GetMintEncryptionKeyRotatorFunctionArgs,
-  deps?: GetMintEncryptionKeyRotatorFunctionDeps,
-): MintEncryptionKeyRotatorFunction
+  args: GetRotateMintX25519EncryptionKeyFunctionArgs,
+  deps?: GetRotateMintX25519EncryptionKeyFunctionDeps,
+): RotateMintX25519EncryptionKeyFunction
 ```
 
 Rotates the X25519 encryption key for a specific mint's shared-mode encrypted token account. Use this when the per-mint key may have been compromised. The account must already be in shared mode.
 
 ---
 
-### GetMintEncryptionKeyRotatorFunctionArgs
+### GetRotateMintX25519EncryptionKeyFunctionArgs
 
 - `client: IUmbraClient`
 
-### GetMintEncryptionKeyRotatorFunctionDeps
+### GetRotateMintX25519EncryptionKeyFunctionDeps
 
 - `accountInfoProvider?: AccountInfoProviderFunction`
 - `getLatestBlockhash?: GetLatestBlockhash`
@@ -119,14 +119,16 @@ Rotates the X25519 encryption key for a specific mint's shared-mode encrypted to
 
 ### Returns
 
-`MintEncryptionKeyRotatorFunction`
+`RotateMintX25519EncryptionKeyFunction`
 
 ```typescript
-type MintEncryptionKeyRotatorFunction = (
+type RotateMintX25519EncryptionKeyFunction = (
   mint: Address,
   optionalData?: OptionalData32,
   hooks?: RotateMintKeyHooks,
-) => Promise<RotateMintKeyResult>
+  microLamportsPerAcu?: MicroLamportsPerAcu,
+  options?: RotateMintKeyOptions,
+) => Promise<TransactionSignature>
 ```
 
 - `mint: Address` - The token mint whose X25519 key to rotate.

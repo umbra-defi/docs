@@ -6,7 +6,7 @@ This documentation covers the SDK API, protocol concepts, indexer REST API, and 
 
 ## Key terms
 
-- **PATA** — `PublicAssociatedTokenAccount`. A standard SPL ATA.
+- **ATA** — `AssociatedTokenAccount`. A standard SPL ATA.
 - **ETA** — `EncryptedTokenAccount`. Umbra-managed encrypted balance, two modes (MXE-only and Shared).
 - **Stealth Pool Note** — a commitment leaf in the mixer's Indexed Merkle Tree (the SDK surfaces it as a "note").
 - **Burn** — consuming a note: reveals its nullifier on-chain and credits the destination balance. The wire protocol retains `/v1/claims` and `submitClaim` / `pollClaimStatus`; the burner-factory `relayer` dep uses TypeScript aliases `submitBurn` / `pollBurnStatus` that re-export the claim methods.
@@ -92,11 +92,11 @@ await register({ confidential: true, anonymous: true });
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-// Deposit 1 USDC PATA → ETA.
+// Deposit 1 USDC ATA → ETA.
 const deposit = getATAIntoETADirectDepositorFunction({ client });
 await deposit(signer.address, USDC, 1_000_000n);
 
-// Withdraw ETA → PATA.
+// Withdraw ETA → ATA.
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 await withdraw(signer.address, USDC, 1_000_000n);
 ```
@@ -154,7 +154,7 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 
 - [How Umbra Works](https://docs.umbraprivacy.com/concepts/how-umbra-works): EncryptedTokenAccounts + Stealth Pool privacy model, MPC dual-instruction pattern, MXE vs Shared encryption modes.
 - [Encrypted Balances](https://docs.umbraprivacy.com/concepts/encrypted-balances): ETAs, MXE-only vs Shared, nonces, balance queries via Rescue cipher decryption.
-- [Stealth Pool Notes](https://docs.umbraprivacy.com/concepts/utxos-and-mixer): Indexed Merkle Tree (depth-20, 1M leaves), nullifier treaps, 4 note variants (self / receiver × PATA / ETA), recipient pre-check.
+- [Stealth Pool Notes](https://docs.umbraprivacy.com/concepts/utxos-and-mixer): Indexed Merkle Tree (depth-20, 1M leaves), nullifier treaps, 4 note variants (self / receiver × ATA / ETA), recipient pre-check.
 
 ## Getting Started
 
@@ -178,11 +178,11 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 
 ## Stealth Pool Operations
 
-- [Overview](https://docs.umbraprivacy.com/sdk/mixer/overview): 4 creator factories × 3 shipped burner factories. Native batching for receiver→ETA (≤4 per proof); single-note for self→ETA / self→PATA.
-- [Writing Notes](https://docs.umbraprivacy.com/sdk/mixer/creating-utxos): `getSelf/ReceiverBurnableStealthPoolNoteFromPublicAssociatedTokenAccountCreatorFunction`, `getSelf/ReceiverBurnableStealthPoolNoteFromEncryptedTokenAccountCreatorFunction` (MPC). Recipient pre-check rubric for receiver-burnable creates.
+- [Overview](https://docs.umbraprivacy.com/sdk/mixer/overview): 4 creator factories × 3 shipped burner factories. Native batching for receiver→ETA (≤4 per proof); single-note for self→ETA / self→ATA.
+- [Writing Notes](https://docs.umbraprivacy.com/sdk/mixer/creating-utxos): `getATAIntoSelf/ReceiverBurnableStealthPoolNoteCreatorFunction`, `getETAIntoSelf/ReceiverBurnableStealthPoolNoteCreatorFunction` (MPC). Recipient pre-check rubric for receiver-burnable creates.
 - [Scanning](https://docs.umbraprivacy.com/sdk/mixer/fetching-utxos): `getBurnableStealthPoolNoteScannerFunction({ client })()` — **zero-arg**, returns `ScannedStealthPoolNoteResult` with 4 long-form keys (`etaToStealthPoolSelfBurnable`, `etaToStealthPoolReceiverBurnable`, `ataToStealthPoolSelfBurnable`, `ataToStealthPoolReceiverBurnable`) + `scannedTrees`. Cursor in `client.utxoDataStore`.
 - [Burning](https://docs.umbraprivacy.com/sdk/mixer/claiming-utxos): `getReceiverBurnableStealthPoolNoteIntoETABurnerFunction`, `getSelfBurnableStealthPoolNoteIntoETABurnerFunction`, `getSelfBurnableStealthPoolNoteIntoATABurnerFunction` — require `fetchBatchMerkleProof`, `zkProver`, and `relayer: { submitBurn, pollBurnStatus, getRelayerAddress }`.
-- [Privacy Analysis](https://docs.umbraprivacy.com/sdk/mixer/privacy-analysis): 3-tier model — Tier 1 ETA↔ETA strongest, Tier 2 mixed, Tier 3 PATA↔PATA weakest.
+- [Privacy Analysis](https://docs.umbraprivacy.com/sdk/mixer/privacy-analysis): 3-tier model — Tier 1 ETA↔ETA strongest, Tier 2 mixed, Tier 3 ATA↔ATA weakest.
 
 ## Compliance
 
@@ -244,7 +244,7 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 ## Protocol Constants
 
 - Program ID (Mainnet): `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh`.
-- Program ID (Devnet): `342qFp62fzTt4zowrVPhrDdcRLGapPCMe8w5kFSoJ4f4`.
+- Program ID (Devnet): `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`.
 - BPS Divisor: 16,384 (2^14).
 - Indexer (Mainnet): `https://utxo-indexer.api.umbraprivacy.com`.
 - Indexer (Devnet): `https://utxo-indexer.api-devnet.umbraprivacy.com`.
@@ -254,7 +254,7 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 
 ## Migrations
 
-- [V4 → V5 Migration](https://docs.umbraprivacy.com/migrations/v4-to-v5): step-by-step upgrade from `@umbra-privacy/sdk@4.x` (V13) to `@umbra-privacy/sdk@5.x` (V14). Covers package consolidation (`@umbra-privacy/web-zk-prover` deleted), subpath imports, every factory rename, zero-arg scanner + long-form result keys, the new burner-factory `relayer` dep shape with `submitBurn`/`pollBurnStatus`/`getRelayerAddress` aliases, browser store-adapter wiring, mint-list changes, and end-to-end before/after.
+- [V4 → V5 Migration](https://docs.umbraprivacy.com/migrations/v4-to-v5): step-by-step upgrade from `@umbra-privacy/sdk@4.x` (V13) to `@umbra-privacy/sdk@5.x` (V18). Covers package consolidation (`@umbra-privacy/web-zk-prover` deleted), subpath imports, every factory rename, zero-arg scanner + long-form result keys, the new burner-factory `relayer` dep shape with `submitBurn`/`pollBurnStatus`/`getRelayerAddress` aliases, browser store-adapter wiring, mint-list changes, and end-to-end before/after.
 
 ## Optional
 

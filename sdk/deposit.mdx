@@ -1,15 +1,15 @@
 ---
 title: "Deposit"
-description: "getATAIntoETADirectDepositorFunction (V14): transfer SPL/Token-2022 tokens from a PATA to an EncryptedTokenAccount. Returns DepositResult with net amount and tx signatures."
+description: "getATAIntoETADirectDepositorFunction: transfer SPL/Token-2022 tokens from an ATA to an EncryptedTokenAccount. Returns DepositResult with net amount and tx signatures."
 ---
 
 ## Overview
 
-The `deposit` operation moves tokens from a user's `PublicAssociatedTokenAccount (PATA)` into their `EncryptedTokenAccount (ETA)`. After a successful deposit, the balance is hidden on-chain.
+The `deposit` operation moves tokens from a user's `AssociatedTokenAccount (ATA)` into their `EncryptedTokenAccount (ETA)`. After a successful deposit, the balance is hidden on-chain.
 
 <Steps>
-  <Step title="Transfer from PATA">
-    Tokens are moved from the user's `PublicAssociatedTokenAccount` into the pool custody account — an on-chain SPL or Token-2022 account controlled by the Umbra program.
+  <Step title="Transfer from ATA">
+    Tokens are moved from the user's `AssociatedTokenAccount` into the pool custody account — an on-chain SPL or Token-2022 account controlled by the Umbra program.
   </Step>
   <Step title="Fee Deduction">
     Protocol fees and any Token-2022 transfer fees are subtracted from the incoming amount. The net amount is what gets credited to the ETA.
@@ -73,7 +73,7 @@ const result = await deposit(
 </ParamField>
 
 <Note>
-There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `purpose` options on the V14 depositor. Priority fees are configured at factory time via `deps.microLamportsPerAcuPolicy`. Callback waiting is always-on for direct deposits — the result's `callback` field is populated on success.
+There are no `priorityFees`, `awaitCallback`, `skipPreflight`, `maxRetries`, or `purpose` options on the depositor. Priority fees are configured at factory time via `deps.microLamportsPerAcuPolicy`. Callback waiting is always-on for direct deposits — the result's `callback` field is populated on success.
 </Note>
 
 ## Return Value
@@ -118,7 +118,7 @@ You do not need to specify the mode manually. The destination address's `isUserA
 
 ## Protocol Fees
 
-Fees are deducted from the `transferAmount` before crediting the ETA. With V14's BPS divisor of 16,384:
+Fees are deducted from the `transferAmount` before crediting the ETA. With the BPS divisor of 16,384:
 
 ```
 credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 16384)
@@ -127,7 +127,7 @@ credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commiss
 Protocol-fee configuration is set on-chain by the pool admin and may vary per pool. The current default is a small fixed base fee plus a 35-bps commission. See [Pricing](/pricing) for full details.
 
 <Note>
-In most cases, direct deposits from your own PATA to your own ETA carry **zero protocol fees** — the `baseFee` and `commissionBps` are both set to 0 for standard self-shielding. Fees may apply for deposits routed through relayers or for specific pool configurations.
+In most cases, direct deposits from your own ATA to your own ETA carry **zero protocol fees** — the `baseFee` and `commissionBps` are both set to 0 for standard self-shielding. Fees may apply for deposits routed through relayers or for specific pool configurations.
 </Note>
 
 ## Example: Self-Deposit

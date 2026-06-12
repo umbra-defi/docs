@@ -999,7 +999,7 @@ RDS goes down                     Write service polls SQS but writes fail → me
 
 SQS goes down                     Consumer buffers in-memory (bounded) + exponential retry
                                   SQS has 99.999999999% durability and is replicated across AZs
-                                  Outages are extremely rare (<5 minutes/year historically)
+                                  Outages are extremely rare (`<5` minutes/year historically)
 
 Read replica lag                  Monitor via CloudWatch → alert if > 5s
 
@@ -1070,10 +1070,10 @@ For historical data or gap recovery:
 
 ### 10.1 Expected Throughput
 
-- **Consumer → SQS**: >10,000 messages/second (SendMessageBatch, 10 msgs/call)
-- **Write service**: >5,000 transactions/second (batch writes to RDS)
-- **API reads**: >10,000 req/s per replica (indexed RDS PostgreSQL)
-- **End-to-end latency**: <500ms from on-chain confirmation to API availability
+- **Consumer → SQS**: `>10,000` messages/second (SendMessageBatch, 10 msgs/call)
+- **Write service**: `>5,000` transactions/second (batch writes to RDS)
+- **API reads**: `>10,000` req/s per replica (indexed RDS PostgreSQL)
+- **End-to-end latency**: `<500ms` from on-chain confirmation to API availability
   - Laserstream: ~200ms, SQS: ~5ms, Parse+Write: ~50ms, Replication: ~100ms
 
 ### 10.2 Storage Estimates

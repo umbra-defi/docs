@@ -7,7 +7,7 @@ description: "Generate a Merkle inclusion proof for a specific leaf in a Merkle 
 Returns an authentication path of **20 sibling hashes** — one per level — ordered from the leaf level (index 0) up to the root level (index 19). All hash values are little-endian 64-character hex strings (32 bytes each).
 
 <Warning>
-Merkle proofs become **stale** when new leaves are inserted into the tree (because the root changes). The V14 burner factories fetch a per-batch proof immediately before submitting the burn, so simply re-run the burner on a stale-root failure — it refetches the proof. Never cache proofs across operations.
+Merkle proofs become **stale** when new leaves are inserted into the tree (because the root changes). The V18 burner factories fetch a per-batch proof immediately before submitting the burn, so simply re-run the burner on a stale-root failure — it refetches the proof. Never cache proofs across operations.
 </Warning>
 
 ## Verifying a Proof

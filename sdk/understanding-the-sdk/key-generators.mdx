@@ -90,7 +90,7 @@ type PoseidonKeystreamBlindingFactorGeneratorFunction = () => Promise<Bn254Field
 
 ### Ephemeral Stealth Pool Note key generators
 
-Each note operation uses per-note ephemeral keys parameterised by the on-chain generation index. All are injectable. The TypeScript names retained their V13 spellings (`EphemeralUtxo*`) and the burn-side interfaces re-export them under V14 aliases:
+Each note operation uses per-note ephemeral keys parameterised by the on-chain generation index. All are injectable. The TypeScript names retained their V13 spellings (`EphemeralUtxo*`) and the burn-side interfaces re-export them under V18 aliases:
 
 ```typescript
 type EphemeralUtxoMasterViewingKeyDeriverFunction = (offset: U256) => Promise<MasterViewingKey>;

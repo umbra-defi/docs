@@ -1,13 +1,13 @@
 ---
 title: "Writing Stealth Pool Notes"
-description: "4 V14 note-creator factory functions: getSelfBurnableStealthPoolNoteFrom{Public|Encrypted}…Creator and getReceiverBurnableStealthPoolNoteFrom{Public|Encrypted}…Creator. Merkle insertion + on-chain ciphertext."
+description: "4 V18 note-creator factory functions: get{ATA|ETA}IntoSelfBurnableStealthPoolNoteCreatorFunction and get{ATA|ETA}IntoReceiverBurnableStealthPoolNoteCreatorFunction. Merkle insertion + on-chain ciphertext."
 ---
 
 ## Overview
 
 Writing a Stealth Pool Note inserts a Poseidon commitment into the on-chain Indexed Merkle Tree and locks the corresponding tokens in the pool. The SDK also publishes an X25519 + AES-GCM ciphertext on-chain so the unlocker can later discover the note with their viewing keys.
 
-Choose the factory function that matches your source (`PATA` or `ETA`) and unlocker (self-burnable or receiver-burnable). All four factories live under `@umbra-privacy/sdk/deposit`.
+Choose the factory function that matches your source (`ATA` or `ETA`) and unlocker (self-burnable or receiver-burnable). All four factories live under `@umbra-privacy/sdk/deposit`.
 
 ## Registration prerequisites differ by variant
 
@@ -36,9 +36,9 @@ if (!ready) {
 
 ## Factory Functions
 
-### Self-burnable from PATA
+### Self-burnable from ATA
 
-Single-tx, no MPC. Funds locked directly from your PATA. You unlock.
+Single-tx, no MPC. Funds locked directly from your ATA. You unlock.
 
 ```typescript
 import { getATAIntoSelfBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
@@ -58,9 +58,9 @@ const signatures = await createNote({
 });
 ```
 
-### Receiver-burnable from PATA
+### Receiver-burnable from ATA
 
-Single-tx, no MPC. Funds locked from your PATA. **Recipient must be fully registered.**
+Single-tx, no MPC. Funds locked from your ATA. **Recipient must be fully registered.**
 
 ```typescript
 import { getATAIntoReceiverBurnableStealthPoolNoteCreatorFunction } from "@umbra-privacy/sdk/deposit";
@@ -143,7 +143,7 @@ All four creator factories accept a `CreateUtxoArgs` object as the first argumen
 </ParamField>
 
 <ParamField path="options.generationIndex" type="U256">
-  Optional deterministic generation index. Defaults to a random `U256` (CSPRNG). Pass the same `generationIndex` on retry to allow the V14 pipeline's `closeProofAccount` step to reclaim a proof-account orphan from a prior failed attempt.
+  Optional deterministic generation index. Defaults to a random `U256` (CSPRNG). Pass the same `generationIndex` on retry to allow the V18 pipeline's `closeProofAccount` step to reclaim a proof-account orphan from a prior failed attempt.
 </ParamField>
 
 <ParamField path="options.optionalData" type="OptionalData32">
@@ -155,11 +155,11 @@ All four creator factories accept a `CreateUtxoArgs` object as the first argumen
 </ParamField>
 
 <ParamField path="options.epochInfoCommitment" type="Commitment" default='"confirmed"'>
-  (PATA-source only) Commitment level for epoch-info fetches (Token-2022 transfer-fee schedule).
+  (ATA-source only) Commitment level for epoch-info fetches (Token-2022 transfer-fee schedule).
 </ParamField>
 
-<ParamField path="options.hooks" type="CreateStealthPoolNoteFromEncryptedTokenAccountHooks | CreateStealthPoolNoteFromPublicAssociatedTokenAccountHooks">
-  Per-phase + per-step lifecycle hooks. Per-step slots use `{ onPreSend, onPostSend, onSkipped }`. Step slot names: `closeProofAccount` (fires only when a stale proof account from a prior failed attempt is reclaimed), `populateProofAccount`, `createStealthPoolNote` (PATA-source pipeline only; ETA-source uses `queueComputation` instead).
+<ParamField path="options.hooks" type="ETAIntoStealthPoolNoteCreatorHooks | ATAIntoStealthPoolNoteCreatorHooks">
+  Per-phase + per-step lifecycle hooks. Per-step slots use `{ onPreSend, onPostSend, onSkipped }`. Step slot names: `closeProofAccount` (fires only when a stale proof account from a prior failed attempt is reclaimed), `populateProofAccount`, `createStealthPoolNote` (ATA-source pipeline only; ETA-source uses `queueComputation` instead).
 </ParamField>
 
 <ParamField path="deps.zkProver" type="ZkProver" required>
@@ -167,14 +167,14 @@ All four creator factories accept a `CreateUtxoArgs` object as the first argumen
 </ParamField>
 
 <Note>
-V4 fields `priorityFees`, `purpose`, `awaitCallback`, `skipPreflight`, `maxRetries` do not exist on V5 note creators. The V4 `callbacks: { createProofAccount, createUtxo, closeProofAccount }` shape has been replaced by `options.hooks` (PATA-source) or `deps.hooks` (ETA-source) with `onPreSend`/`onPostSend`/`onSkipped` per-step events.
+V4 fields `priorityFees`, `purpose`, `awaitCallback`, `skipPreflight`, `maxRetries` do not exist on V5 note creators. The V4 `callbacks: { createProofAccount, createUtxo, closeProofAccount }` shape has been replaced by `options.hooks` (ATA-source) or `deps.hooks` (ETA-source) with `onPreSend`/`onPostSend`/`onSkipped` per-step events.
 </Note>
 
 ## Return Value
 
 The return type depends on the source:
 
-- **From PATA (ZK-only):** `Promise<TransactionSignature[]>` of length 1 — `[noteWriteSig]`.
+- **From ATA (ZK-only):** `Promise<TransactionSignature[]>` of length 1 — `[noteWriteSig]`.
 - **From ETA (MPC pipeline):** `Promise<TransactionSignature[]>` of length 2 — `[proofAccountSig, noteWriteSig]`.
 
 ## The ZK prover dependency
@@ -189,7 +189,7 @@ The `zkProver` dependency is **required** and cannot be omitted. There is no bui
 
 ## Anonymous payment fallback (receiver-burnable → self-burnable)
 
-For one-shot payments to a recipient who may not be registered, prefer the **self-burnable PATA** variant + share a recovery secret out of band (or use the relayer's escrow flow). This avoids the "recipient must register first" UX trap:
+For one-shot payments to a recipient who may not be registered, prefer the **self-burnable ATA** variant + share a recovery secret out of band (or use the relayer's escrow flow). This avoids the "recipient must register first" UX trap:
 
 ```typescript
 import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk/query";
@@ -198,7 +198,6 @@ import {
   getATAIntoSelfBurnableStealthPoolNoteCreatorFunction,
 } from "@umbra-privacy/sdk/deposit";
 import {
-  getATAIntoStealthPoolNoteCreatorProver,
   getATAIntoStealthPoolNoteCreatorProver,
 } from "@umbra-privacy/sdk/zk-prover";
 

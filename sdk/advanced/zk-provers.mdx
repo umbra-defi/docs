@@ -1,13 +1,13 @@
 ---
 title: "ZK Provers"
-description: "Custom Groth16 provers in V14: provers ship inside @umbra-privacy/sdk/zk-prover (no separate web-zk-prover package), CDN asset provider, web worker setup with comlink, 2-8s browser / 1-3s Node.js proof generation."
+description: "Custom Groth16 provers in V18: provers ship inside @umbra-privacy/sdk/zk-prover (no separate web-zk-prover package), CDN asset provider, web worker setup with comlink, 2-8s browser / 1-3s Node.js proof generation."
 ---
 
 ## Overview
 
 Stealth Pool Note creation and burning require client-side generation of [Groth16](https://eprint.iacr.org/2016/260.pdf) zero-knowledge proofs. The SDK does not bundle a default prover — you provide one as a dependency injection.
 
-**V14: the prover ships inside `@umbra-privacy/sdk/zk-prover`.** The standalone `@umbra-privacy/web-zk-prover` package from V13 has been deleted. All factories listed below wrap [snarkjs](https://github.com/iden3/snarkjs) and handle proving-key loading from Umbra's CDN by default.
+**The prover ships inside `@umbra-privacy/sdk/zk-prover`.** The standalone `@umbra-privacy/web-zk-prover` package has been deleted. All factories listed below wrap [snarkjs](https://github.com/iden3/snarkjs) and handle proving-key loading from Umbra's CDN by default.
 
 ## Quick start
 
@@ -55,7 +55,7 @@ All factories accept an optional `provider` parameter of type `IZkAssetProvider`
 - `getETAIntoStealthPoolNoteCreatorProver(provider?)` → `IZkProverForETAIntoStealthPoolNote`. Shared by both self-burnable and receiver-burnable ETA-source creators.
 - `getATAIntoStealthPoolNoteCreatorProver(provider?)` → `IZkProverForATAIntoStealthPoolNote`. Shared by both self-burnable and receiver-burnable ATA-source creators.
 
-**Burner provers (V13 names retained):**
+**Burner provers:**
 - `getClaimSelfClaimableUtxoIntoEncryptedBalanceProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoEncryptedBalance`.
 - `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(provider?)` → `IZkProverForClaimReceiverClaimableUtxoIntoEncryptedBalance`.
 - `getClaimSelfClaimableUtxoIntoPublicBalanceProver(provider?)` → `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance`.
@@ -64,7 +64,7 @@ All factories accept an optional `provider` parameter of type `IZkAssetProvider`
 - `getUserRegistrationProver(provider?)` → `IZkProverForUserRegistration`.
 
 <Note>
-The **burner** prover factory names retained their V13 spellings (`getClaim…ClaimableUtxo…`). The **creator** prover factories were renamed to the new V14 vocabulary (`getETAIntoStealthPoolNoteCreatorProver`, `getATAIntoStealthPoolNoteCreatorProver`). Both sets coexist — the rename is by design to match the high-level factory vocabulary.
+The **burner** prover factory names use the `getClaim…ClaimableUtxo…` spelling, while the **creator** prover factories use the Stealth Pool Note vocabulary (`getETAIntoStealthPoolNoteCreatorProver`, `getATAIntoStealthPoolNoteCreatorProver`). Both sets coexist — the naming difference is by design to match the high-level factory vocabulary.
 </Note>
 
 ## Custom asset provider

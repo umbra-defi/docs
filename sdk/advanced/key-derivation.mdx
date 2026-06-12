@@ -98,7 +98,7 @@ Rotating an offset produces a different public key or nullifier. If you have alr
 
 Some keys must be BN254 field elements (values less than the BN254 curve order `p`). After KMAC256 produces 64 random bytes, the SDK interprets them as a big-endian 512-bit integer and reduces it modulo `p` using constant-time modular reduction.
 
-Because the input is 512 bits and the field order is ~254 bits, the statistical bias from modular reduction is negligible (less than 2^{-254}), guaranteeing a practically uniform distribution over the field.
+Because the input is 512 bits and the field order is ~254 bits, the statistical bias from modular reduction is negligible (less than `2^{-254}`), guaranteeing a practically uniform distribution over the field.
 
 For the Master Viewing Key specifically, the output is additionally masked to 252 bits to ensure compatibility with certain circuit constraints.
 

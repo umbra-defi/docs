@@ -28,7 +28,7 @@ You can use the EncryptedTokenAccount alone (hide amounts), the Stealth Pool alo
 
 When you deposit tokens into your ETA:
 
-1. Your tokens move from your **PublicAssociatedTokenAccount (PATA)** to the on-chain pool custody account.
+1. Your tokens move from your **AssociatedTokenAccount (ATA)** to the on-chain pool custody account.
 2. The program initialises an `EncryptedTokenAccount` PDA for your `(wallet, mint)` pair if one does not already exist.
 3. The balance is encrypted and stored in that ETA using **Arcium MPC**.
 
@@ -90,7 +90,7 @@ Every confidential MPC operation in Umbra involves two on-chain transactions:
 The SDK waits for both transactions to confirm before returning. You don't need to manage this yourself.
 
 <Note>
-This is why Umbra MPC operations take a few seconds longer than a standard token transfer — there is an off-chain MPC round-trip between the two on-chain instructions. Pure ZK operations (e.g. a PATA-source note write) are single-tx and finish in normal Solana confirmation time.
+This is why Umbra MPC operations take a few seconds longer than a standard token transfer — there is an off-chain MPC round-trip between the two on-chain instructions. Pure ZK operations (e.g. an ATA-source note write) are single-tx and finish in normal Solana confirmation time.
 </Note>
 
 ## Privacy Guarantees Summary

@@ -32,13 +32,6 @@
             ]
           },
           {
-            "group": "AI Integration",
-            "pages": [
-              "ai/mcp",
-              "ai/skill"
-            ]
-          },
-          {
             "group": "Foundations",
             "pages": [
               "sdk/understanding-the-sdk/overview",

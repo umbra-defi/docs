@@ -1,6 +1,6 @@
 ---
 title: "Stealth Pool (Mixer)"
-description: "V14 API reference: getBurnableStealthPoolNoteScannerFunction (zero-arg) + 3 burner factories (receiver→ETA, self→ETA, self→PATA) with fetchBatchMerkleProof, ZK prover, and relayer deps."
+description: "V18 API reference: getBurnableStealthPoolNoteScannerFunction (zero-arg) + 3 burner factories (receiver→ETA, self→ETA, self→ATA) with fetchBatchMerkleProof, ZK prover, and relayer deps."
 ---
 
 All Stealth Pool factories live under `@umbra-privacy/sdk/burn`.
@@ -59,7 +59,7 @@ Notes are **not** proof-bundled — proofs are fetched per batch at burn time.
 
 ### Errors
 
-Throws `FetchUtxosError` (named with the legacy noun; class name retained for backwards compatibility — the error itself covers V14 Stealth Pool Note scanning). See [Errors](./errors#fetchutxoserror).
+Throws `FetchUtxosError` (named with the legacy noun; class name retained for backwards compatibility — the error itself covers V18 Stealth Pool Note scanning). See [Errors](./errors#fetchutxoserror).
 
 ### Example
 
@@ -104,7 +104,7 @@ Burns receiver-burnable notes into the caller's ETA. **Natively batches**: group
 
 - **`fetchBatchMerkleProof`** — typically `client.fetchBatchMerkleProof` (auto-wired when `indexerApiEndpoint` is set on the client).
 - **`zkProver`** — `getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver()` from `@umbra-privacy/sdk/zk-prover`. (The interface type is aliased internally as `IZkProverForBurnReceiverBurnableStealthPoolNoteIntoEncryptedTokenAccount` — the underlying type is identical.)
-- **`relayer`** — adapter built from `getUmbraRelayer({ apiEndpoint })`. `BurnSubmitterFunction` and `BurnStatusPollerFunction` are V14 TypeScript aliases of `ClaimSubmitterFunction` and `ClaimStatusPollerFunction`, so the relayer client's `submitClaim` / `pollClaimStatus` plug in directly under the renamed property names.
+- **`relayer`** — adapter built from `getUmbraRelayer({ apiEndpoint })`. `BurnSubmitterFunction` and `BurnStatusPollerFunction` are V18 TypeScript aliases of `ClaimSubmitterFunction` and `ClaimStatusPollerFunction`, so the relayer client's `submitClaim` / `pollClaimStatus` plug in directly under the renamed property names.
 
 ### Returns
 
@@ -113,9 +113,9 @@ type ReceiverBurnableStealthPoolNoteIntoETABurnerFunction = (
   stealthPoolNotes: readonly (DecryptedStealthPoolNoteData & { kind: "receiver-burnable" })[],
   optionalData?: OptionalData32,
   microLamportsPerAcu?: MicroLamportsPerAcu,
-) => Promise<BurnStealthPoolNoteIntoEncryptedTokenAccountResult>;
+) => Promise<BurnStealthPoolNoteIntoETAResult>;
 
-interface BurnStealthPoolNoteIntoEncryptedTokenAccountResult {
+interface BurnStealthPoolNoteIntoETAResult {
   readonly signatures: readonly TransactionSignature[]; // every tx submitted (from OperationOutcome)
   readonly batches: Map<U32, BurnBatchResult>;          // keyed by batch index
 }
@@ -125,7 +125,7 @@ interface BurnBatchResult {
   readonly status: BurnStatus;
   readonly txSignature?: string;               // on-chain burn tx (when landed)
   readonly callbackSignature?: string;         // MPC callback tx (when finalised)
-  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v14"
+  readonly resolvedVariant?: string;           // e.g. "claim_into_existing_shared_balance_v18"
   readonly failureReason?: string | null;
   readonly stealthPoolNoteIds?: readonly string[]; // "treeIndex:leafIndex" pairs
 }
@@ -156,10 +156,10 @@ Same shape as the receiver variant. `MAX_NOTES_PER_PROOF = 1` — the SDK loops 
 
 **Import:** `@umbra-privacy/sdk/burn`
 
-Same shape; tokens released to the destination PATA instead of an ETA. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance` — use `getClaimSelfClaimableUtxoIntoPublicBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
+Same shape; tokens released to the destination ATA instead of an ETA. `zkProver` is `IZkProverForClaimSelfClaimableUtxoIntoPublicBalance` — use `getClaimSelfClaimableUtxoIntoPublicBalanceProver` from `@umbra-privacy/sdk/zk-prover`.
 
 <Note>
-Receiver-burnable → PATA exists on-chain but is not yet shipped in the SDK. Use receiver-burnable → ETA then a regular withdrawal until the SDK adds the direct path.
+Receiver-burnable → ATA exists on-chain but is not yet shipped in the SDK. Use receiver-burnable → ETA then a regular withdrawal until the SDK adds the direct path.
 </Note>
 
 ---

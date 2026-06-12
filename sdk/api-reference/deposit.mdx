@@ -9,14 +9,14 @@ description: "Complete reference for direct deposit into encrypted balance."
 import { getATAIntoETADirectDepositorFunction } from "@umbra-privacy/sdk/deposit";
 
 function getATAIntoETADirectDepositorFunction(
-  args: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs,
-  deps?: GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionDeps,
-): PublicBalanceToEncryptedBalanceDirectDepositorFunction
+  args: GetATAIntoETADirectDepositorFunctionArgs,
+  deps?: GetATAIntoETADirectDepositorFunctionDeps,
+): ATAIntoETADirectDepositorFunction
 ```
 
 Factory function that returns a callable deposit function.
 
-### `GetPublicBalanceToEncryptedBalanceDirectDepositorFunctionArgs`
+### `GetATAIntoETADirectDepositorFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -29,11 +29,11 @@ async function deposit(
   destinationAddress: Address,
   mint: Address,
   transferAmount: bigint,
-  options?: DirectDepositOptions,
+  options?: ATAIntoETADirectDepositorOptions,
 ): Promise<DepositResult>
 ```
 
-Moves tokens from the calling user's PATA into their EncryptedTokenAccount. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium MPC, then waits for the callback to confirm.
+Moves tokens from the calling user's ATA into their EncryptedTokenAccount. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - the SDK submits the handler transaction, waits for Arcium MPC, then waits for the callback to confirm.
 
 ### Parameters
 

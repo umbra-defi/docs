@@ -1,25 +1,29 @@
 ---
 title: "Installation"
-description: "Install @umbra-privacy/sdk@5.x. V14 ships everything in one package — operations are imported from named subpaths (/registration, /deposit, /burn, /query, …); the ZK prover lives at /zk-prover."
+description: "Install @umbra-privacy/sdk@5.x. The SDK ships everything in one package — operations are imported from named subpaths (/registration, /deposit, /burn, /query, …); the ZK prover lives at /zk-prover."
 ---
 
 ## Package
 
-The SDK is a single package — `@umbra-privacy/sdk`. The ZK prover, indexer client, relayer client, store adapters, and Solana primitives are all subpaths of the same package. **There is no separate `@umbra-privacy/web-zk-prover` in V14** (it was folded into `@umbra-privacy/sdk/zk-prover` in the V14 bundle).
+The SDK is a single package — `@umbra-privacy/sdk`. The ZK prover, indexer client, relayer client, store adapters, and Solana primitives are all subpaths of the same package. **There is no separate `@umbra-privacy/web-zk-prover`** — it is folded into `@umbra-privacy/sdk/zk-prover`.
 
 <CodeGroup>
 ```bash pnpm
-pnpm add @umbra-privacy/sdk
+pnpm add @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 
 ```bash npm
-npm install @umbra-privacy/sdk
+npm install @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 
 ```bash yarn
-yarn add @umbra-privacy/sdk
+yarn add @umbra-privacy/sdk@5.0.0-rc.6 snarkjs
 ```
 </CodeGroup>
+
+<Note>
+`snarkjs` is a **required peer dependency** — the SDK imports it for Groth16 proving. Install it alongside the SDK (as shown above) or the first prover import throws `ERR_MODULE_NOT_FOUND`.
+</Note>
 
 <Warning>
 Pin the SDK to an exact version (no `^`, no `~`). The ZK assets are versioned in lockstep with the package; a floating version can resolve a manifest that points at a different circuit hash than the one your wallet's master seed was set up for.
@@ -52,13 +56,13 @@ The main `@umbra-privacy/sdk` barrel only re-exports:
 - The full error hierarchy and the `Result<T, E>` helpers.
 - Everything from `infrastructure/{arcium, indexer, relayer, solana, zk-prover}` — including `getUmbraRelayer`, `getUmbraIndexer`, RPC providers, transaction forwarders.
 
-**Every operation factory lives behind a named subpath.** This keeps the main barrel small and helps bundlers tree-shake aggressively. The subpath map (V14):
+**Every operation factory lives behind a named subpath.** This keeps the main barrel small and helps bundlers tree-shake aggressively. The subpath map:
 
 - `@umbra-privacy/sdk/client` — `IUmbraClient`, `IUmbraSigner` interfaces.
 - `@umbra-privacy/sdk/shared` — protocol-wide constants. **`UMBRA_MESSAGE_TO_SIGN` lives here**, not on the main barrel.
 - `@umbra-privacy/sdk/registration` — `getUserRegistrationFunction` + executors.
 - `@umbra-privacy/sdk/deposit` — direct depositor + the four Stealth Pool Note creators.
-- `@umbra-privacy/sdk/withdrawal` — ETA → PATA withdrawer.
+- `@umbra-privacy/sdk/withdrawal` — ETA → ATA withdrawer.
 - `@umbra-privacy/sdk/burn` — note scanner + three burner factories + `enrichWithMerkleProof`.
 - `@umbra-privacy/sdk/query` — encrypted-balance + user-account queriers.
 - `@umbra-privacy/sdk/conversion` — MXE-only → Shared converter.
@@ -97,7 +101,7 @@ import {
   getReceiverBurnableStealthPoolNoteIntoETABurnerFunction,
 } from "@umbra-privacy/sdk/burn";
 
-// ZK prover (V14: same package, named subpath)
+// ZK prover (same package, named subpath)
 import {
   getATAIntoStealthPoolNoteCreatorProver,
   getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver,
@@ -115,7 +119,7 @@ import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
 ```
 
 <Note>
-The **burner** ZK prover factories retained V13 spellings (`getClaim…ClaimableUtxo…`). The **creator** prover factories were renamed: `getETAIntoStealthPoolNoteCreatorProver` (ETA-source) and `getATAIntoStealthPoolNoteCreatorProver` (ATA-source). Only the burner names are "legacy".
+The **burner** ZK prover factories are spelled `getClaim…ClaimableUtxo…`. The **creator** prover factories are `getETAIntoStealthPoolNoteCreatorProver` (ETA-source) and `getATAIntoStealthPoolNoteCreatorProver` (ATA-source).
 </Note>
 
 ## Runtime Requirements

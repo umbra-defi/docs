@@ -377,7 +377,7 @@ impl OrderingBuffer {
 3. After each insert, `drain_contiguous()` checks if there's a run of sequential events starting from `next_expected`
 4. If yes: those events are returned for immediate Merkle tree insertion
 5. If there's a gap: the buffer holds the events until the missing ones arrive (from SQS or backfill)
-6. If a gap persists for >30 seconds: trigger backfill from Helius RPC
+6. If a gap persists for `>30` seconds: trigger backfill from Helius RPC
 
 **Example:**
 ```
@@ -617,7 +617,7 @@ Write service crashes             ECS restarts → load ordering_buffer_pending 
 
 SQS goes down                     Consumer buffers in DropOldest (10K cap)
                                   SQS is multi-AZ with 99.999999999% durability
-                                  Outages extremely rare (<5 min/year)
+                                  Outages extremely rare (`<5` min/year)
 
 RDS goes down                     Write service polls SQS but insertions fail
                                   Messages stay in SQS (14-day retention)
@@ -670,10 +670,10 @@ Poison message                    After 3 SQS receive attempts → moved to DLQ
 
 ### 8.1 Throughput
 
-- **Consumer → SQS**: >5,000 filtered messages/second (discriminator check is ~μs, SQS batch send is ~5ms per 10 messages)
-- **Write service parse**: >10,000 events/second (borsh decode is fast, no I/O)
+- **Consumer → SQS**: `>5,000` filtered messages/second (discriminator check is ~μs, SQS batch send is ~5ms per 10 messages)
+- **Write service parse**: `>10,000` events/second (borsh decode is fast, no I/O)
 - **Merkle tree insertion**: ~1,000-2,000 insertions/second per tree (bottleneck: PostgreSQL writes for tree nodes)
-- **Read service proofs**: >5,000 proofs/second (indexed PostgreSQL reads, most data cached)
+- **Read service proofs**: `>5,000` proofs/second (indexed PostgreSQL reads, most data cached)
 
 ### 8.2 Latency (End-to-End)
 

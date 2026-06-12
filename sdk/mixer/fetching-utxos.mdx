@@ -1,6 +1,6 @@
 ---
 title: "Scanning for Notes"
-description: "getBurnableStealthPoolNoteScannerFunction (V14, zero-arg): walks every active tree, decrypts X25519-AES ciphertexts addressable by your viewing keys, persists cursor in client.utxoDataStore. Returns ScannedStealthPoolNoteResult grouped by (kind, source)."
+description: "getBurnableStealthPoolNoteScannerFunction (V18, zero-arg): walks every active tree, decrypts X25519-AES ciphertexts addressable by your viewing keys, persists cursor in client.utxoDataStore. Returns ScannedStealthPoolNoteResult grouped by (kind, source)."
 ---
 
 ## Overview
@@ -14,7 +14,7 @@ After a Stealth Pool Note is written, the SDK publishes an X25519-AES ciphertext
 5. Persists progress.
 6. Returns the successful decryptions, grouped by `(kind, source)`.
 
-The V14 scanner is **zero-arg** — the cursor is fully SDK-managed.
+The V18 scanner is **zero-arg** — the cursor is fully SDK-managed.
 
 <Warning>
 The scanner requires the indexer. Ensure `indexerApiEndpoint` is set when constructing the client. The browser scanner is several orders of magnitude faster when `utxoDataStore` and `nullifierStore` are wired — without them, every call re-scans every active tree from genesis.
@@ -27,7 +27,7 @@ import { getBurnableStealthPoolNoteScannerFunction } from "@umbra-privacy/sdk/bu
 
 const scan = getBurnableStealthPoolNoteScannerFunction({ client });
 
-const result = await scan(); // zero-arg in V14
+const result = await scan(); // zero-arg in V18
 ```
 
 ## Return Value
@@ -61,8 +61,8 @@ const result = await scan();
 
 console.log("Self-burnable from ETA:        ", result.etaToStealthPoolSelfBurnable.length);
 console.log("Receiver-burnable from ETA:    ", result.etaToStealthPoolReceiverBurnable.length);
-console.log("Self-burnable from PATA:       ", result.ataToStealthPoolSelfBurnable.length);
-console.log("Receiver-burnable from PATA:   ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Self-burnable from ATA:        ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Receiver-burnable from ATA:    ", result.ataToStealthPoolReceiverBurnable.length);
 
 for (const tree of result.scannedTrees) {
   console.log(
@@ -160,7 +160,7 @@ import {
 
 // Burner factory setup omitted — see /sdk/mixer/claiming-utxos.
 
-// Burn all receiver-burnable notes from PATA-source writes into your ETA.
+// Burn all receiver-burnable notes from ATA-source writes into your ETA.
 await burnReceiverIntoEta(result.ataToStealthPoolReceiverBurnable);
 ```
 

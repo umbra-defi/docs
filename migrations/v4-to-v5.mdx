@@ -1,6 +1,6 @@
 ---
 title: "Migration: V4 → V5"
-description: "Step-by-step migration from @umbra-privacy/sdk@4.x (V13) to @umbra-privacy/sdk@5.x (V14): package consolidation, subpath imports, factory renames, zero-arg scanner, burner relayer-dep shape, store adapters."
+description: "Step-by-step migration from @umbra-privacy/sdk@4.x to @umbra-privacy/sdk@5.x: package consolidation, subpath imports, factory renames, zero-arg scanner, burner relayer-dep shape, store adapters."
 ---
 
 V5 is a vocabulary + ergonomics overhaul. The on-chain protocol and wire formats are **unchanged** — relayer paths are still `/v1/claims`, the on-chain instruction is still `burn_*` under the hood, and a handful of TypeScript aliases bridge the two namespaces so most callers can rename without rewriting logic.
@@ -19,7 +19,7 @@ PDA bug (`ConstraintSeeds 2006` on deposit) and the columnar `scan()` BigInt bug
 1. Bump the package: `@umbra-privacy/sdk@4.x → @umbra-privacy/sdk@5.0.0-rc.6`. Pin an **exact** version (codama is pinned by the SDK — no override needed).
 2. Delete `@umbra-privacy/web-zk-prover` from `package.json`. The prover ships inside the SDK at `@umbra-privacy/sdk/zk-prover`.
 3. Move every operation factory import from the main barrel to its **named subpath** (`/registration`, `/deposit`, `/withdrawal`, `/burn`, `/query`, `/conversion`, `/compliance`, `/account`).
-4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, ATA → PATA, encrypted balance → ETA).
+4. Rename factories per the table below (UTXO → Stealth Pool Note, claim → burn, PublicBalance → ATA, encrypted balance → ETA).
 5. Rewrite the scanner call: zero-arg in V5, results bucketed by `(kind, source)` under long-form keys.
 6. Burner factories take a new `relayer` dep — `{ submitBurn, pollBurnStatus, getRelayerAddress }` — these are TypeScript aliases of the relayer client's existing `submitClaim` / `pollClaimStatus` / `getRelayerAddress`, so plug in the same client unchanged.
 7. (Browser) Wire `utxoDataStore` + `nullifierStore` from `@umbra-privacy/sdk/store-adapters`. Without them every `scan()` walks every active tree from genesis.
@@ -124,7 +124,7 @@ Names lengthened to spell out the data flow end-to-end. The vocabulary swap:
 
 - **`UTXO`** → **`Stealth Pool Note`** (in factory names + result types; on-chain commitments and the indexer route are still called UTXOs).
 - **`Claim`** → **`Burn`** (in factory names + lifecycle hooks; the wire endpoint is still `/v1/claims`).
-- **`ATA` / `PublicBalance`** → **`PublicAssociatedTokenAccount` (PATA)** in factory names.
+- **`PublicBalance`** → **`AssociatedTokenAccount` (ATA)** in factory names.
 - **`EncryptedBalance`** → **`EncryptedTokenAccount` (ETA)** in factory names.
 
 ### Deposits
@@ -204,8 +204,8 @@ const result = await scan(0, 0); // (treeIndex, startInsertionIndex, endInsertio
 
 console.log("Self-burnable from ETA:", result.selfBurnable.length);
 console.log("Receiver from ETA:",      result.received.length);
-console.log("Self-burnable from PATA:", result.publicSelfBurnable.length);
-console.log("Receiver from PATA:",      result.publicReceived.length);
+console.log("Self-burnable from ATA:", result.publicSelfBurnable.length);
+console.log("Receiver from ATA:",      result.publicReceived.length);
 
 // Pass directly to a V4 claimer — the UTXOs come with Merkle proofs attached.
 await claim(result.received);
@@ -221,8 +221,8 @@ const result = await scan(); // zero-arg
 
 console.log("Self-burnable from ETA:    ", result.etaToStealthPoolSelfBurnable.length);
 console.log("Receiver from ETA:         ", result.etaToStealthPoolReceiverBurnable.length);
-console.log("Self-burnable from PATA:   ", result.ataToStealthPoolSelfBurnable.length);
-console.log("Receiver from PATA:        ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Self-burnable from ATA:   ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Receiver from ATA:        ", result.ataToStealthPoolReceiverBurnable.length);
 console.log("Scanned trees:             ", result.scannedTrees.length);
 
 // Pass directly to a V5 burner — it fetches per-batch proofs internally.
@@ -299,7 +299,7 @@ Two new required deps to be aware of:
 
 ### Burn result shape
 
-V4 claimers returned `{ signatures: Record<number, TransactionSignature[]> }`. V5 burners return `BurnStealthPoolNoteIntoETAResult` (or `…IntoPublicAssociatedTokenAccountResult` for the PATA variant):
+V4 claimers returned `{ signatures: Record<number, TransactionSignature[]> }`. V5 burners return `BurnStealthPoolNoteIntoETAResult` (or `BurnStealthPoolNoteIntoATAResult` for the ATA variant):
 
 ```typescript
 interface BurnStealthPoolNoteIntoETAResult {
@@ -340,7 +340,7 @@ type ReceiverBurnerFn = (
 ### Batching is unchanged conceptually
 
 - **Receiver-burnable → ETA** batches **natively**: groups notes by `destinationAddress`, chunks to ≤5 per proof. Pass the whole array.
-- **Self-burnable → ETA / PATA** has `MAX_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array.
+- **Self-burnable → ETA / ATA** has `MAX_NOTES_PER_PROOF = 1`. The SDK loops internally — caller still passes an array.
 
 ---
 
@@ -657,4 +657,4 @@ After migrating, verify each:
 
 ## Forward-compatibility note
 
-The V5 surface is the **target shape** going forward. Future minor releases will add factories (e.g. receiver-burnable → PATA), additional store backends, and ergonomic helpers — but the existing V5 factory names, subpath layout, and `relayer` dep shape are stable.
+The V5 surface is the **target shape** going forward. Future minor releases will add factories (e.g. receiver-burnable → ATA), additional store backends, and ergonomic helpers — but the existing V5 factory names, subpath layout, and `relayer` dep shape are stable.

@@ -1,6 +1,6 @@
 ---
 title: "Deposit"
-description: "V14 API reference: getATAIntoETADirectDepositorFunction + 4 Stealth Pool Note creators."
+description: "V18 API reference: getATAIntoETADirectDepositorFunction + 4 Stealth Pool Note creators."
 ---
 
 All deposit-side factories live under `@umbra-privacy/sdk/deposit`.
@@ -14,11 +14,11 @@ All deposit-side factories live under `@umbra-privacy/sdk/deposit`.
 ```typescript
 function getATAIntoETADirectDepositorFunction(
   args: { client: IUmbraClient },
-  deps?: GetFromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunctionDeps,
-): FromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunction;
+  deps?: GetATAIntoETADirectDepositorFunctionDeps,
+): ATAIntoETADirectDepositorFunction;
 ```
 
-Transfers tokens from a PATA into a destination user's ETA. The destination must be registered on Umbra. This is the primary deposit path — no ZK proof required. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
+Transfers tokens from an ATA into a destination user's ETA. The destination must be registered on Umbra. This is the primary deposit path — no ZK proof required. Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern).
 
 ### Deps
 
@@ -30,11 +30,11 @@ Transfers tokens from a PATA into a destination user's ETA. The destination must
 ### Returns
 
 ```typescript
-type FromPublicAssociatedTokenAccountIntoEncryptedTokenAccountDirectDepositorFunction = (
+type ATAIntoETADirectDepositorFunction = (
   destinationAddress: Address,
   mint: Address,
   transferAmount: U64,
-  options?: DepositIntoEncryptedTokenAccountOptions,
+  options?: ATAIntoETADirectDepositorOptions,
 ) => Promise<DepositResult>;
 ```
 
@@ -117,9 +117,9 @@ Writes a self-burnable Stealth Pool Note funded from the caller's ETA (ETA → p
 
 ```typescript
 type ETAIntoSelfBurnableStealthPoolNoteCreatorFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateUtxoOptions,
-) => Promise<TransactionSignature[]>; // length 2: [proofAccountSig, noteWriteSig]
+  args: CreateStealthPoolNoteArgs,
+  options?: CreateStealthPoolNoteOptions,
+) => Promise<ETAIntoStealthPoolNoteCreatorResult>;
 ```
 
 ### CreateStealthPoolNoteArgs
@@ -134,7 +134,7 @@ type ETAIntoSelfBurnableStealthPoolNoteCreatorFunction = (
 - `optionalData?: OptionalData32` — caller metadata. Pre-hashed only. Default 32 zero bytes.
 - `accountInfoCommitment?: Commitment` — per-call RPC commitment. Default `"confirmed"`.
 
-(Per-step hooks for the ETA-source pipeline are attached at factory time via `deps.hooks: CreateStealthPoolNoteFromEncryptedTokenAccountHooks`, not on the per-call options object.)
+(Per-step hooks for the ETA-source pipeline are attached at factory time via `deps.hooks: ETAIntoStealthPoolNoteCreatorHooks`, not on the per-call options object.)
 
 ### Errors
 
@@ -163,24 +163,24 @@ function getATAIntoSelfBurnableStealthPoolNoteCreatorFunction(
 ): ATAIntoSelfBurnableStealthPoolNoteCreatorFunction;
 ```
 
-Writes a self-burnable note funded from a PATA (PATA → pool). Single-tx, no MPC. `deps.zkProver` is **required** — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
+Writes a self-burnable note funded from an ATA (ATA → pool). Single-tx, no MPC. `deps.zkProver` is **required** — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
 ### Returns
 
 ```typescript
 type ATAIntoSelfBurnableStealthPoolNoteCreatorFunction = (
-  args: CreateUtxoArgs,
-  options?: CreateUtxoFromPublicBalanceOptions,
-) => Promise<TransactionSignature[]>; // length 1: [noteWriteSig]
+  args: CreateStealthPoolNoteArgs,
+  options?: ATAIntoStealthPoolNoteCreatorOptions,
+) => Promise<ATAIntoStealthPoolNoteCreatorResult>;
 ```
 
-### CreateStealthPoolNoteFromPublicAssociatedTokenAccountOptions (PATA-source)
+### ATAIntoStealthPoolNoteCreatorOptions (ATA-source)
 
 - `generationIndex?: U256`.
 - `optionalData?: OptionalData32`.
 - `accountInfoCommitment?: Commitment` — default `"confirmed"`.
 - `epochInfoCommitment?: Commitment` — default `"confirmed"`.
-- `hooks?: CreateStealthPoolNoteFromPublicAssociatedTokenAccountHooks` — per-phase + per-step lifecycle hooks. Step slot names: `closeProofAccount`, `populateProofAccount`, `createStealthPoolNote` — each `SkippableDirectTransactionStepHooks` with `{ onPreSend, onPostSend, onSkipped }`.
+- `hooks?: ATAIntoStealthPoolNoteCreatorHooks` — per-phase + per-step lifecycle hooks. Step slot names: `closeProofAccount`, `populateProofAccount`, `createStealthPoolNote` — each `SkippableDirectTransactionStepHooks` with `{ onPreSend, onPostSend, onSkipped }`.
 
 ### Errors
 
@@ -192,7 +192,7 @@ Throws `CreateUtxoError`. See [Errors](./errors#createutxoerror).
 
 **Import:** `@umbra-privacy/sdk/deposit`
 
-Same shape as the self-PATA variant. `deps.zkProver` is `IZkProverForATAIntoStealthPoolNote` — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
+Same shape as the self-ATA variant. `deps.zkProver` is `IZkProverForATAIntoStealthPoolNote` — use `getATAIntoStealthPoolNoteCreatorProver` from `@umbra-privacy/sdk/zk-prover`.
 
 **Recipient prerequisite:** must have all three registration sub-step flags. Pre-check and fall back to self-burnable when needed.
 
@@ -200,7 +200,7 @@ Same shape as the self-PATA variant. `deps.zkProver` is `IZkProverForATAIntoStea
 
 ## EncryptedDepositError
 
-Thrown by the PATA→ETA depositor.
+Thrown by the ATA→ETA depositor.
 
 Stage values: `"initialization"` | `"validation"` | `"mint-fetch"` | `"fee-calculation"` | `"pda-derivation"` | `"account-fetch"` | `"instruction-build"` | `"transaction-build"` | `"transaction-compile"` | `"transaction-sign"` | `"transaction-validate"` | `"transaction-send"`.
 

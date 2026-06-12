@@ -1,6 +1,6 @@
 ---
 title: "Recovery"
-description: "Deterministic recovery in V14: same wallet + same network recreates all keys. Re-scan via zero-arg getBurnableStealthPoolNoteScannerFunction. Master seed persistence patterns. Dropped MPC callback recovery via getStagedSpl/SolRecovererFunction."
+description: "Deterministic recovery: same wallet + same network recreates all keys. Re-scan via zero-arg getBurnableStealthPoolNoteScannerFunction. Master seed persistence patterns. Dropped MPC callback recovery via getStagedSpl/SolRecovererFunction."
 ---
 
 ## Overview
@@ -74,8 +74,8 @@ const result = await scan();
 
 console.log("Recovered self-burnable from ETA:        ", result.etaToStealthPoolSelfBurnable.length);
 console.log("Recovered receiver-burnable from ETA:    ", result.etaToStealthPoolReceiverBurnable.length);
-console.log("Recovered self-burnable from PATA:       ", result.ataToStealthPoolSelfBurnable.length);
-console.log("Recovered receiver-burnable from PATA:   ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Recovered self-burnable from ATA:        ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Recovered receiver-burnable from ATA:    ", result.ataToStealthPoolReceiverBurnable.length);
 ```
 
 If `utxoDataStore` was not persisted (e.g. you didn't wire `createBrowserStorageBackend`), the first post-recovery scan walks every active tree from genesis. On mainnet this can be slow but is one-shot — subsequent scans are incremental.

@@ -1,6 +1,6 @@
 ---
 title: "Compliance"
-description: "Two independent V14 compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for Stealth Pool Notes, and X25519 compliance grants for EncryptedTokenAccount re-encryption."
+description: "Two independent compliance mechanisms: hierarchical viewing keys (MVK + Poseidon-derived temporal keys) for Stealth Pool Notes, and X25519 compliance grants for EncryptedTokenAccount re-encryption."
 ---
 
 ## Overview
@@ -43,7 +43,7 @@ Master Viewing Key
 
 Each level is derived from the level above using a Poseidon hash. Sharing a key at any level grants read access to all note activity within that scope and nothing outside it. The Second Viewing Key (a.k.a. the transaction viewing key — TVK) is the one that actually decrypts a note's Poseidon stream cipher (`pc_encrypted_*`).
 
-Eight derivers ship in V14, all from the SDK's key-derivation primitives:
+Eight derivers ship in the SDK, all from the key-derivation primitives:
 
 ```typescript
 import {
@@ -88,7 +88,7 @@ See [X25519 Compliance Grants](/sdk/compliance-x25519-grants) for the complete w
 
 ---
 
-## V14 compliance factory inventory
+## Compliance factory inventory
 
 All under `@umbra-privacy/sdk/compliance`:
 
@@ -100,8 +100,6 @@ All under `@umbra-privacy/sdk/compliance`:
 - `getSharedCiphertextReencryptorForUserGrantFunction` — re-encrypt under a user grant.
 - `getNetworkCiphertextReencryptorForNetworkGrantFunction` — re-encrypt under a network grant.
 - `getSharedCiphertextReencryptorForNetworkGrantFunction` — re-encrypt a Shared-mode ciphertext for a network grantee.
-
-The V14 query factories were renamed from V13's `getQueryNetworkMxe…` / `getQueryNetworkShared…` to today's `getNetworkComplianceGrantQuerierFunction` / `getSharedComplianceGrantQuerierFunction`. The reencryptors changed correspondingly.
 
 ## Privacy and Trust Model
 

@@ -1,11 +1,11 @@
 ---
 title: "Transaction Callbacks"
-description: "V14 per-operation hooks interfaces: DirectTransactionStepHooks, MpcTransactionStepHooks, RegistrationHooks, BurnHooks. Named per-phase/per-step slots replace the V13 generic TransactionCallbacks."
+description: "V18 per-operation hooks interfaces: DirectTransactionStepHooks, MpcTransactionStepHooks, RegistrationHooks, BurnHooks. Named per-phase/per-step slots replace the V13 generic TransactionCallbacks."
 ---
 
 ## Overview
 
-V14 uses per-operation **hooks** objects (not a single generic `TransactionCallbacks`). Each factory's `deps.hooks` or `options.hooks` slot accepts a named interface specific to that operation, with named per-phase / per-step hook keys. Hooks observe the operation as it moves through validation, fetching, ZK proving, transaction submission, MPC callback waiting, and completion.
+V18 uses per-operation **hooks** objects (not a single generic `TransactionCallbacks`). Each factory's `deps.hooks` or `options.hooks` slot accepts a named interface specific to that operation, with named per-phase / per-step hook keys. Hooks observe the operation as it moves through validation, fetching, ZK proving, transaction submission, MPC callback waiting, and completion.
 
 The two transaction-level building blocks every hooks interface uses:
 
@@ -38,13 +38,13 @@ interface MpcTransactionStepHooks extends DirectTransactionStepHooks {
 }
 ```
 
-**Skipped steps fire `onSkipped`, not `onPreSend` / `onPostSend`.** This is the V14 way to observe "the step was a no-op because the on-chain state was already correct."
+**Skipped steps fire `onSkipped`, not `onPreSend` / `onPostSend`.** This is the V18 way to observe "the step was a no-op because the on-chain state was already correct."
 
 ---
 
 ## Usage — Registration
 
-V14 registration uses a single `hooks` option (`RegistrationHooks`) with named per-step slots and top-level phase hooks. Each skippable step slot takes `{ onPreSend, onPostSend, onSkipped }`.
+V18 registration uses a single `hooks` option (`RegistrationHooks`) with named per-step slots and top-level phase hooks. Each skippable step slot takes `{ onPreSend, onPostSend, onSkipped }`.
 
 ```typescript
 import { getUserRegistrationFunction } from "@umbra-privacy/sdk/registration";

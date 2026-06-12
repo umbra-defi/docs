@@ -1,6 +1,6 @@
 ---
 title: "Key Rotation & Deps Reference"
-description: "Offset-based key rotation: U512 offsets on getUmbraClient shift KMAC256 derivation to produce new X25519, MVK, and commitment keys for the same wallet. Complete deps map per V14 factory."
+description: "Offset-based key rotation: U512 offsets on getUmbraClient shift KMAC256 derivation to produce new X25519, MVK, and commitment keys for the same wallet. Complete deps map per V18 factory."
 ---
 
 ## Key Rotation via Offsets
@@ -42,7 +42,7 @@ For active on-chain key rotation (issue a new key, re-encrypt existing state, re
 
 ---
 
-## Per-Factory Deps Reference (V14)
+## Per-Factory Deps Reference (V18)
 
 A complete map of which injectable deps each factory accepts. Subpath in parens.
 
@@ -93,7 +93,7 @@ A complete map of which injectable deps each factory accepts. Subpath in parens.
 - Same as above.
 - `zkProver` (`IZkProverForETAIntoStealthPoolNote`) — **required**.
 
-**`getATAIntoSelfBurnableStealthPoolNoteCreatorFunction`** (PATA-source, no MPC)
+**`getATAIntoSelfBurnableStealthPoolNoteCreatorFunction`** (ATA-source, no MPC)
 - `accountInfoProvider`, `blockhashProvider`, `transactionForwarder`.
 - All MVK / Poseidon / ephemeral-note key derivers.
 - Cryptographic operation functions.

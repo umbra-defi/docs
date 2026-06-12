@@ -7,7 +7,7 @@ description: "Poll the status of a submitted burn request. The wire path is /v1/
 The SDK polls this endpoint automatically with a 3-second interval and a 120-second timeout. You only need to call it directly if building a custom integration.
 
 <Note>
-The wire path retains the legacy `/v1/claims/{request_id}` segment. In V14 SDK code you call it via the relayer client's `pollClaimStatus` method (or its `pollBurnStatus` alias when plugged into a burner factory's `relayer` dep).
+The wire path retains the legacy `/v1/claims/{request_id}` segment. In V18 SDK code you call it via the relayer client's `pollClaimStatus` method (or its `pollBurnStatus` alias when plugged into a burner factory's `relayer` dep).
 </Note>
 
 ## Polling recommendations

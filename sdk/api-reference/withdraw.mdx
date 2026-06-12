@@ -9,14 +9,14 @@ description: "Complete reference for direct withdrawal from encrypted balance."
 import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 
 function getETAIntoATAWithdrawerFunction(
-  args: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs,
-  deps?: GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionDeps,
-): EncryptedBalanceToPublicBalanceDirectWithdrawerFunction
+  args: GetETAIntoATAWithdrawerFunctionArgs,
+  deps?: GetETAIntoATAWithdrawerFunctionDeps,
+): ETAIntoATAWithdrawerFunction
 ```
 
 Factory function that returns a callable withdrawal function.
 
-### `GetEncryptedBalanceToPublicBalanceDirectWithdrawerFunctionArgs`
+### `GetETAIntoATAWithdrawerFunctionArgs`
 
 <ParamField path="client" type="IUmbraClient" required>
   The Umbra client instance.
@@ -29,11 +29,11 @@ async function withdraw(
   destinationAddress: Address,
   mint: Address,
   amount: bigint,
-  options?: DirectWithdrawOptions,
+  options?: ETAIntoATAWithdrawerOptions,
 ): Promise<WithdrawResult>
 ```
 
-Moves tokens from the signer's ETA back to the destination's PATA.
+Moves tokens from the signer's ETA back to the destination's ATA.
 
 Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instruction-pattern) - waits for both the handler transaction and the Arcium MPC callback transaction to confirm before resolving. Total wall-clock time is typically a few seconds.
 
@@ -68,14 +68,14 @@ Follows the [dual-instruction pattern](/concepts/how-umbra-works#the-dual-instru
 </ParamField>
 
 <ParamField path="options.feeVaultOffset" type="U128" default="0n">
-  Fee-vault PDA offset. The fee-vault path is currently unused for public-PATA withdrawals — leave at `0n` (sentinel: no fee-vault interaction).
+  Fee-vault PDA offset. The fee-vault path is currently unused for public-ATA withdrawals — leave at `0n` (sentinel: no fee-vault interaction).
 </ParamField>
 
 <ParamField path="options.destinationProgram" type="Address">
   Observer-CPI destination program. Default: System Program (sentinel: no observer CPI).
 </ParamField>
 
-<ParamField path="options.hooks" type="FromEncryptedTokenAccountIntoPublicAssociatedTokenAccountWithdrawHooks">
+<ParamField path="options.hooks" type="WithdrawalHooks">
   Per-phase lifecycle hooks. See [Transaction Callbacks](/sdk/understanding-the-sdk/callbacks).
 </ParamField>
 
@@ -105,7 +105,7 @@ interface WithdrawResult {
 
 ## Withdrawal Destination
 
-Tokens are sent to the PATA associated with `destinationAddress` for the given mint. If that PATA does not exist, the transaction will fail. To send to a different address anonymously, use the [Stealth Pool flow](/sdk/mixer/overview).
+Tokens are sent to the ATA associated with `destinationAddress` for the given mint. If that ATA does not exist, the transaction will fail. To send to a different address anonymously, use the [Stealth Pool flow](/sdk/mixer/overview).
 
 ---
 

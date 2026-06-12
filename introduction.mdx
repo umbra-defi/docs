@@ -7,7 +7,7 @@ description: "Umbra privacy protocol for Solana: shield SPL/Token-2022 balances 
 
 Umbra adds a privacy layer on top of standard Solana [SPL and Token-2022 tokens](https://spl.solana.com/token). It lets you:
 
-- **Shield balances** — move tokens from a public Associated Token Account (PATA) into an **EncryptedTokenAccount (ETA)** where the balance is hidden from everyone except authorized viewers.
+- **Shield balances** — move tokens from a public Associated Token Account (ATA) into an **EncryptedTokenAccount (ETA)** where the balance is hidden from everyone except authorized viewers.
 - **Transfer anonymously** — write a **Stealth Pool Note** into a shared mixer tree, then **burn** it from any wallet with no on-chain linkage to the sender.
 - **Control who sees what** — grant selective viewing access to auditors or compliance systems without exposing your full history.
 
@@ -21,7 +21,7 @@ You do **not** need to understand MPC or zero-knowledge proofs to use Umbra. The
 
 The SDK and these docs use this vocabulary throughout:
 
-- **PATA** — `PublicAssociatedTokenAccount`. A standard SPL Associated Token Account holding plaintext tokens.
+- **ATA** — `AssociatedTokenAccount`. A standard SPL Associated Token Account holding plaintext tokens.
 - **ETA** — `EncryptedTokenAccount`. An Umbra-managed account whose balance is encrypted. Two modes: **MXE-only** (Arcium decrypts) and **Shared** (the user can also decrypt locally).
 - **Stealth Pool Note** — a leaf in the shared mixer tree. On-chain it is a commitment in the Indexed Merkle Tree; the SDK surfaces it as a "note".
 - **Burn** — consuming a note: it reveals the note's nullifier on-chain and credits the destination balance.
@@ -65,13 +65,13 @@ Your App
 The Umbra on-chain program is deployed at different addresses per network:
 
 - **Mainnet:** `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh`
-- **Devnet:** `342qFp62fzTt4zowrVPhrDdcRLGapPCMe8w5kFSoJ4f4`
+- **Devnet:** `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`
 
 The SDK resolves the correct program address automatically based on the `network` parameter.
 
 ## Supported Networks
 
-- `mainnet` — Production. wSOL, USDC, USDT, UMBRA, CASH.
+- `mainnet` — Production. wSOL, USDC, USDT, UMBRA, CASH, ZINC.
 - `devnet` — Development and integration testing. wSOL only.
 - `localnet` — Local validator. wSOL only.
 

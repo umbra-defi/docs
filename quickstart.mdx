@@ -88,32 +88,12 @@ const client = await getUmbraClient({
 ```
 
 <Note>
-**Testing on devnet?** Use `network: "devnet"`,
-`rpcUrl: "https://api.devnet.solana.com"` (+ `wss://api.devnet.solana.com`),
-`indexerApiEndpoint: "https://utxo-indexer.api-devnet.umbraprivacy.com"`, the devnet
-relayer `https://relayer.api-devnet.umbraprivacy.com`, and the devnet **dUSDC** mint
-`4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7`. See [Supported Tokens](/supported-tokens)
-for the full per-network mint list.
-</Note>
 
-<Note>
-The Umbra program address differs between devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
-</Note>
+- **Testing on devnet?** Use `network: "devnet"`, `rpcUrl: "https://api.devnet.solana.com"` (+ `wss://api.devnet.solana.com`), `indexerApiEndpoint: "https://utxo-indexer.api-devnet.umbraprivacy.com"`, the devnet relayer `https://relayer.api-devnet.umbraprivacy.com`, and the devnet **dUSDC** mint `4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7`. See [Supported Tokens](/supported-tokens) for the full per-network mint list.
+- The Umbra program address differs between devnet and mainnet. The SDK resolves the correct address automatically based on the `network` parameter.
+- The first operation that needs the master seed (typically `register()`) prompts the wallet to sign a deterministic consent message. Subsequent operations reuse the cached seed without re-prompting.
+- **Browser: persist scan state.** On Node you can omit persistent stores and the scanner falls back to in-memory state (fine for scripts). In the browser, wire `createShardedUtxoDataStore` + `createShardedNullifierStore` (`@umbra-privacy/sdk/store-adapters`) — otherwise every `scan()` walks every tree from genesis. Because those stores derive their keys from the client's master seed, it's a **two-phase build**: construct a bootstrap client, build the stores from it, then rebuild the client with the stores in `deps`. See the example app's [`lib/umbra-client.ts`](https://github.com/umbra-defi/examples/blob/main/private-payments-nextjs/lib/umbra-client.ts) for the full pattern.
 
-<Note>
-The first operation that needs the master seed (typically `register()`) prompts the wallet to sign a deterministic consent message. Subsequent operations reuse the cached seed without re-prompting.
-</Note>
-
-<Note>
-**Browser: persist scan state.** On Node you can omit persistent stores and the
-scanner falls back to in-memory state (fine for scripts). In the browser, wire
-`createShardedUtxoDataStore` + `createShardedNullifierStore`
-(`@umbra-privacy/sdk/store-adapters`) — otherwise every `scan()` walks every tree
-from genesis. Because those stores derive their keys from the client's master seed,
-it's a **two-phase build**: construct a bootstrap client, build the stores from it,
-then rebuild the client with the stores in `deps`. See the example app's
-[`lib/umbra-client.ts`](https://github.com/umbra-defi/examples/blob/main/private-payments-nextjs/lib/umbra-client.ts)
-for the full pattern.
 </Note>
 
 ## 4. Register Your Account
@@ -147,7 +127,7 @@ Internally registration is two independent on-chain instructions:
 
 Both `init_if_needed` the user account, so either may run first. The orchestrator picks the right combination based on requested flags and on-chain state.
 
-## 5. Deposit Tokens (PATA → ETA)
+## 5. Deposit Tokens (ATA → ETA)
 
 Shield an SPL or Token-2022 balance by moving it from your public Associated Token Account into your Encrypted Token Account.
 
@@ -177,7 +157,7 @@ if (result.callback?.status === "finalized") {
 }
 ```
 
-## 6. Withdraw Tokens (ETA → PATA)
+## 6. Withdraw Tokens (ETA → ATA)
 
 Move tokens back from your Encrypted Token Account to your public ATA. (`MINT` and
 `amount` are the branded values from step 5.)
@@ -188,7 +168,7 @@ import { getETAIntoATAWithdrawerFunction } from "@umbra-privacy/sdk/withdrawal";
 const withdraw = getETAIntoATAWithdrawerFunction({ client });
 
 const result = await withdraw(
-  signer.address, // destination PATA owner
+  signer.address, // destination ATA owner
   MINT,
   amount,
 );
@@ -266,8 +246,8 @@ const result = await scan();
 
 console.log("Self-burnable from ETA: ", result.etaToStealthPoolSelfBurnable.length);
 console.log("Receiver-burnable from ETA: ", result.etaToStealthPoolReceiverBurnable.length);
-console.log("Self-burnable from PATA: ", result.ataToStealthPoolSelfBurnable.length);
-console.log("Receiver-burnable from PATA: ", result.ataToStealthPoolReceiverBurnable.length);
+console.log("Self-burnable from ATA: ", result.ataToStealthPoolSelfBurnable.length);
+console.log("Receiver-burnable from ATA: ", result.ataToStealthPoolReceiverBurnable.length);
 console.log("Scanned trees:", result.scannedTrees.length);
 ```
 
@@ -339,7 +319,7 @@ The `submitBurn` / `pollBurnStatus` property names map onto the relayer client's
 </Note>
 
 <Note>
-Batching: pass an array of notes. The receiver-into-ETA burner groups them by `destinationAddress`, chunks to ≤5 per proof, and runs each chunk through the relayer. Single-note burners (`self-into-ETA`, `self-into-PATA`) have `MAX_NOTES_PER_PROOF = 1` and loop internally — caller still passes an array.
+Batching: pass an array of notes. The receiver-into-ETA burner groups them by `destinationAddress`, chunks to ≤5 per proof, and runs each chunk through the relayer. Single-note burners (`self-into-ETA`, `self-into-ATA`) have `MAX_NOTES_PER_PROOF = 1` and loop internally — caller still passes an array.
 </Note>
 
 ## Full Example
@@ -394,11 +374,11 @@ async function main() {
   );
   await register({ confidential: true, anonymous: true });
 
-  // 4. Deposit (PATA → ETA).
+  // 4. Deposit (ATA → ETA).
   const deposit = getATAIntoETADirectDepositorFunction({ client });
   await deposit(signer.address, MINT, createU64({ value: 1_000_000n }));
 
-  // 5. Withdraw (ETA → PATA).
+  // 5. Withdraw (ETA → ATA).
   const withdraw = getETAIntoATAWithdrawerFunction({ client });
   await withdraw(signer.address, MINT, createU64({ value: 1_000_000n }));
 
