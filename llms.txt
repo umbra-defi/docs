@@ -26,7 +26,7 @@ This documentation covers the SDK API, protocol concepts, indexer REST API, and 
 - **Relayer**: required for burning Stealth Pool Notes. The burner factory's `relayer` dep takes `{ submitBurn, pollBurnStatus, getRelayerAddress }`.
 - **Indexer**: required for note scanning + burning. Mainnet: `utxo-indexer.api.umbraprivacy.com`, Devnet: `utxo-indexer.api-devnet.umbraprivacy.com`.
 - **Store adapters (browser)**: wire `utxoDataStore` + `nullifierStore` via `createShardedUtxoDataStore` / `createShardedNullifierStore` from `@umbra-privacy/sdk/store-adapters`. Without them every `scan()` walks every active tree from genesis.
-- **Supported tokens (mainnet)**: wSOL (`So11111111111111111111111111111111111111112`), USDC (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`), USDT (`Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`), UMBRA (`PRVT6TB7uss3FrUd2D9xs2zqDBsa3GbMJMwCQsgmeta`), CASH (`CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`).
+- **Supported tokens (mainnet)**: wSOL (`So11111111111111111111111111111111111111112`), USDC (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`), USDT (`Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`), UMBRA (`PRVT6TB7uss3FrUd2D9xs2zqDBsa3GbMJMwCQsgmeta`), CASH (`CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH`), ZINC (`zinc155BS4mSPk8GXQj4R5hkVDQXcW253pTYq5SGyfi`).
 - **Supported tokens (devnet/localnet)**: wSOL only.
 - **Rate limiting**: all API endpoints subject to rate limits (429 on exceed).
 
@@ -162,7 +162,7 @@ if (result.ataToStealthPoolReceiverBurnable.length > 0) {
 - [Quickstart](https://docs.umbraprivacy.com/quickstart): end-to-end example — getUmbraClient, register, deposit, withdraw, create note, scan, burn.
 - [Creating a Client](https://docs.umbraprivacy.com/sdk/creating-a-client): `getUmbraClient(args, deps?)` — signer, network, rpcUrl, rpcSubscriptionsUrl, indexerApiEndpoint, relayerApiEndpoint, utxoDataStore, nullifierStore.
 - [Wallet Adapters](https://docs.umbraprivacy.com/sdk/wallet-adapters): `IUmbraSigner` interface, `createInMemorySigner`, `createSignerFromWalletAccount`, `UMBRA_MESSAGE_TO_SIGN` from `@umbra-privacy/sdk/shared`.
-- [Supported Tokens](https://docs.umbraprivacy.com/supported-tokens): mainnet wSOL/USDC/USDT/UMBRA/CASH, devnet/localnet wSOL only.
+- [Supported Tokens](https://docs.umbraprivacy.com/supported-tokens): mainnet wSOL/USDC/USDT/UMBRA/CASH/ZINC, devnet/localnet wSOL only.
 
 ## Registration & Account State
 
